@@ -87,7 +87,7 @@ real tablet.
 | AT-14 | Storage full during autosave | **Partial, not verified** | `StorageFullError` is a distinct type and the UI shows a recovery message; the single-transaction write means a failure cannot corrupt the previous checkpoint (`round-trip.test.ts` proves an aborted save leaves nothing behind). **A genuinely full device was never tested.** |
 | AT-15 | Auto-next waits for pen-up plus a pause | **Deferred** | FR-10 not built (M3). |
 | AT-16 | Pencil with the palm resting on the glass | **Device — unverified** | Needs a real iPad + Apple Pencil and an Android tablet + active stylus. Nothing here can establish it. |
-| AT-17 | Fast, short, repeated strokes; pointercancel; fps and p95 latency | **Partly structural, mostly Device — unverified** | The single-active-pointer rule and cancel handling are covered in `DrawingPad.test.tsx` and `artwork-surface.test.ts`, so the *logic* that could produce a connecting line is tested. **fps and p95 latency are not measured and must be on real hardware.** |
+| AT-17 | Fast, short, repeated strokes; pointercancel; fps and p95 latency | **Partly structural, mostly Device — unverified** | The single-active-pointer rule and cancel handling are covered in `DrawingPad.test.tsx` and `artwork-surface.test.ts`, and a `Profiler` test shows forty pointermove samples cost zero React commits — so the *logic* that could produce a connecting line or a stall is tested. **fps and p95 latency are not measured and must be on real hardware.** |
 | AT-18 | No-pressure input and capacitive stylus | **Device — unverified** | Width is preset-driven with no pressure dependency, and a capacitive stylus reports as `touch` so finger mode covers it — but this has not been tried on a device. |
 | AT-19 | Cold launch of the installed PWA offline | **Deferred** | No service worker (M3). |
 | AT-20 | Project export, clear site data, import | **Deferred** | FR-24 not built (M3). |
@@ -114,6 +114,11 @@ Automated, reproducible in this repo (`npm run build`, `npm test`, `npm run lint
 - A component-level pass over the whole slice: draw, undo, redo, refuse a touch
   in pencil mode, hide and replay the hint, walk all nine steps, switch the
   colour boundary off, finish, and save.
+- That a pointer-down and forty pointermove samples produce **zero** React
+  commits, measured with a `Profiler` — PRD section 11's "render stroke tidak
+  bergantung pada rerender ... per pointermove" as a check rather than a claim.
+- That an interrupted pointer (`pointercancel`) keeps the ink it drew and the
+  next stroke starts at its own pointer-down, so no connecting line can form.
 
 Browser check (Chrome via devtools, **a simulation**): the app boots, renders
 the first step, accepts a synthetic pointer stroke, paints it, reports

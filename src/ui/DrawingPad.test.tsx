@@ -8,6 +8,7 @@
  * and Android tablet (AT-16, AT-17, AT-18, PRD section 13).
  */
 
+import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { CAT_LESSON } from '../lesson-data/cat-lesson';
@@ -196,6 +197,50 @@ describe('drawing', () => {
       ),
     );
     expect(screen.queryByText(/Mode pensil: gambar dengan stylus/)).toBeNull();
+  });
+});
+
+describe('the pointermove path', () => {
+  it('does not re-render React while the pointer is down (PRD section 11)', () => {
+    // PRD section 11: "Render stroke tidak bergantung pada rerender seluruh
+    // komponen React per pointermove." A Profiler commit is exactly what that
+    // forbids, so counting commits measures the claim rather than assuming it.
+    const store = new MemorySessionStore();
+    let commits = 0;
+
+    const view = render(
+      <Profiler id="pad" onRender={() => { commits += 1; }}>
+        <DrawingPad
+          lesson={CAT_LESSON}
+          store={store}
+          initialState={createSession(CAT_LESSON, 'profiled-session')}
+          durable
+          notice={null}
+        />
+      </Profiler>,
+    );
+    const canvas = view.container.querySelector('canvas')!;
+
+    const afterMount = commits;
+    expect(afterMount).toBeGreaterThan(0);
+
+    act(() => pointerDown(canvas, { x: 100, y: 100 }, { pointerId: 11 }));
+    expect(commits).toBe(afterMount);
+
+    act(() => {
+      for (let i = 1; i <= 40; i += 1) {
+        pointerMove(canvas, { x: 100 + i * 5, y: 100 + i * 3 }, { pointerId: 11 });
+      }
+    });
+
+    // Pointer-down and forty samples, not one commit: the ink went straight to
+    // the canvas.
+    expect(commits).toBe(afterMount);
+
+    act(() => pointerUp(canvas, { x: 300, y: 220 }, { pointerId: 11 }));
+
+    // Lifting the pointer commits the stroke to the session, which does render.
+    expect(commits).toBeGreaterThan(afterMount);
   });
 });
 

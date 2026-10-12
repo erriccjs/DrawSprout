@@ -163,7 +163,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
     begin: (point) => {
       const surface = surfaceRef.current;
       if (!surface) return;
-      setRejection(null);
+      // Guarded: calling setState with the value it already holds still costs a
+      // render before React bails out, and pointer-down is on the hot path.
+      if (rejection !== null) setRejection(null);
 
       // FR-03: the tool is resolved once, here. Nothing can change colour or
       // width for the rest of this stroke.
