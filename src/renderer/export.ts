@@ -92,10 +92,14 @@ export async function exportArtworkPng(options: ExportOptions): Promise<Blob> {
   });
 }
 
-/** Filename that tells a parent what the file is without leaking any content. */
-export function artworkFileName(lessonTitle: string, at: Date = new Date()): string {
+/**
+ * Filename that tells a parent what the file is without leaking any content.
+ * `title` is just a string to slug; the renderer does not know it came from a
+ * lesson.
+ */
+export function artworkFileName(title: string, at: Date = new Date()): string {
   const slug =
-    lessonTitle
+    title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'gambar';
