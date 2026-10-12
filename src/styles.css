@@ -395,37 +395,3 @@ body {
     overflow-y: visible;
   }
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page: #16191d;
-    --ink: #f2f3f5;
-    --muted: #a6adb5;
-    --line: #3a4048;
-    --accent: #7f9bff;
-    --accent-soft: #232b3f;
-    --warning-bg: #3a2f14;
-    --warning-line: #d8a93a;
-  }
-
-  /* The canvas stays white: it is paper, and the exported PNG has a white
-     background either way. */
-  :root {
-    --paper: #ffffff;
-  }
-
-  .step-panel,
-  .toolbar,
-  .banner,
-  .button,
-  .chip,
-  .field select {
-    background: #1f242b;
-    color: var(--ink);
-  }
-
-  .button--primary {
-    background: var(--accent);
-    color: #10131a;
-  }
-}
