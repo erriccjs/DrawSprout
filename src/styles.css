@@ -1,0 +1,397 @@
+/*
+ * Tablet-first layout (PRD section 10): landscape is the primary orientation,
+ * portrait stacks, touch targets are at least 48 logical pixels, and no state
+ * is signalled by colour alone.
+ */
+
+:root {
+  --paper: #ffffff;
+  --page: #f3f0ea;
+  --ink: #1f2933;
+  --muted: #5c6670;
+  --line: #d6d1c7;
+  --accent: #3350d6;
+  --accent-soft: #e5e9fb;
+  --warning-bg: #fdf0d5;
+  --warning-line: #c08a1e;
+  --tap: 48px;
+  --radius: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.shell {
+  height: 100%;
+  padding: 12px;
+}
+
+.shell--centered {
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 12px;
+}
+
+/* --- drawing pad ---------------------------------------------------------- */
+
+.pad {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+
+.pad__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pad__title {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.pad__subtitle,
+.pad__status {
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.pad__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.pad__stage {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  min-width: 0;
+  background: var(--page);
+}
+
+.stage__frame {
+  position: relative;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  /* The child's hand rests here, so text selection and long-press callouts are
+     suppressed on the surface only — never on the page. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.stage__canvas {
+  display: block;
+  /* The one place browser gestures are given up, so a drawing stroke is not
+     read as a scroll or a pinch (PRD section 11). */
+  touch-action: none;
+}
+
+.guide-overlay {
+  position: absolute;
+  inset: 0;
+  /* Guides never intercept a stroke. */
+  pointer-events: none;
+}
+
+.pad__side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+}
+
+/* --- step panel ----------------------------------------------------------- */
+
+.step-panel,
+.toolbar {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.step-panel__counter {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.step-panel__instruction {
+  margin: 4px 0 0;
+  font-size: 1.375rem;
+  line-height: 1.25;
+}
+
+.step-panel__hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.step-panel__nav {
+  display: flex;
+  gap: 8px;
+}
+
+.step-panel__nav .button {
+  flex: 1;
+}
+
+.step-panel__group,
+.toolbar__group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 10px 10px;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.step-panel__group legend,
+.toolbar__group legend {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 4px;
+}
+
+.target-preview {
+  width: 100%;
+  height: auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--tap);
+  cursor: pointer;
+}
+
+.radio input {
+  width: 22px;
+  height: 22px;
+  margin-top: 4px;
+  flex: none;
+}
+
+.radio small {
+  display: block;
+  color: var(--muted);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.field select {
+  min-height: var(--tap);
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  padding: 0 8px;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* --- controls ------------------------------------------------------------- */
+
+.button,
+.chip {
+  min-height: var(--tap);
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.button:disabled,
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Pressed state is carried by the border weight and the checkmark as well as
+   the fill, so it survives a colour-vision difference. */
+.chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  border-width: 2px;
+  font-weight: 600;
+}
+
+.chip[aria-pressed='true']::after {
+  content: ' ✓';
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+.swatch {
+  width: var(--tap);
+  height: var(--tap);
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  cursor: pointer;
+}
+
+.swatch[aria-pressed='true'] {
+  border-color: var(--ink);
+  border-width: 4px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.toolbar__readout {
+  width: 100%;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.toolbar__readout--muted {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  vertical-align: -2px;
+}
+
+:is(.button, .chip, .swatch, input, select):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- banners -------------------------------------------------------------- */
+
+.banner {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--accent-soft);
+  font-size: 0.9375rem;
+}
+
+.banner--warning {
+  background: var(--warning-bg);
+  border-color: var(--warning-line);
+}
+
+/* --- finish screen -------------------------------------------------------- */
+
+.finish {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  height: 100%;
+  overflow-y: auto;
+  text-align: center;
+}
+
+.finish__title {
+  margin: 0;
+}
+
+.finish__lead {
+  margin: 0;
+  color: var(--muted);
+}
+
+.finish__preview {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+.finish__canvas {
+  max-width: 100%;
+  height: auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.finish__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Portrait and narrow windows stack instead of shrinking the canvas away. */
+@media (max-width: 1000px), (orientation: portrait) {
+  .pad__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(240px, 1fr) auto;
+  }
+
+  .pad__side {
+    overflow-y: visible;
+  }
+}

@@ -1,0 +1,7 @@
+node_modules/
+.forgeguard/
+dist/
+coverage/
+*.local
+.DS_Store
+.vite/
