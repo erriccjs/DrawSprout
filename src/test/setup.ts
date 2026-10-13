@@ -7,7 +7,7 @@
  */
 
 import 'fake-indexeddb/auto';
-import { constructedPathData, createRecordingCanvas } from './fake-canvas';
+import { constructedPathData, createRecordingCanvas, registerRecording } from './fake-canvas';
 
 /** Records the path data so tests can assert what geometry was clipped with. */
 class FakePath2D {
@@ -45,6 +45,7 @@ HTMLCanvasElement.prototype.getContext = function getContext(this: HTMLCanvasEle
   const existing = recordingContexts.get(this);
   if (existing) return existing;
   const recording = createRecordingCanvas(this.width, this.height);
+  registerRecording(this, recording);
   const ctx = recording.canvas.getContext('2d');
   recordingContexts.set(this, ctx);
   return ctx;

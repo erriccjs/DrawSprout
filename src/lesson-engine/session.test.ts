@@ -117,6 +117,40 @@ describe('tool presets and colour preference', () => {
     expect(effectiveToolPreset(lesson, next).widthViewbox).toBe(lesson.steps[1]!.toolPreset.widthViewbox);
   });
 
+  it('hands the step its own tool, so an eraser does not follow the child into colouring (FR-03)', () => {
+    const erasingOnDetail = applyAll(newSessionState(), [
+      { type: 'next-step' },
+      { type: 'next-step' },
+      { type: 'next-step' },
+      { type: 'next-step' },
+      { type: 'next-step' },
+      { type: 'set-tool', tool: 'eraser' },
+    ]);
+    expect(activeStep(lesson, erasingOnDetail).id).toBe('eyes-nose');
+    expect(effectiveToolPreset(lesson, erasingOnDetail).tool).toBe('eraser');
+
+    const colouring = applyAll(erasingOnDetail, [
+      { type: 'next-step' },
+      { type: 'next-step' },
+    ]);
+    const step = activeStep(lesson, colouring);
+    expect(step.id).toBe('color-fur');
+    // The colour step paints with the tool it authored, at its own width, not
+    // with the eraser that fixed a line two steps ago.
+    const preset = effectiveToolPreset(lesson, colouring);
+    expect(preset.tool).toBe(step.toolPreset.tool);
+    expect(preset.widthViewbox).toBe(step.toolPreset.widthViewbox);
+  });
+
+  it('still lets the child pick a different tool within a step', () => {
+    const onColourStep = applyAll(
+      newSessionState(),
+      lesson.steps.slice(1).map(() => ({ type: 'next-step' }) as const),
+    );
+    const erasing = reduceSession(lesson, onColourStep, { type: 'set-tool', tool: 'eraser' });
+    expect(effectiveToolPreset(lesson, erasing).tool).toBe('eraser');
+  });
+
   it('gives the eraser a wider default than the pen it replaces', () => {
     const erasing = reduceSession(lesson, newSessionState(), { type: 'set-tool', tool: 'eraser' });
     const preset = effectiveToolPreset(lesson, erasing);

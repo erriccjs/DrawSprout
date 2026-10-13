@@ -100,12 +100,12 @@ export function reduceSession(
 
     case 'next-step': {
       if (state.currentStepIndex >= lesson.steps.length - 1) return state;
-      return withStepIndex(state, state.currentStepIndex + 1);
+      return withStepIndex(lesson, state, state.currentStepIndex + 1);
     }
 
     case 'prev-step': {
       if (state.currentStepIndex <= 0) return state;
-      return withStepIndex(state, state.currentStepIndex - 1);
+      return withStepIndex(lesson, state, state.currentStepIndex - 1);
     }
 
     case 'set-assistance-mode':
@@ -150,16 +150,23 @@ export function reduceSession(
   }
 }
 
-function withStepIndex(state: SessionState, index: number): SessionState {
+function withStepIndex(lesson: LessonPackage, state: SessionState, index: number): SessionState {
+  const step = lesson.steps[index];
+  if (!step) return state;
   return {
     ...state,
     currentStepIndex: index,
     // Redo belongs to the step it was undone in; carrying it across a step
     // change would let redo resurrect a stroke the child cannot see.
     redoStack: [],
-    // A step hands over its own tool, so a width override from the previous
-    // step does not leak into a step with a different scale (FR-03).
-    toolPreferences: { ...state.toolPreferences, customWidth: null },
+    // A step hands over its own tool, so neither an eraser picked to fix the
+    // previous step nor a width override for its scale follows the child into
+    // this one (FR-03). A different tool within the step is still one tap away.
+    toolPreferences: {
+      ...state.toolPreferences,
+      activeTool: step.toolPreset.tool,
+      customWidth: null,
+    },
   };
 }
 

@@ -31,7 +31,7 @@ export interface StrokeInputCallbacks {
 }
 
 export function useStrokeInput(
-  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  canvas: HTMLCanvasElement | null,
   space: RenderSpace,
   callbacks: StrokeInputCallbacks,
 ): void {
@@ -47,7 +47,9 @@ export function useStrokeInput(
   const activePointerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    // The element itself is the dependency, so a canvas that remounts - after
+    // the finish screen is dismissed, say - gets its own listeners instead of
+    // silently going deaf.
     if (!canvas) return;
 
     const toPoint = (event: PointerEvent): Point =>
@@ -119,5 +121,5 @@ export function useStrokeInput(
       canvas.removeEventListener('pointercancel', onPointerCancel);
       canvas.removeEventListener('lostpointercapture', onPointerCancel);
     };
-  }, [canvasRef, space]);
+  }, [canvas, space]);
 }

@@ -162,6 +162,27 @@ describe('resize', () => {
     expect(transforms.at(-1)!.args[0]).toBeCloseTo(0.8, 5);
   });
 
+  it('keeps a stroke that is still being drawn, and keeps extending it', () => {
+    const { surface, ink } = harness();
+    surface.beginStroke(stroke, { x: 0, y: 0 });
+    surface.extendStroke({ x: 10, y: 0 });
+
+    surface.resize(fitViewport(space, 800, 600, 1));
+
+    // The pointer is still down, so the samples so far are repainted at the new
+    // scale rather than wiped, and the rest of the stroke still has something
+    // to extend.
+    expect(surface.hasLiveStroke()).toBe(true);
+    const afterResize = ops(ink.calls, 'stroke').length;
+    surface.extendStroke({ x: 20, y: 0 });
+    expect(ops(ink.calls, 'stroke')).toHaveLength(afterResize + 1);
+    expect(surface.endStroke()).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 20, y: 0 },
+    ]);
+  });
+
   it('skips the work when the backing store size has not changed', () => {
     const { surface, ink } = harness();
     surface.replay([stroke]);

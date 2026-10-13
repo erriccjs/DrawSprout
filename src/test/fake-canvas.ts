@@ -26,6 +26,18 @@ export function resetConstructedPathData(): void {
   constructedPathData.length = 0;
 }
 
+const recordingsByElement = new WeakMap<HTMLCanvasElement, RecordingCanvas>();
+
+/** Associates a real canvas element with the recording standing in for it. */
+export function registerRecording(element: HTMLCanvasElement, recording: RecordingCanvas): void {
+  recordingsByElement.set(element, recording);
+}
+
+/** Draw calls made through a mounted canvas element, in order. */
+export function recordedCalls(element: HTMLCanvasElement): readonly RecordedCall[] {
+  return recordingsByElement.get(element)?.calls ?? [];
+}
+
 export function createRecordingCanvas(widthPx: number, heightPx: number): RecordingCanvas {
   const calls: RecordedCall[] = [];
   const record =

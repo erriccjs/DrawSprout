@@ -12,6 +12,8 @@ import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { CAT_LESSON } from '../lesson-data/cat-lesson';
+import { backingSize, fitViewport } from '../renderer/coordinates';
+import { recordedCalls } from '../test/fake-canvas';
 import { createSession } from '../lesson-engine/session';
 import { fromRestoredSession } from '../persistence/mapping';
 import { MemorySessionStore } from '../persistence/memory-store';
@@ -23,6 +25,7 @@ import {
   pointerMove,
   pointerUp,
   stubLayoutBox,
+  TEST_CANVAS_RECT,
 } from '../test/pointer';
 
 const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
@@ -41,6 +44,46 @@ function setup() {
   );
   const canvas = view.container.querySelector('canvas')!;
   return { store, canvas, view };
+}
+
+function stageCanvas(container: HTMLElement): HTMLCanvasElement {
+  return container.querySelector<HTMLCanvasElement>('.stage__canvas')!;
+}
+
+/**
+ * Replaces the inert jsdom `ResizeObserver` with one the test can fire, so a
+ * reflow of the stage can be provoked the way the browser would.
+ */
+function controllableResizeObserver(): { fire: () => void; restore: () => void } {
+  const original = globalThis.ResizeObserver;
+  const callbacks: ResizeObserverCallback[] = [];
+  class Controllable {
+    constructor(callback: ResizeObserverCallback) {
+      callbacks.push(callback);
+    }
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    value: Controllable,
+    writable: true,
+    configurable: true,
+  });
+  return {
+    fire: () => {
+      for (const callback of callbacks) {
+        callback([], {} as ResizeObserver);
+      }
+    },
+    restore: () => {
+      Object.defineProperty(globalThis, 'ResizeObserver', {
+        value: original,
+        writable: true,
+        configurable: true,
+      });
+    },
+  };
 }
 
 function canvasGuides(container: HTMLElement): SVGPathElement[] {
@@ -154,6 +197,46 @@ describe('drawing', () => {
     // ...and the next stroke begins at its own pointer-down, not at the point
     // the cancelled one stopped.
     expect(second!.points[0]).toEqual({ x: 700, y: 600 });
+  });
+
+  it('keeps the stroke in progress when a refused palm reflows the stage (FR-22, AT-17)', async () => {
+    const observer = controllableResizeObserver();
+    try {
+      const { store, canvas } = setup();
+      act(() => screen.getByRole('button', { name: /Mode pensil/ }).click());
+
+      act(() => {
+        pointerDown(canvas, { x: 100, y: 100 }, { pointerType: 'pen', pointerId: 20 });
+        pointerMove(canvas, { x: 150, y: 120 }, { pointerType: 'pen', pointerId: 20 });
+      });
+
+      // A palm lands. It is refused, which inserts the explanation banner and
+      // so shortens the stage.
+      act(() => pointerDown(canvas, { x: 600, y: 600 }, { pointerType: 'touch', pointerId: 21 }));
+      expect(screen.getByText(/Mode pensil: gambar dengan stylus/)).toBeTruthy();
+      act(() => observer.fire());
+
+      // The pen never left the glass, so the rest of the stroke belongs to it.
+      act(() => {
+        pointerMove(canvas, { x: 200, y: 160 }, { pointerType: 'pen', pointerId: 20 });
+        pointerUp(canvas, { x: 200, y: 160 }, { pointerType: 'pen', pointerId: 20 });
+      });
+
+      await waitFor(async () => {
+        const restored = await store.loadSession('test-session');
+        expect(restored?.checkpoint.committedStrokeIds).toHaveLength(1);
+      });
+
+      const restored = await store.loadSession('test-session');
+      const [committed] = fromRestoredSession(restored!).strokes;
+      expect(committed!.points).toEqual([
+        { x: 100, y: 100 },
+        { x: 150, y: 120 },
+        { x: 200, y: 160 },
+      ]);
+    } finally {
+      observer.restore();
+    }
   });
 
   it('refuses a touch in pencil mode and says why, without losing the artwork (FR-22)', () => {
@@ -330,6 +413,46 @@ describe('finishing', () => {
 
     act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
     expect(screen.getByRole('button', { name: /Selesai/ })).toBeTruthy();
+  });
+
+  it('gives back a sized, repainted canvas that still draws after Gambar lagi', async () => {
+    const { store, view } = setup();
+    act(() =>
+      drawStroke(stageCanvas(view.container), [
+        { x: 100, y: 100 },
+        { x: 200, y: 160 },
+      ]),
+    );
+    for (let i = 1; i < CAT_LESSON.steps.length; i += 1) {
+      act(() => screen.getByRole('button', { name: /Lanjut/ }).click());
+    }
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+
+    const reopened = stageCanvas(view.container);
+    const expected = backingSize(
+      fitViewport(CAT_LESSON.coordinateSpace, TEST_CANVAS_RECT.width, TEST_CANVAS_RECT.height, 1),
+    );
+    // Sized to the stage it is in, not left at the intrinsic 300x150.
+    expect(reopened.width).toBe(expected.width);
+    expect(reopened.height).toBe(expected.height);
+    // Both artwork layers were composited back onto it, so the drawing the
+    // child already made is on screen again.
+    const composites = recordedCalls(reopened).filter((call) => call.op === 'drawImage');
+    expect(composites.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(composites.map((call) => call.args[0])).size).toBe(2);
+
+    // And the child can keep drawing: the new element has its own listeners.
+    act(() =>
+      drawStroke(reopened, [
+        { x: 300, y: 300 },
+        { x: 360, y: 340 },
+      ]),
+    );
+    await waitFor(async () => {
+      const restored = await store.loadSession('test-session');
+      expect(restored?.checkpoint.committedStrokeIds).toHaveLength(2);
+    });
   });
 });
 

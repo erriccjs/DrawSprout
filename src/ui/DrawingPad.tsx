@@ -81,8 +81,11 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
 
   // --- canvas plumbing -------------------------------------------------------
 
-  const stageRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Held as state, not refs: the finish screen unmounts the whole stage, and
+  // every effect below owns a DOM element, so each one has to re-run against
+  // the element that is actually on screen.
+  const [stage, setStage] = useState<HTMLDivElement | null>(null);
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const surfaceRef = useRef<ArtworkSurface | null>(null);
   const [viewport, setViewport] = useState<Viewport | null>(null);
 
@@ -90,7 +93,6 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
   const renderStrokes = useMemo(() => toRenderStrokes(state.strokes), [state.strokes]);
 
   useEffect(() => {
-    const stage = stageRef.current;
     if (!stage) return;
 
     const measure = () => {
@@ -105,15 +107,14 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
     return () => observer.disconnect();
-  }, [lesson.coordinateSpace]);
+  }, [stage, lesson.coordinateSpace]);
 
   const paint = useCallback(() => {
-    const canvas = canvasRef.current;
     const surface = surfaceRef.current;
     if (!canvas || !surface) return;
     const ctx = canvas.getContext('2d');
     if (ctx) surface.compositeTo(ctx);
-  }, []);
+  }, [canvas]);
 
   const paintScheduledRef = useRef(false);
   const schedulePaint = useCallback(() => {
@@ -127,7 +128,6 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
   }, [paint]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
     if (!canvas || !viewport) return;
 
     const { width, height } = backingSize(viewport);
@@ -149,14 +149,14 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
     // log, and costs nothing on the pointermove path.
     surface.replay(renderStrokes);
     paint();
-  }, [viewport, renderStrokes, clipPaths, lesson.coordinateSpace, paint]);
+  }, [canvas, viewport, renderStrokes, clipPaths, lesson.coordinateSpace, paint]);
 
   // --- pointer input ---------------------------------------------------------
 
   const pendingRef = useRef<PendingStroke | null>(null);
   const [rejection, setRejection] = useState<string | null>(null);
 
-  useStrokeInput(canvasRef, lesson.coordinateSpace, {
+  useStrokeInput(canvas, lesson.coordinateSpace, {
     accepts: (pointerType) => acceptsPointerType(state.inputMode, pointerType),
     rejected: (pointerType) => setRejection(rejectionMessage(state.inputMode, pointerType)),
 
@@ -296,7 +296,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
       {rejection !== null && <p className="banner">{rejection}</p>}
 
       <div className="pad__body">
-        <div className="pad__stage" ref={stageRef}>
+        <div className="pad__stage" ref={setStage}>
           <div
             className="stage__frame"
             style={
@@ -306,7 +306,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
             }
           >
             <canvas
-              ref={canvasRef}
+              ref={setCanvas}
               className="stage__canvas"
               role="img"
               aria-label={`Kanvas gambar. ${step.instruction}`}

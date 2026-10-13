@@ -87,10 +87,16 @@ export class ArtworkSurface {
     this.replay(this.committed);
   }
 
-  /** Clears both layers and redraws every stroke in order. */
+  /**
+   * Clears both layers and redraws every stroke in order.
+   *
+   * A stroke the child is still drawing survives: it is redrawn from its
+   * samples after the committed ones and stays live, so a replay provoked
+   * mid-stroke by a resize or a reflow neither loses its ink nor leaves the
+   * rest of the stroke with nothing to extend.
+   */
   replay(strokes: readonly RenderStroke[]): void {
     this.committed = strokes;
-    this.live = null;
     for (const layer of Object.values(this.layers)) {
       layer.ctx.setTransform(1, 0, 0, 1, 0, 0);
       layer.ctx.globalCompositeOperation = 'source-over';
@@ -103,6 +109,13 @@ export class ArtworkSurface {
         strokeWholePath(target, stroke.points);
       });
     }
+    const live = this.live;
+    if (!live) return;
+    const { ctx } = this.layers[live.spec.layer];
+    this.prepare(ctx, live.spec);
+    this.withClip(ctx, live.spec.clipPathIds, (target) => {
+      strokeWholePath(target, live.points);
+    });
   }
 
   beginStroke(spec: LiveStrokeSpec, at: Point): void {
