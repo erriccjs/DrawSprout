@@ -9,7 +9,7 @@
  */
 
 import { Profiler } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { CAT_LESSON } from '../lesson-data/cat-lesson';
 import { backingSize, fitViewport } from '../renderer/coordinates';
@@ -27,6 +27,10 @@ import {
   stubLayoutBox,
   TEST_CANVAS_RECT,
 } from '../test/pointer';
+
+// The step-walk helper drives real UI interactions step by step, so these tests
+// are slow rather than broken; a generous timeout keeps them off the flake line.
+vi.setConfig({ testTimeout: 60_000 });
 
 const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
