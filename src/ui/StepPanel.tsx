@@ -81,7 +81,8 @@ export function StepPanel({
         space={lesson.coordinateSpace}
         paths={lesson.targetPreview.paths}
         title={lesson.title}
-        highlightIds={step.guidePaths.map((path) => path.id)}
+        step={step}
+        colorRegions={lesson.colorRegions}
       />
 
       <fieldset className="step-panel__group">

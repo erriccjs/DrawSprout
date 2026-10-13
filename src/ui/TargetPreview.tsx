@@ -6,18 +6,19 @@
  * being drawn. Keeping it as its own small SVG panel satisfies both.
  */
 
-import type { CoordinateSpace, GuidePath } from '../lesson-data/schema';
+import type { ColorRegion, CoordinateSpace, GuidePath, LessonStep } from '../lesson-data/schema';
 
 interface TargetPreviewProps {
   readonly space: CoordinateSpace;
   readonly paths: readonly GuidePath[];
   readonly title: string;
-  /** Paths to draw in the accent colour, e.g. the active step's geometry. */
-  readonly highlightIds?: readonly string[];
+  readonly step: LessonStep;
+  readonly colorRegions: readonly ColorRegion[];
 }
 
-export function TargetPreview({ space, paths, title, highlightIds = [] }: TargetPreviewProps) {
-  const highlighted = new Set(highlightIds);
+export function TargetPreview({ space, paths, title, step, colorRegions }: TargetPreviewProps) {
+  const highlighted = new Set(step.guidePaths.map((path) => path.id));
+  const activeRegions = new Set(step.colorRegionIds);
   return (
     <svg
       className="target-preview"
@@ -25,6 +26,10 @@ export function TargetPreview({ space, paths, title, highlightIds = [] }: Target
       role="img"
       aria-label={`Contoh hasil akhir: ${title}`}
     >
+      {step.phase === 'color' &&
+        colorRegions
+          .filter((region) => activeRegions.has(region.id))
+          .map((region) => <path key={region.id} d={region.d} fill={step.toolPreset.color} />)}
       {paths.map((path) => (
         <path
           key={path.id}
