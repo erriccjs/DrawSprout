@@ -4,6 +4,12 @@
  * PRD section 9 is explicit that the target illustration is never exported as
  * the child's artwork, and section 9.3 that the example must not cover the area
  * being drawn. Keeping it as its own small SVG panel satisfies both.
+ *
+ * During a `color` step the panel also fills that step's regions with the step's
+ * preset colour, so the child can see which part is being coloured and which
+ * colour the lesson suggests. Only the active step's regions are filled: the
+ * panel must not pre-colour the whole illustration. The fill is a suggestion,
+ * not a constraint — the child's own colour choice stays available (FR-04).
  */
 
 import type { ColorRegion, CoordinateSpace, GuidePath, LessonStep } from '../lesson-data/schema';
