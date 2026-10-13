@@ -130,11 +130,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
   useEffect(() => {
     if (!canvas || !viewport) return;
 
-    const { width, height } = backingSize(viewport);
-    canvas.width = width;
-    canvas.height = height;
-    canvas.style.width = `${viewport.cssWidth}px`;
-    canvas.style.height = `${viewport.cssHeight}px`;
+    sizeCanvas(canvas, viewport);
 
     let surface = surfaceRef.current;
     if (!surface) {
@@ -346,6 +342,14 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
       </div>
     </div>
   );
+}
+
+function sizeCanvas(canvas: HTMLCanvasElement, viewport: Viewport): void {
+  const { width, height } = backingSize(viewport);
+  canvas.width = width;
+  canvas.height = height;
+  canvas.style.width = `${viewport.cssWidth}px`;
+  canvas.style.height = `${viewport.cssHeight}px`;
 }
 
 function statusLabel(status: ReturnType<typeof useAutosave>, durable: boolean): string {

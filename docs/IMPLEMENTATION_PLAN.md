@@ -43,7 +43,7 @@ real tablet.
 | --- | --- | --- | --- | --- |
 | FR-01 | Canvas, orientation-stable | M1 | **Done** | Fixed 1000×750 coordinate space; `src/renderer/coordinates.ts`. Resize and rotation only change the viewport, never stored geometry. |
 | FR-02 | Pen, eraser, palette, width, ≥50 undo | M1 | **Done** | `src/lesson-engine/session.ts`, `src/ui/Toolbar.tsx`. History is unbounded; an erase is a stroke, so undo restores it. |
-| FR-03 | Per-step tool preset, stable during input | M1 | **Done** | `effectiveToolPreset` is resolved once at pointer-down in `DrawingPad.tsx`; nothing can change colour or width mid-stroke. |
+| FR-03 | Per-step tool preset, stable during input | M1 | **Done** | `effectiveToolPreset` is resolved once at pointer-down in `DrawingPad.tsx`; nothing can change colour or width mid-stroke. A step change installs that step's authored tool, so an eraser or a width picked for the previous step does not follow the child into this one. |
 | FR-04 | "Follow the guide" vs "my colour" | M1 | **Done** | `colorSource` persists across steps until `use-guide-color`. |
 | FR-05 | Lesson template with preview, steps, geometry, regions, version | M1 | **Done** | `src/lesson-data/schema.ts`, `cat-lesson.ts`, validated by `validate.ts`. |
 | FR-06 | Dashed guide, active part only, not exported | M1 | **Done** | SVG overlay (`GuideOverlay.tsx`) layered over the canvas, so it is in no canvas the exporter can read. |
@@ -105,7 +105,8 @@ Automated, reproducible in this repo (`npm run build`, `npm test`, `npm run lint
 - Undo/redo, redo invalidation after a new stroke, step-scoped undo, and
   undoing an erase.
 - Tool preset resolution: step preset by default, a chosen colour that outlives
-  a step change, a width override that does not.
+  a step change, a tool choice and a width override that do not — while a
+  different tool is still free to be picked within a step.
 - Persistence round trip through real IndexedDB transactions, including the
   undone-stroke case, session isolation, and a rolled-back save leaving nothing
   behind.

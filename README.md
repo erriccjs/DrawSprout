@@ -19,8 +19,9 @@ export that contains the child's drawing and nothing else.
 - Three assistance levels: dashed guides always visible, guides that fade after
   3/5/10 seconds, or example-in-the-panel only — plus a "show the hint" button
   that is always available.
-- Colour and pen width prepared per step, with a free colour choice that sticks
-  until the child asks for the guide colour back.
+- Tool, colour and pen width prepared per step — each step starts with its own
+  tool — with a free colour choice that sticks until the child asks for the
+  guide colour back.
 - A colouring phase with an **optional** boundary assist the child can switch off.
 - Autosave and resume through IndexedDB.
 - PNG export of the artwork alone — no guides, no example illustration.
