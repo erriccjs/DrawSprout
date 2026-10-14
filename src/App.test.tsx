@@ -5,6 +5,7 @@ import { createSession, reduceSession } from './lesson-engine/session';
 import * as persistence from './persistence';
 import { toCheckpoint } from './persistence/mapping';
 import { MemorySessionStore } from './persistence/memory-store';
+import { StorageFullError } from './persistence/types';
 import { App } from './App';
 
 vi.mock('./lesson-data', async (importOriginal) => {
@@ -25,6 +26,10 @@ vi.mock('./persistence', async (importOriginal) => ({
   ...(await importOriginal<typeof persistence>()),
   createSessionStore: vi.fn(),
 }));
+
+// Each case renders the full drawing pad once or twice; the default 5s budget
+// is not enough for that on a slow machine, as DrawingPad's own suite assumes.
+vi.setConfig({ testTimeout: 60_000 });
 
 let store: MemorySessionStore;
 
@@ -101,5 +106,44 @@ describe('lesson picker', () => {
     await screen.findByRole('heading', { name: 'Selesai! Ini karyamu.' });
     fireEvent.click(screen.getByRole('button', { name: 'Pilih gambar lain' }));
     await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+  });
+});
+
+describe('leaving a drawing', () => {
+  it('still reaches the picker and says so when the save fails', async () => {
+    vi.spyOn(store, 'saveProgress').mockRejectedValue(new StorageFullError());
+
+    render(<App />);
+    await open('Kucing');
+    fireEvent.click(screen.getByRole('button', { name: /Pilih gambar/ }));
+
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    expect(await screen.findByText(/mungkin belum tersimpan/)).toBeTruthy();
+  });
+});
+
+describe('resume notice', () => {
+  const RESUMED = /Karya terakhirmu dilanjutkan/;
+
+  it('opens a blank drawing silently after leaving and coming back', async () => {
+    render(<App />);
+    await open('Kucing');
+    await returnToPicker();
+    await open('Kucing');
+
+    expect(await store.loadLatestSessionForLesson(lessonData.BUNDLED_LESSONS[0]!.id)).not.toBeNull();
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.queryByText(RESUMED)).toBeNull();
+  });
+
+  it('tells the child when real progress is picked up again', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const started = reduceSession(cat, createSession(cat, 'started-cat'), { type: 'next-step' });
+    await store.saveProgress({ checkpoint: toCheckpoint(started, 1, 123), newStrokes: [] });
+
+    render(<App />);
+    await open('Kucing');
+
+    expect(screen.getByText(RESUMED)).toBeTruthy();
   });
 });

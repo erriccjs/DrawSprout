@@ -44,6 +44,7 @@ function setup() {
       initialState={initialState}
       durable
       notice={null}
+      onChoosePicture={() => undefined}
     />,
   );
   const canvas = view.container.querySelector('canvas')!;
@@ -314,6 +315,7 @@ describe('the pointermove path', () => {
           initialState={createSession(CAT_LESSON, 'profiled-session')}
           durable
           notice={null}
+          onChoosePicture={() => undefined}
         />
       </Profiler>,
     );
@@ -617,6 +619,7 @@ describe('autosave and resume', () => {
         initialState={createSession(CAT_LESSON, 'failing-session')}
         durable
         notice={null}
+        onChoosePicture={() => undefined}
       />,
     );
     const canvas = container.querySelector('canvas')!;

@@ -18,7 +18,7 @@ interface FinishScreenProps {
   readonly state: SessionState;
   readonly clipPaths: Record<string, string>;
   readonly onKeepDrawing: () => void;
-  readonly onChoosePicture?: () => void;
+  readonly onChoosePicture: () => void;
   readonly saveStatus: SaveStatus;
 }
 
@@ -86,11 +86,9 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
         <button type="button" className="button" onClick={onKeepDrawing}>
           ← Gambar lagi
         </button>
-        {onChoosePicture && (
-          <button type="button" className="button" onClick={onChoosePicture}>
-            Pilih gambar lain
-          </button>
-        )}
+        <button type="button" className="button" onClick={onChoosePicture}>
+          Pilih gambar lain
+        </button>
       </div>
 
       {saveStatus.kind === 'storage-full' && (

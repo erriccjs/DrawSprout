@@ -4,6 +4,7 @@ import type { LessonPackage } from './lesson-data/schema';
 import { createSession } from './lesson-engine/session';
 import type { SessionState } from './lesson-engine/types';
 import { fromRestoredSession } from './persistence/mapping';
+import type { SessionCheckpoint } from './persistence/types';
 import { DrawingPad } from './ui/DrawingPad';
 import { LessonPicker } from './ui/LessonPicker';
 import { newId } from './ui/ids';
@@ -20,6 +21,7 @@ export function App() {
   const [openLesson, setOpenLesson] = useState<OpenLesson | null>(null);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [exitNotice, setExitNotice] = useState<string | null>(null);
 
   if (bootstrap.status === 'loading') {
     return (
@@ -42,6 +44,7 @@ export function App() {
     if (opening) return;
     setOpening(true);
     setOpenError(null);
+    setExitNotice(null);
     try {
       const lesson = getLesson(lessonId);
       const restored = await bootstrap.store.loadLatestSessionForLesson(lessonId);
@@ -62,7 +65,11 @@ export function App() {
         }
       }
 
-      setOpenLesson({ lesson, initialState, notice });
+      setOpenLesson({
+        lesson,
+        initialState,
+        notice: restored && hasProgress(restored.checkpoint) ? notice : null,
+      });
     } catch (error) {
       setOpenError(`Gagal membuka gambar: ${describe(error)}`);
     } finally {
@@ -80,12 +87,33 @@ export function App() {
           initialState={openLesson.initialState}
           durable={bootstrap.durable}
           notice={openLesson.notice}
-          onChoosePicture={() => setOpenLesson(null)}
+          onChoosePicture={(saved) => {
+            setOpenLesson(null);
+            setExitNotice(
+              saved
+                ? null
+                : 'Gambar tadi mungkin belum tersimpan. Tidak apa-apa, kamu bisa menggambar lagi.',
+            );
+          }}
         />
       ) : (
-        <LessonPicker onSelect={(lessonId) => void selectLesson(lessonId)} opening={opening} error={openError} />
+        <LessonPicker
+          onSelect={(lessonId) => void selectLesson(lessonId)}
+          opening={opening}
+          error={openError}
+          notice={exitNotice}
+        />
       )}
     </main>
+  );
+}
+
+/** Whether a checkpoint holds work a child would recognise as their own. */
+function hasProgress(checkpoint: SessionCheckpoint): boolean {
+  return (
+    checkpoint.committedStrokeIds.length > 0 ||
+    checkpoint.redoStrokeIds.length > 0 ||
+    checkpoint.currentStepIndex > 0
   );
 }
 

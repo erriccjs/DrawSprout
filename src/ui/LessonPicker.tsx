@@ -4,14 +4,16 @@ interface LessonPickerProps {
   readonly onSelect: (lessonId: string) => void;
   readonly opening: boolean;
   readonly error: string | null;
+  readonly notice: string | null;
 }
 
-export function LessonPicker({ onSelect, opening, error }: LessonPickerProps) {
+export function LessonPicker({ onSelect, opening, error, notice }: LessonPickerProps) {
   return (
     <section className="lesson-picker" aria-labelledby="lesson-picker-title">
       <h1 id="lesson-picker-title">Mau gambar apa hari ini?</h1>
       <p>Pilih gambar yang kamu suka, lalu ikuti langkahnya.</p>
       {error && <p className="banner banner--warning" role="alert">{error}</p>}
+      {notice && <p className="banner" role="status">{notice}</p>}
       <div className="lesson-picker__choices">
         {BUNDLED_LESSONS.map((lesson) => (
           <button
