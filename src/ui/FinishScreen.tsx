@@ -92,7 +92,7 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
         <div className="finish__choice" role="group" aria-label="Pilihan gambar lagi">
           <h2>Mau mulai dengan gambar kosong?</h2>
           <div className="finish__actions">
-            <button type="button" className="button" onClick={onKeepDrawing}>
+            <button type="button" className="button" onClick={onKeepDrawing} autoFocus>
               Gambar lama tetap ada
             </button>
             <button type="button" className="button" onClick={onStartFresh}>

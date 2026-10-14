@@ -284,6 +284,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         clipPaths={clipPaths}
         onKeepDrawing={() => {
           if (restartingRef.current) return;
+          setRestartError(null);
           dispatch({ type: 'reopen' });
         }}
         onChoosePicture={choosePicture}
