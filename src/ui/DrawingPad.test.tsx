@@ -539,6 +539,16 @@ describe('finishing', () => {
     expect(screen.getByRole('button', { name: /Selesai/ })).toBeTruthy();
   });
 
+  it('focuses the first choice after asking to draw again', () => {
+    setup();
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    const drawAgain = screen.getByRole('button', { name: /Gambar lagi/ });
+    drawAgain.focus();
+    act(() => drawAgain.click());
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Gambar lama tetap ada' }));
+  });
+
   it('gives back a sized, repainted canvas that still draws after Gambar lagi', async () => {
     const { store, view } = setup();
     act(() =>
@@ -650,6 +660,20 @@ describe('finishing', () => {
     expect(restored?.checkpoint.finished).toBe(true);
     expect(restored?.checkpoint.currentStepIndex).toBe(CAT_LESSON.steps.length - 1);
     expect(restored?.strokes).toHaveLength(1);
+  });
+
+  it('clears a failed restart message when keeping the drawing', async () => {
+    const { store } = setup();
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    store.deleteSession = vi.fn().mockRejectedValue(new Error('delete failed'));
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+    expect(await screen.findByText(/Belum bisa mulai gambar baru/)).toBeTruthy();
+
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    expect(screen.queryByText(/Belum bisa mulai gambar baru/)).toBeNull();
   });
 
   it('shows a fresh temporary guide after restarting', async () => {

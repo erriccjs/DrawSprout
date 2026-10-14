@@ -280,7 +280,10 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         lesson={lesson}
         state={state}
         clipPaths={clipPaths}
-        onKeepDrawing={() => dispatch({ type: 'reopen' })}
+        onKeepDrawing={() => {
+          setRestartError(null);
+          dispatch({ type: 'reopen' });
+        }}
         onChoosePicture={choosePicture}
         onStartFresh={() => {
           if (restartingRef.current) return;
