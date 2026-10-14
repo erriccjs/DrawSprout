@@ -288,7 +288,10 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           setRestarting(true);
           setRestartError(null);
           void clearSession(reduceSession(lesson, state, { type: 'restart' }))
-            .then(() => dispatch({ type: 'restart' }))
+            .then(() => {
+              setHintWindow({ key: '', open: false, nonce: 0 });
+              dispatch({ type: 'restart' });
+            })
             .catch(() => setRestartError('Belum bisa mulai gambar baru. Coba lagi.'))
             .finally(() => {
               restartingRef.current = false;

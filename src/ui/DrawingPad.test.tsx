@@ -651,6 +651,28 @@ describe('finishing', () => {
     expect(restored?.checkpoint.currentStepIndex).toBe(CAT_LESSON.steps.length - 1);
     expect(restored?.strokes).toHaveLength(1);
   });
+
+  it('shows a fresh temporary guide after restarting', async () => {
+    vi.useFakeTimers();
+    try {
+      const { view } = setup();
+      act(() => screen.getByRole('radio', { name: /Petunjuk sementara/ }).click());
+      expect(canvasGuides(view.container).length).toBeGreaterThan(0);
+      act(() => vi.advanceTimersByTime(5000));
+      expect(canvasGuides(view.container)).toHaveLength(0);
+      vi.useRealTimers();
+
+      advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+      act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+      act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+      act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+
+      await waitFor(() => expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy());
+      expect(canvasGuides(view.container).length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('autosave and resume', () => {
