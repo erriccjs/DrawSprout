@@ -22,7 +22,10 @@ export that contains the child's drawing and nothing else.
 - Tool, colour and pen width prepared per step — each step starts with its own
   tool — with a free colour choice that sticks until the child asks for the
   guide colour back.
-- A colouring phase with an **optional** boundary assist the child can switch off.
+- A colouring phase with an **optional** boundary assist the child can switch
+  off. During a colouring step the example panel fills the regions that step
+  covers in the colour the lesson suggests, so the child can see *where* and
+  *which colour* — and is still free to pick another colour.
 - Autosave and resume through IndexedDB.
 - PNG export of the artwork alone — no guides, no example illustration.
 

@@ -9,7 +9,7 @@
  */
 
 import { Profiler } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { CAT_LESSON } from '../lesson-data/cat-lesson';
 import { backingSize, fitViewport } from '../renderer/coordinates';
@@ -27,6 +27,10 @@ import {
   stubLayoutBox,
   TEST_CANVAS_RECT,
 } from '../test/pointer';
+
+// The step-walk helper drives real UI interactions step by step, so these tests
+// are slow rather than broken; a generous timeout keeps them off the flake line.
+vi.setConfig({ testTimeout: 60_000 });
 
 const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
@@ -88,6 +92,17 @@ function controllableResizeObserver(): { fire: () => void; restore: () => void }
 
 function canvasGuides(container: HTMLElement): SVGPathElement[] {
   return [...container.querySelectorAll<SVGPathElement>('.guide-overlay path')];
+}
+
+function previewPaths(): SVGPathElement[] {
+  return [...screen.getByRole('img', { name: /Contoh hasil akhir/ }).querySelectorAll('path')];
+}
+
+function advanceToStep(stepId: string): void {
+  const stepIndex = CAT_LESSON.steps.findIndex((step) => step.id === stepId);
+  for (let i = 0; i < stepIndex; i += 1) {
+    act(() => screen.getByRole('button', { name: /Lanjut/ }).click());
+  }
 }
 
 beforeEach(() => {
@@ -362,6 +377,75 @@ describe('assistance modes', () => {
 });
 
 describe('navigation and colouring', () => {
+  it('keeps the outline example unchanged on a line step', () => {
+    setup();
+    const paths = previewPaths();
+    expect(paths).toHaveLength(CAT_LESSON.targetPreview.paths.length);
+    expect(paths.map((path) => path.getAttribute('d'))).toEqual(
+      CAT_LESSON.targetPreview.paths.map((path) => path.d),
+    );
+    expect(paths.map((path) => [
+      path.getAttribute('fill'),
+      path.getAttribute('stroke'),
+      path.getAttribute('stroke-width'),
+    ])).toEqual(
+      CAT_LESSON.targetPreview.paths.map((path) => [
+        'none',
+        path.id === 'head' ? '#4b6bfb' : '#8a9099',
+        path.id === 'head' ? '10' : '5',
+      ]),
+    );
+  });
+
+  it('shows the fur regions in the suggested colour on color-fur', () => {
+    setup();
+    advanceToStep('color-fur');
+    const step = CAT_LESSON.steps.find((item) => item.id === 'color-fur')!;
+    const filled = previewPaths().filter((path) => path.getAttribute('fill') !== 'none');
+    expect(filled.map((path) => path.getAttribute('d'))).toEqual(
+      CAT_LESSON.colorRegions
+        .filter((region) => step.colorRegionIds.includes(region.id))
+        .map((region) => region.d),
+    );
+    expect(filled.every((path) => path.getAttribute('fill') === step.toolPreset.color)).toBe(true);
+    expect(
+      previewPaths()
+        .filter((path) => path.getAttribute('fill') === 'none')
+        .every((path) => path.getAttribute('stroke') === '#8a9099'),
+    ).toBe(true);
+  });
+
+  it('shows only the inner ears and nose in the suggested colour on color-face', () => {
+    setup();
+    advanceToStep('color-face');
+    const step = CAT_LESSON.steps.find((item) => item.id === 'color-face')!;
+    const filled = previewPaths().filter((path) => path.getAttribute('fill') !== 'none');
+    expect(filled.map((path) => path.getAttribute('d'))).toEqual(
+      CAT_LESSON.colorRegions
+        .filter((region) => step.colorRegionIds.includes(region.id))
+        .map((region) => region.d),
+    );
+    expect(filled.every((path) => path.getAttribute('fill') === step.toolPreset.color)).toBe(true);
+  });
+
+  it('paints with a self-chosen colour during a colour step', async () => {
+    const { store, canvas } = setup();
+    advanceToStep('color-fur');
+    act(() => screen.getByRole('button', { name: 'Warna Ungu' }).click());
+    expect(
+      previewPaths()
+        .filter((path) => path.getAttribute('fill') !== 'none')
+        .every((path) => path.getAttribute('fill') === CAT_LESSON.steps.find((step) => step.id === 'color-fur')!.toolPreset.color),
+    ).toBe(true);
+    act(() => drawStroke(canvas, [{ x: 450, y: 215 }, { x: 500, y: 215 }]));
+
+    await waitFor(async () => {
+      const restored = await store.loadSession('test-session');
+      expect(restored?.strokes).toHaveLength(1);
+      expect(restored?.strokes[0]?.color).toBe('#8a5bd6');
+    });
+  });
+
   it('walks every step and reaches the colouring tools', () => {
     setup();
 
