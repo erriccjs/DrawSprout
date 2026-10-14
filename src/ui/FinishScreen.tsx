@@ -80,7 +80,21 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
 
       <div className="finish__preview" ref={previewRef} />
 
-      {askingToClear ? (
+      <div className="finish__actions">
+        <button type="button" className="button button--primary" onClick={() => void save()}>
+          Simpan gambar (PNG)
+        </button>
+        {!askingToClear && (
+          <button type="button" className="button" onClick={() => setAskingToClear(true)}>
+            ← Gambar lagi
+          </button>
+        )}
+        <button type="button" className="button" onClick={onChoosePicture}>
+          Pilih gambar lain
+        </button>
+      </div>
+
+      {askingToClear && (
         <div className="finish__choice" role="group" aria-label="Pilihan gambar lagi">
           <h2>Mau mulai dengan gambar kosong?</h2>
           <div className="finish__actions">
@@ -91,18 +105,6 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
               Ya, mulai gambar baru
             </button>
           </div>
-        </div>
-      ) : (
-        <div className="finish__actions">
-          <button type="button" className="button button--primary" onClick={() => void save()}>
-            Simpan gambar (PNG)
-          </button>
-          <button type="button" className="button" onClick={() => setAskingToClear(true)}>
-            ← Gambar lagi
-          </button>
-          <button type="button" className="button" onClick={onChoosePicture}>
-            Pilih gambar lain
-          </button>
         </div>
       )}
 
