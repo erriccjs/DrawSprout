@@ -85,10 +85,13 @@ export function useAutosave(
       revisionRef.current = 0;
       stateRef.current = fresh;
       setStatus({ kind: 'idle' });
-    } finally {
+    } catch (error) {
       clearingRef.current = false;
+      await flush();
+      throw error;
     }
-  }, [store]);
+    clearingRef.current = false;
+  }, [store, flush]);
 
   useEffect(() => {
     if (!enabled) return;
