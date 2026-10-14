@@ -20,13 +20,12 @@ interface FinishScreenProps {
   readonly onChoosePicture: () => void;
   readonly onStartFresh: () => void;
   readonly restartError: string | null;
-  readonly restarting: boolean;
 }
 
 /** Small enough to render instantly, large enough to look right on a tablet. */
 const PREVIEW_WIDTH_PX = 900;
 
-export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoosePicture, onStartFresh, restartError, restarting }: FinishScreenProps) {
+export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoosePicture, onStartFresh, restartError }: FinishScreenProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
@@ -85,10 +84,10 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
         <div className="finish__choice" role="group" aria-label="Pilihan gambar lagi">
           <h2>Mau mulai dengan gambar kosong?</h2>
           <div className="finish__actions">
-            <button type="button" className="button" onClick={onKeepDrawing} disabled={restarting} autoFocus>
+            <button type="button" className="button" onClick={onKeepDrawing} autoFocus>
               Gambar lama tetap ada
             </button>
-            <button type="button" className="button" onClick={onStartFresh} disabled={restarting}>
+            <button type="button" className="button" onClick={onStartFresh}>
               Ya, mulai gambar baru
             </button>
           </div>

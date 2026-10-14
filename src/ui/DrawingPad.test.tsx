@@ -641,6 +641,44 @@ describe('finishing', () => {
     }, { timeout: 4000 });
   });
 
+  it('starts fresh only once when the choice is tapped twice in a row', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    let release = () => {};
+    const pending = new Promise<void>((resolve) => {
+      release = () => resolve();
+    });
+    const realDelete = store.deleteSession.bind(store);
+    const deleteSession = vi.fn(async (id: string) => {
+      await pending;
+      await realDelete(id);
+    });
+    store.deleteSession = deleteSession;
+
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    const startFresh = screen.getByRole('button', { name: 'Ya, mulai gambar baru' });
+    act(() => startFresh.click());
+    await waitFor(() => expect(deleteSession).toHaveBeenCalledTimes(1));
+    act(() => startFresh.click());
+
+    await act(async () => {
+      release();
+      await pending;
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    });
+    expect(deleteSession).toHaveBeenCalledTimes(1);
+    const restored = await store.loadSession('test-session');
+    expect(restored?.strokes ?? []).toHaveLength(0);
+  });
+
   it('saves the finished drawing when starting fresh fails', async () => {
     const { store, canvas } = setup();
     act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));

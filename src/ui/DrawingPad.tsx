@@ -83,7 +83,6 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   // and the save result follows it there.
   const choosePicture = () => onChoosePicture(restorePending ? Promise.resolve(true) : flush(), stateRef.current);
   const [restartError, setRestartError] = useState<string | null>(null);
-  const [restarting, setRestarting] = useState(false);
   const restartingRef = useRef(false);
   const step = activeStep(lesson, state);
   const preset = effectiveToolPreset(lesson, state);
@@ -288,7 +287,6 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         onStartFresh={() => {
           if (restartingRef.current) return;
           restartingRef.current = true;
-          setRestarting(true);
           setRestartError(null);
           void clearSession(reduceSession(lesson, state, { type: 'restart' }))
             .then(() => {
@@ -298,11 +296,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
             .catch(() => setRestartError('Belum bisa mulai gambar baru. Coba lagi.'))
             .finally(() => {
               restartingRef.current = false;
-              setRestarting(false);
             });
         }}
         restartError={restartError}
-        restarting={restarting}
       />
     );
   }
