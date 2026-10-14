@@ -26,7 +26,7 @@ export function useAutosave(
   state: SessionState,
   enabled = true,
   pendingSave: Promise<boolean> | null = null,
-) {
+): { status: SaveStatus; flush: () => Promise<boolean>; clearSession: (fresh: SessionState) => Promise<void> } {
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
 
   // Written in an effect rather than during render; the save effect below is
@@ -85,13 +85,10 @@ export function useAutosave(
       revisionRef.current = 0;
       stateRef.current = fresh;
       setStatus({ kind: 'idle' });
-    } catch (error) {
+    } finally {
       clearingRef.current = false;
-      await flush();
-      throw error;
     }
-    clearingRef.current = false;
-  }, [store, flush]);
+  }, [store]);
 
   useEffect(() => {
     if (!enabled) return;
