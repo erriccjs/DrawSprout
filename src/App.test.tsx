@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as lessonData from './lesson-data';
+import type { LessonPackage } from './lesson-data/schema';
 import { createSession, reduceSession } from './lesson-engine/session';
 import * as persistence from './persistence';
 import { toCheckpoint } from './persistence/mapping';
@@ -8,9 +9,10 @@ import { MemorySessionStore } from './persistence/memory-store';
 import { StorageFullError } from './persistence/types';
 import { App } from './App';
 
+const lessons = vi.hoisted(() => [] as LessonPackage[]);
+
 vi.mock('./lesson-data', async (importOriginal) => {
   const actual = await importOriginal<typeof lessonData>();
-  const lessons = [actual.CAT_LESSON, { ...actual.CAT_LESSON, id: 'test-flower', title: 'Bunga' }];
   return {
     ...actual,
     BUNDLED_LESSONS: lessons,
@@ -34,6 +36,11 @@ vi.setConfig({ testTimeout: 60_000 });
 let store: MemorySessionStore;
 
 beforeEach(() => {
+  lessons.splice(0, lessons.length, lessonData.CAT_LESSON, {
+    ...lessonData.CAT_LESSON,
+    id: 'test-flower',
+    title: 'Bunga',
+  });
   store = new MemorySessionStore();
   vi.mocked(persistence.createSessionStore).mockResolvedValue({ store, durable: true });
 });
@@ -94,6 +101,19 @@ describe('lesson picker', () => {
     await waitFor(async () => {
       expect((await store.loadLatestSessionForLesson(cat.id))?.checkpoint.sessionId).toBe('old-cat-session');
     });
+  });
+
+  it('refuses with the child-facing message when a bundled package is broken', async () => {
+    lessons.splice(0, lessons.length, {
+      ...lessonData.CAT_LESSON,
+      coordinateSpace: { ...lessonData.CAT_LESSON.coordinateSpace, width: 0 },
+    });
+
+    render(<App />);
+
+    await screen.findByRole('heading', { name: 'Pelajaran tidak dapat dibuka' });
+    expect(screen.getByText(/positive width and height/)).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Mau gambar apa hari ini?' })).toBeNull();
   });
 
   it('returns to the picker from a finished drawing', async () => {

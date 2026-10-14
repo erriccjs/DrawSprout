@@ -43,6 +43,15 @@ export function findLessonProblems(lesson: LessonPackage): string[] {
   if (lesson.steps.length === 0) {
     problems.push('lesson has no steps');
   }
+  if (lesson.title.trim() === '') {
+    problems.push('lesson has an empty title');
+  }
+  if (lesson.subtitle.trim() === '') {
+    problems.push('lesson has an empty subtitle');
+  }
+  if (lesson.targetPreview.paths.length === 0) {
+    problems.push('targetPreview has no paths to draw');
+  }
 
   const regionIds = new Set<string>();
   for (const region of lesson.colorRegions) {
@@ -106,11 +115,20 @@ function pathProblems(where: string, d: string): string[] {
 }
 
 /**
- * Throws unless the package is safe to open. Call this before a lesson reaches
- * the engine or the renderer.
+ * Throws unless every package in the list is safe to show and to open. Call
+ * this before any lesson reaches the picker, the engine or the renderer: the
+ * picker draws a tile from a package before anyone taps it, and a lesson id
+ * shared by two packages would open the wrong one.
  */
-export function assertValidLesson(lesson: LessonPackage): LessonPackage {
-  const problems = findLessonProblems(lesson);
+export function assertValidLessons(lessons: readonly LessonPackage[]): void {
+  const problems: string[] = [];
+  const lessonIds = new Set<string>();
+
+  for (const lesson of lessons) {
+    if (lessonIds.has(lesson.id)) problems.push(`duplicate lesson id "${lesson.id}"`);
+    lessonIds.add(lesson.id);
+    problems.push(...findLessonProblems(lesson));
+  }
+
   if (problems.length > 0) throw new LessonValidationError(problems);
-  return lesson;
 }
