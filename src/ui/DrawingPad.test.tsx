@@ -630,6 +630,27 @@ describe('finishing', () => {
       expect(restored?.strokes).toHaveLength(0);
     }, { timeout: 4000 });
   });
+
+  it('saves the finished drawing when starting fresh fails', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    store.deleteSession = vi.fn().mockRejectedValue(new Error('delete failed'));
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+
+    expect(await screen.findByText(/Belum bisa mulai gambar baru/)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Ini karyamu/ })).toBeTruthy();
+    const restored = await store.loadSession('test-session');
+    expect(restored?.checkpoint.finished).toBe(true);
+    expect(restored?.checkpoint.currentStepIndex).toBe(CAT_LESSON.steps.length - 1);
+    expect(restored?.strokes).toHaveLength(1);
+  });
 });
 
 describe('autosave and resume', () => {
