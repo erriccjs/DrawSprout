@@ -5,10 +5,9 @@
  * the child's artwork, and section 9.3 that the example must not cover the area
  * being drawn. Keeping it as its own small SVG panel satisfies both.
  *
- * During a `color` step the panel also fills that step's regions with the step's
- * preset colour, so the child can see which part is being coloured and which
- * colour the lesson suggests. Only the active step's regions are filled: the
- * panel must not pre-colour the whole illustration. The fill is a suggestion,
+ * During a `color` step the panel shows completed colour steps and outlines
+ * the current step's regions. Later regions stay blank even when they overlap
+ * an earlier fill. The fill is a suggestion,
  * not a constraint — the child's own colour choice stays available (FR-04).
  */
 
@@ -19,12 +18,18 @@ interface TargetPreviewProps {
   readonly paths: readonly GuidePath[];
   readonly title: string;
   readonly step: LessonStep;
+  readonly steps: readonly LessonStep[];
   readonly colorRegions: readonly ColorRegion[];
 }
 
-export function TargetPreview({ space, paths, title, step, colorRegions }: TargetPreviewProps) {
+export function TargetPreview({ space, paths, title, step, steps, colorRegions }: TargetPreviewProps) {
   const highlighted = new Set(step.guidePaths.map((path) => path.id));
   const activeRegions = new Set(step.colorRegionIds);
+  const stepIndex = steps.indexOf(step);
+  const completedColors = steps.slice(0, stepIndex + 1).filter((item) => item.phase === 'color');
+  const futureRegions = new Set(
+    steps.slice(stepIndex + 1).flatMap((item) => item.colorRegionIds),
+  );
   return (
     <svg
       className="target-preview"
@@ -32,10 +37,20 @@ export function TargetPreview({ space, paths, title, step, colorRegions }: Targe
       role="img"
       aria-label={`Contoh hasil akhir: ${title}`}
     >
-      {step.phase === 'color' &&
-        colorRegions
-          .filter((region) => activeRegions.has(region.id))
-          .map((region) => <path key={region.id} d={region.d} fill={step.toolPreset.color} />)}
+      {step.phase === 'color' && (
+        <>
+          {completedColors.flatMap((item) =>
+            colorRegions
+              .filter((region) => item.colorRegionIds.includes(region.id))
+              .map((region) => (
+                <path key={`${item.id}-${region.id}`} d={region.d} fill={item.toolPreset.color} />
+              )),
+          )}
+          {colorRegions
+            .filter((region) => futureRegions.has(region.id))
+            .map((region) => <path key={`future-${region.id}`} d={region.d} fill="var(--paper)" />)}
+        </>
+      )}
       {paths.map((path) => (
         <path
           key={path.id}
@@ -47,6 +62,12 @@ export function TargetPreview({ space, paths, title, step, colorRegions }: Targe
           strokeLinejoin="round"
         />
       ))}
+      {step.phase === 'color' &&
+        colorRegions
+          .filter((region) => activeRegions.has(region.id))
+          .map((region) => (
+            <path key={`active-${region.id}`} d={region.d} fill="none" stroke="#4b6bfb" strokeWidth={7} />
+          ))}
     </svg>
   );
 }
