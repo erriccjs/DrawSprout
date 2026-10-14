@@ -679,6 +679,44 @@ describe('finishing', () => {
     expect(restored?.strokes ?? []).toHaveLength(0);
   });
 
+  it('ignores the keep choice once a fresh start is under way', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    let release = () => {};
+    const pending = new Promise<void>((resolve) => {
+      release = () => resolve();
+    });
+    const realDelete = store.deleteSession.bind(store);
+    const deleteSession = vi.fn(async (id: string) => {
+      await pending;
+      await realDelete(id);
+    });
+    store.deleteSession = deleteSession;
+
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+    await waitFor(() => expect(deleteSession).toHaveBeenCalledTimes(1));
+
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
+    expect(screen.getByRole('heading', { name: /Ini karyamu/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Selesai/ })).toBeNull();
+
+    await act(async () => {
+      release();
+      await pending;
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    });
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
+  });
+
   it('saves the finished drawing when starting fresh fails', async () => {
     const { store, canvas } = setup();
     act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
