@@ -87,8 +87,14 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
         <button type="button" className="button" onClick={onChoosePicture}>
           Pilih gambar lain
         </button>
+        {!askingToClear && (
+          <button type="button" className="button" onClick={() => setAskingToClear(true)}>
+            ← Gambar lagi
+          </button>
+        )}
       </div>
-      {askingToClear ? (
+
+      {askingToClear && (
         <div className="finish__choice" role="group" aria-label="Pilihan gambar lagi">
           <h2>Mau mulai dengan gambar kosong?</h2>
           <div className="finish__actions">
@@ -99,12 +105,6 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
               Ya, mulai gambar baru
             </button>
           </div>
-        </div>
-      ) : (
-        <div className="finish__actions">
-          <button type="button" className="button" onClick={() => setAskingToClear(true)}>
-            ← Gambar lagi
-          </button>
         </div>
       )}
 

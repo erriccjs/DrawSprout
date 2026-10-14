@@ -539,6 +539,44 @@ describe('finishing', () => {
     expect(screen.getByRole('button', { name: /Selesai/ })).toBeTruthy();
   });
 
+  it('keeps the PNG save action usable while the question is on screen', async () => {
+    const createObjectURL = vi.fn(() => 'blob:artwork');
+    const revokeObjectURL = vi.fn();
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = createObjectURL as unknown as typeof URL.createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL as unknown as typeof URL.revokeObjectURL;
+    const clicks: string[] = [];
+    const originalClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function recordClick(this: HTMLAnchorElement) {
+      clicks.push(this.download);
+    };
+    try {
+      setup();
+      advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+      act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+      act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+
+      expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
+      const saveWhileAsking = screen.getByRole('button', { name: /Simpan gambar/ });
+      expect(saveWhileAsking.hasAttribute('disabled')).toBe(false);
+      act(() => saveWhileAsking.click());
+      expect(await screen.findByText(/dikirim ke unduhan browser/)).toBeTruthy();
+      expect(clicks).toHaveLength(1);
+      expect(clicks[0]).toMatch(/\.png$/);
+
+      act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
+      act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+      act(() => screen.getByRole('button', { name: /Simpan gambar/ }).click());
+      expect(await screen.findByText(/dikirim ke unduhan browser/)).toBeTruthy();
+      expect(clicks).toHaveLength(2);
+    } finally {
+      HTMLAnchorElement.prototype.click = originalClick;
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+    }
+  });
+
   it('focuses the first choice after asking to draw again', () => {
     setup();
     advanceToStep(CAT_LESSON.steps.at(-1)!.id);
