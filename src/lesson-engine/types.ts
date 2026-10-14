@@ -117,4 +117,5 @@ export type SessionAction =
   | { readonly type: 'clear-custom-width' }
   | { readonly type: 'set-boundary-assist'; readonly enabled: boolean }
   | { readonly type: 'finish' }
-  | { readonly type: 'reopen' };
+  | { readonly type: 'reopen' }
+  | { readonly type: 'restart' };

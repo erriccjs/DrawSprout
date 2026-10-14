@@ -534,6 +534,8 @@ describe('finishing', () => {
     expect(screen.getByText(/Garis panduan dan contoh tidak ikut tersimpan/)).toBeTruthy();
 
     act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
     expect(screen.getByRole('button', { name: /Selesai/ })).toBeTruthy();
   });
 
@@ -550,6 +552,7 @@ describe('finishing', () => {
     }
     act(() => screen.getByRole('button', { name: /Selesai/ }).click());
     act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
 
     const reopened = stageCanvas(view.container);
     const expected = backingSize(
@@ -575,6 +578,57 @@ describe('finishing', () => {
       const restored = await store.loadSession('test-session');
       expect(restored?.checkpoint.committedStrokeIds).toHaveLength(2);
     });
+  });
+
+  it('asks before changing the drawing, then keeps the old strokes and step when chosen', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /Karyamu:/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Selesai/ })).toBeNull();
+    expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
+    expect(screen.getByText(`Tahap ${CAT_LESSON.steps.length} dari ${CAT_LESSON.steps.length}`, { exact: false })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Selesai/ })).toBeTruthy();
+    expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+  });
+
+  it('clears the canvas and stored strokes and returns to the first step when chosen', async () => {
+    const { store, canvas, view } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+
+    await waitFor(() => {
+      expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    });
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
+    const composites = recordedCalls(stageCanvas(view.container)).filter((call) => call.op === 'drawImage');
+    const inkLayer = composites.at(-1)!.args[0] as HTMLCanvasElement;
+    const inkCalls = recordedCalls(inkLayer);
+    const lastClear = inkCalls.map((call) => call.op).lastIndexOf('clearRect');
+    expect(inkCalls.slice(lastClear + 1).filter((call) => call.op === 'stroke')).toHaveLength(0);
+    await waitFor(async () => {
+      const restored = await store.loadSession('test-session');
+      expect(restored?.checkpoint.currentStepIndex).toBe(0);
+      expect(restored?.checkpoint.committedStrokeIds).toHaveLength(0);
+      expect(restored?.strokes).toHaveLength(0);
+    }, { timeout: 4000 });
   });
 });
 

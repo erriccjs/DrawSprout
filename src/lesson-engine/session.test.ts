@@ -53,6 +53,19 @@ describe('step navigation', () => {
 });
 
 describe('session state machine', () => {
+  it('restarts at the first step without strokes or redo history', () => {
+    const drawn = draw(newSessionState(), stepIdAt(0));
+    const later = reduceSession(lesson, drawn, { type: 'next-step' });
+    const finished = reduceSession(lesson, later, { type: 'finish' });
+
+    const restarted = reduceSession(lesson, finished, { type: 'restart' });
+    expect(restarted.currentStepIndex).toBe(0);
+    expect(restarted.strokes).toHaveLength(0);
+    expect(restarted.redoStack).toHaveLength(0);
+    expect(restarted.nextSequence).toBe(1);
+    expect(restarted.finished).toBe(false);
+  });
+
   it('walks not_started to drawing to coloring to completed', () => {
     const fresh = newSessionState();
     expect(sessionPhase(lesson, fresh)).toBe('not_started');

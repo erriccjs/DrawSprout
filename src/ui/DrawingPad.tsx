@@ -78,10 +78,13 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     [lesson, onActivity],
   );
 
-  const { status: saveStatus, flush } = useAutosave(store, state, !restorePending, pendingSave);
+  const { status: saveStatus, flush, clearSession } = useAutosave(store, state, !restorePending, pendingSave);
   // Leaving never waits on storage: the child reaches the picker immediately
   // and the save result follows it there.
   const choosePicture = () => onChoosePicture(restorePending ? Promise.resolve(true) : flush(), stateRef.current);
+  const [restartError, setRestartError] = useState<string | null>(null);
+  const [restarting, setRestarting] = useState(false);
+  const restartingRef = useRef(false);
   const step = activeStep(lesson, state);
   const preset = effectiveToolPreset(lesson, state);
   const isColorStep = step.phase === 'color';
@@ -279,6 +282,21 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         clipPaths={clipPaths}
         onKeepDrawing={() => dispatch({ type: 'reopen' })}
         onChoosePicture={choosePicture}
+        onStartFresh={() => {
+          if (restartingRef.current) return;
+          restartingRef.current = true;
+          setRestarting(true);
+          setRestartError(null);
+          void clearSession(reduceSession(lesson, state, { type: 'restart' }))
+            .then(() => dispatch({ type: 'restart' }))
+            .catch(() => setRestartError('Belum bisa mulai gambar baru. Coba lagi.'))
+            .finally(() => {
+              restartingRef.current = false;
+              setRestarting(false);
+            });
+        }}
+        restartError={restartError}
+        restarting={restarting}
       />
     );
   }
