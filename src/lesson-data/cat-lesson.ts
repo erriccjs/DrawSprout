@@ -55,7 +55,7 @@ const COLOR_REGIONS = [
   {
     id: 'fur-tail',
     label: 'Ekor',
-    d: 'M 640 552 C 742 574 788 498 764 430 C 750 390 708 376 690 398 C 710 406 724 418 728 444 C 740 502 708 546 636 594 Z',
+    d: `${TAIL} Z`,
     suggestedColor: FUR,
   },
   { id: 'inner-ear-left', label: 'Dalam telinga kiri', d: 'M 408 141 L 411 62 L 457 104 Z', suggestedColor: PINK },

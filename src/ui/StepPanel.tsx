@@ -82,6 +82,7 @@ export function StepPanel({
         paths={lesson.targetPreview.paths}
         title={lesson.title}
         step={step}
+        steps={lesson.steps}
         colorRegions={lesson.colorRegions}
       />
 

@@ -397,35 +397,63 @@ describe('navigation and colouring', () => {
     );
   });
 
-  it('shows the fur regions in the suggested colour on color-fur', () => {
+  it('emphasises fur while leaving the later ear and nose regions blank on color-fur', () => {
     setup();
     advanceToStep('color-fur');
     const step = CAT_LESSON.steps.find((item) => item.id === 'color-fur')!;
-    const filled = previewPaths().filter((path) => path.getAttribute('fill') !== 'none');
+    const filled = previewPaths().filter((path) => path.getAttribute('fill') === step.toolPreset.color);
     expect(filled.map((path) => path.getAttribute('d'))).toEqual(
       CAT_LESSON.colorRegions
         .filter((region) => step.colorRegionIds.includes(region.id))
         .map((region) => region.d),
     );
-    expect(filled.every((path) => path.getAttribute('fill') === step.toolPreset.color)).toBe(true);
     expect(
       previewPaths()
-        .filter((path) => path.getAttribute('fill') === 'none')
+        .filter((path) => path.getAttribute('fill') === 'var(--paper)')
+        .map((path) => path.getAttribute('d')),
+    ).toEqual(
+      CAT_LESSON.colorRegions
+        .filter((region) => CAT_LESSON.steps.find((item) => item.id === 'color-face')!.colorRegionIds.includes(region.id))
+        .map((region) => region.d),
+    );
+    expect(
+      previewPaths()
+        .filter((path) => path.getAttribute('stroke') === '#4b6bfb')
+        .map((path) => path.getAttribute('d')),
+    ).toEqual(filled.map((path) => path.getAttribute('d')));
+    expect(
+      previewPaths()
+        .filter((path) => path.getAttribute('fill') === 'none' && path.getAttribute('stroke') !== '#4b6bfb')
         .every((path) => path.getAttribute('stroke') === '#8a9099'),
     ).toBe(true);
   });
 
-  it('shows only the inner ears and nose in the suggested colour on color-face', () => {
+  it('keeps fur coloured and emphasises only the new pink regions on color-face', () => {
     setup();
     advanceToStep('color-face');
     const step = CAT_LESSON.steps.find((item) => item.id === 'color-face')!;
-    const filled = previewPaths().filter((path) => path.getAttribute('fill') !== 'none');
+    const furStep = CAT_LESSON.steps.find((item) => item.id === 'color-fur')!;
+    const filled = previewPaths().filter((path) => path.getAttribute('fill') === step.toolPreset.color);
+    expect(
+      previewPaths()
+        .filter((path) => path.getAttribute('fill') === furStep.toolPreset.color)
+        .map((path) => path.getAttribute('d')),
+    ).toEqual(
+      CAT_LESSON.colorRegions
+        .filter((region) => furStep.colorRegionIds.includes(region.id))
+        .map((region) => region.d),
+    );
     expect(filled.map((path) => path.getAttribute('d'))).toEqual(
       CAT_LESSON.colorRegions
         .filter((region) => step.colorRegionIds.includes(region.id))
         .map((region) => region.d),
     );
-    expect(filled.every((path) => path.getAttribute('fill') === step.toolPreset.color)).toBe(true);
+    expect(
+      previewPaths()
+        .filter((path) => path.getAttribute('stroke') === '#4b6bfb')
+        .map((path) => path.getAttribute('d')),
+    ).toEqual(filled.map((path) => path.getAttribute('d')));
+    expect(previewPaths().filter((path) => path.getAttribute('fill') === 'var(--paper)')).toHaveLength(0);
   });
 
   it('paints with a self-chosen colour during a colour step', async () => {
@@ -434,7 +462,7 @@ describe('navigation and colouring', () => {
     act(() => screen.getByRole('button', { name: 'Warna Ungu' }).click());
     expect(
       previewPaths()
-        .filter((path) => path.getAttribute('fill') !== 'none')
+        .filter((path) => path.getAttribute('fill') !== 'none' && path.getAttribute('fill') !== 'var(--paper)')
         .every((path) => path.getAttribute('fill') === CAT_LESSON.steps.find((step) => step.id === 'color-fur')!.toolPreset.color),
     ).toBe(true);
     act(() => drawStroke(canvas, [{ x: 450, y: 215 }, { x: 500, y: 215 }]));

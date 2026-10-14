@@ -48,7 +48,7 @@ real tablet.
 | FR-05 | Lesson template with preview, steps, geometry, regions, version | M1 | **Done** | `src/lesson-data/schema.ts`, `cat-lesson.ts`, validated by `validate.ts`. |
 | FR-06 | Dashed guide, active part only, not exported | M1 | **Done** | SVG overlay (`GuideOverlay.tsx`) layered over the canvas, so it is in no canvas the exporter can read. |
 | FR-07 | Temporary hint, 3/5/10 s or always on, replay button | M1 | **Done** | `DrawingPad.tsx` guide window; default 5 s per the PRD's proposal. |
-| FR-08 | Independent mode: example in its own panel | M1 | **Done** | `TargetPreview.tsx`; the canvas overlay stays off until asked. On a colour step the panel fills that step's regions in the suggested colour, so the colour reference lives in the panel too. |
+| FR-08 | Independent mode: example in its own panel | M1 | **Done** | `TargetPreview.tsx`; the canvas overlay stays off until asked. See the colouring example in [README](../README.md). |
 | FR-09 | Back/next without similarity checks | M1 | **Done** | Navigation is unconditional; later steps' strokes survive going back. |
 | FR-10 | Automatic step completion | M3 | **Deferred** | `completionPolicy.automaticEnabled` is `false` on every step; the field exists so enabling it later is data, not a rewrite. |
 | FR-11 | Colouring with optional boundary assist | M1 | **Done** | Colour regions clip paint; the child can switch the boundary off and the clip is frozen per stroke. |
