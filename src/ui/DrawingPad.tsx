@@ -47,7 +47,7 @@ interface DrawingPadProps {
   readonly initialState: SessionState;
   readonly durable: boolean;
   readonly notice: string | null;
-  readonly onChoosePicture: (saved: boolean) => void;
+  readonly onChoosePicture: (saved: Promise<boolean>) => void;
 }
 
 /** What the pointer began drawing, frozen at pointer-down (FR-03). */
@@ -65,9 +65,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, onCho
   );
 
   const { status: saveStatus, flush } = useAutosave(store, state);
-  const choosePicture = async () => {
-    onChoosePicture(await flush());
-  };
+  // Leaving never waits on storage: the child reaches the picker immediately
+  // and the save result follows it there.
+  const choosePicture = () => onChoosePicture(flush());
   const step = activeStep(lesson, state);
   const preset = effectiveToolPreset(lesson, state);
   const isColorStep = step.phase === 'color';
@@ -260,9 +260,8 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, onCho
         lesson={lesson}
         state={state}
         clipPaths={clipPaths}
-        saveStatus={saveStatus}
         onKeepDrawing={() => dispatch({ type: 'reopen' })}
-        onChoosePicture={() => void choosePicture()}
+        onChoosePicture={choosePicture}
       />
     );
   }
@@ -270,7 +269,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, onCho
   return (
     <div className="pad">
       <header className="pad__header">
-        <button type="button" className="button" onClick={() => void choosePicture()}>
+        <button type="button" className="button" onClick={choosePicture}>
           ← Pilih gambar
         </button>
         <div>

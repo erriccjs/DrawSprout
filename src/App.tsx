@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { getLesson } from './lesson-data';
 import type { LessonPackage } from './lesson-data/schema';
-import { createSession } from './lesson-engine/session';
+import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
 import type { SessionState } from './lesson-engine/types';
 import { fromRestoredSession } from './persistence/mapping';
 import type { SessionCheckpoint } from './persistence/types';
@@ -48,7 +48,7 @@ export function App() {
     try {
       const lesson = getLesson(lessonId);
       const restored = await bootstrap.store.loadLatestSessionForLesson(lessonId);
-      const preferences = (await bootstrap.store.loadPreferences()) ?? bootstrap.preferences;
+      const preferences = (await bootstrap.store.loadPreferences()) ?? DEFAULT_PREFERENCES;
       let initialState = createSession(lesson, newId(), preferences);
       let notice: string | null = null;
 
@@ -89,11 +89,14 @@ export function App() {
           notice={openLesson.notice}
           onChoosePicture={(saved) => {
             setOpenLesson(null);
-            setExitNotice(
-              saved
-                ? null
-                : 'Gambar tadi mungkin belum tersimpan. Tidak apa-apa, kamu bisa menggambar lagi.',
-            );
+            setExitNotice(null);
+            void saved.then((wasSaved) => {
+              if (!wasSaved) {
+                setExitNotice(
+                  'Gambar tadi mungkin belum tersimpan. Tidak apa-apa, kamu bisa menggambar lagi.',
+                );
+              }
+            });
           }}
         />
       ) : (

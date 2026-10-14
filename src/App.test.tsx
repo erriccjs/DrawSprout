@@ -120,6 +120,26 @@ describe('leaving a drawing', () => {
     await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
     expect(await screen.findByText(/mungkin belum tersimpan/)).toBeTruthy();
   });
+
+  it('reaches the picker while the save is still pending, then reports the failure', async () => {
+    let failPendingSave: (error: Error) => void = () => {};
+    vi.spyOn(store, 'saveProgress').mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          failPendingSave = reject;
+        }),
+    );
+
+    render(<App />);
+    await open('Kucing');
+    fireEvent.click(screen.getByRole('button', { name: /Pilih gambar/ }));
+
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    expect(screen.queryByText(/mungkin belum tersimpan/)).toBeNull();
+
+    failPendingSave(new StorageFullError());
+    expect(await screen.findByText(/mungkin belum tersimpan/)).toBeTruthy();
+  });
 });
 
 describe('resume notice', () => {
