@@ -7,8 +7,7 @@ import { assertValidLesson } from './validate';
 import type { LessonPackage } from './schema';
 
 /**
- * Every lesson shipped in the app. Milestone 1 ships one hand-authored lesson;
- * the catalogue screen and the local gallery are deferred work.
+ * Every lesson shipped in the app. The picker reads this list directly.
  */
 export const BUNDLED_LESSONS: readonly LessonPackage[] = [CAT_LESSON];
 

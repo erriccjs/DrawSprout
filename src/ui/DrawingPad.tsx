@@ -39,7 +39,7 @@ import { StepPanel } from './StepPanel';
 import { Toolbar } from './Toolbar';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 import { newId } from './ids';
-import { useAutosave } from './useAutosave';
+import { useAutosave, type SaveStatus } from './useAutosave';
 
 interface DrawingPadProps {
   readonly lesson: LessonPackage;
@@ -47,6 +47,7 @@ interface DrawingPadProps {
   readonly initialState: SessionState;
   readonly durable: boolean;
   readonly notice: string | null;
+  readonly onChoosePicture?: () => void;
 }
 
 /** What the pointer began drawing, frozen at pointer-down (FR-03). */
@@ -56,14 +57,17 @@ interface PendingStroke {
   readonly tool: Stroke['tool'];
 }
 
-export function DrawingPad({ lesson, store, initialState, durable, notice }: DrawingPadProps) {
+export function DrawingPad({ lesson, store, initialState, durable, notice, onChoosePicture }: DrawingPadProps) {
   const [state, setState] = useState(initialState);
   const dispatch = useCallback(
     (action: SessionAction) => setState((previous) => reduceSession(lesson, previous, action)),
     [lesson],
   );
 
-  const saveStatus = useAutosave(store, state);
+  const { status: saveStatus, flush } = useAutosave(store, state);
+  const choosePicture = async () => {
+    if (await flush()) onChoosePicture?.();
+  };
   const step = activeStep(lesson, state);
   const preset = effectiveToolPreset(lesson, state);
   const isColorStep = step.phase === 'color';
@@ -256,7 +260,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
         lesson={lesson}
         state={state}
         clipPaths={clipPaths}
+        saveStatus={saveStatus}
         onKeepDrawing={() => dispatch({ type: 'reopen' })}
+        {...(onChoosePicture ? { onChoosePicture: () => void choosePicture() } : {})}
       />
     );
   }
@@ -264,6 +270,11 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
   return (
     <div className="pad">
       <header className="pad__header">
+        {onChoosePicture && (
+          <button type="button" className="button" onClick={() => void choosePicture()}>
+            ← Pilih gambar
+          </button>
+        )}
         <div>
           <h1 className="pad__title">{lesson.title}</h1>
           <p className="pad__subtitle">{lesson.subtitle}</p>
@@ -352,7 +363,7 @@ function sizeCanvas(canvas: HTMLCanvasElement, viewport: Viewport): void {
   canvas.style.height = `${viewport.cssHeight}px`;
 }
 
-function statusLabel(status: ReturnType<typeof useAutosave>, durable: boolean): string {
+function statusLabel(status: SaveStatus, durable: boolean): string {
   if (!durable) return 'Tidak tersimpan permanen';
   switch (status.kind) {
     case 'idle':

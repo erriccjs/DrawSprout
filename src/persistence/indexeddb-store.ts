@@ -113,6 +113,22 @@ export class IndexedDbSessionStore implements SessionStore {
     return sessionId === null ? null : await this.loadSession(sessionId);
   }
 
+  async loadLatestSessionForLesson(lessonId: string): Promise<RestoredSession | null> {
+    const db = await this.dbPromise;
+    const sessionId = await runTransaction(db, [CHECKPOINTS], 'readonly', async (tx) => {
+      const checkpoints = await request<SessionCheckpoint[]>(tx.objectStore(CHECKPOINTS).getAll());
+      const latest = checkpoints
+        .filter((checkpoint) => checkpoint.lessonId === lessonId)
+        .reduce<SessionCheckpoint | null>(
+          (current, checkpoint) =>
+            !current || checkpoint.updatedAt >= current.updatedAt ? checkpoint : current,
+          null,
+        );
+      return latest?.sessionId ?? null;
+    });
+    return sessionId === null ? null : await this.loadSession(sessionId);
+  }
+
   async deleteSession(sessionId: string): Promise<void> {
     const db = await this.dbPromise;
     await runTransaction(db, [CHECKPOINTS, STROKES], 'readwrite', (tx) => {

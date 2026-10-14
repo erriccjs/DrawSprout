@@ -11,18 +11,21 @@ import type { LessonPackage } from '../lesson-data/schema';
 import type { SessionState } from '../lesson-engine/types';
 import { artworkFileName, exportArtworkPng, renderArtworkToCanvas } from '../renderer/export';
 import { toRenderStrokes } from './render-adapter';
+import type { SaveStatus } from './useAutosave';
 
 interface FinishScreenProps {
   readonly lesson: LessonPackage;
   readonly state: SessionState;
   readonly clipPaths: Record<string, string>;
   readonly onKeepDrawing: () => void;
+  readonly onChoosePicture?: () => void;
+  readonly saveStatus: SaveStatus;
 }
 
 /** Small enough to render instantly, large enough to look right on a tablet. */
 const PREVIEW_WIDTH_PX = 900;
 
-export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing }: FinishScreenProps) {
+export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoosePicture, saveStatus }: FinishScreenProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
@@ -83,7 +86,19 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing }: Finish
         <button type="button" className="button" onClick={onKeepDrawing}>
           ← Gambar lagi
         </button>
+        {onChoosePicture && (
+          <button type="button" className="button" onClick={onChoosePicture}>
+            Pilih gambar lain
+          </button>
+        )}
       </div>
+
+      {saveStatus.kind === 'storage-full' && (
+        <p className="banner banner--warning">Penyimpanan penuh. Karya terbaru belum tersimpan.</p>
+      )}
+      {saveStatus.kind === 'failed' && (
+        <p className="banner banner--warning">Gagal menyimpan: {saveStatus.message}</p>
+      )}
 
       {savedName !== null && (
         <p className="banner" role="status">

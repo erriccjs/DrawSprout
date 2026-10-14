@@ -49,6 +49,68 @@ body {
   gap: 12px;
 }
 
+.lesson-picker {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: clamp(20px, 5vw, 64px);
+}
+
+.lesson-picker h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.lesson-picker > p {
+  font-size: 1.125rem;
+}
+
+.lesson-picker__choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 20px;
+  margin-top: 32px;
+}
+
+.lesson-picker__choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-height: 300px;
+  padding: 20px;
+  border: 2px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lesson-picker__choice:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.lesson-picker__choice:disabled {
+  opacity: 0.6;
+}
+
+.lesson-picker__picture {
+  width: 100%;
+  max-height: 190px;
+  flex: 1;
+  color: var(--accent);
+}
+
+.lesson-picker__name {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.lesson-picker__subtitle {
+  color: var(--muted);
+}
+
 /* --- drawing pad ---------------------------------------------------------- */
 
 .pad {

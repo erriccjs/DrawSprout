@@ -64,6 +64,8 @@ export interface SessionStore {
   loadSession(sessionId: string): Promise<RestoredSession | null>;
   /** Most recently updated session, for the "lanjutkan karya" entry point. */
   loadLatestSession(): Promise<RestoredSession | null>;
+  /** Most recently updated session belonging to one lesson. */
+  loadLatestSessionForLesson(lessonId: string): Promise<RestoredSession | null>;
   deleteSession(sessionId: string): Promise<void>;
   loadPreferences(): Promise<SessionPreferences | null>;
   savePreferences(preferences: SessionPreferences): Promise<void>;

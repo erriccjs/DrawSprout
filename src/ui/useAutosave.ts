@@ -21,7 +21,10 @@ export type SaveStatus =
   | { readonly kind: 'storage-full' }
   | { readonly kind: 'failed'; readonly message: string };
 
-export function useAutosave(store: SessionStore, state: SessionState): SaveStatus {
+export function useAutosave(
+  store: SessionStore,
+  state: SessionState,
+): { status: SaveStatus; flush: () => Promise<boolean> } {
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
 
   // Written in an effect rather than during render; the save effect below is
@@ -34,9 +37,9 @@ export function useAutosave(store: SessionStore, state: SessionState): SaveStatu
   const revisionRef = useRef(0);
   const savedStrokeIdsRef = useRef(new Set<string>());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  const inFlightRef = useRef<Promise<boolean> | null>(null);
 
-  const flush = useCallback(async (): Promise<void> => {
+  const flush = useCallback(async (): Promise<boolean> => {
     // Serialise saves: two overlapping transactions could otherwise land in the
     // wrong order and leave an older checkpoint on top.
     await inFlightRef.current;
@@ -56,14 +59,16 @@ export function useAutosave(store: SessionStore, state: SessionState): SaveStatu
       .then(() => {
         for (const stroke of newStrokes) savedStrokeIdsRef.current.add(stroke.id);
         setStatus({ kind: 'saved', at: Date.now() });
+        return true;
       })
       .catch((error: unknown) => {
         if (error instanceof StorageFullError) setStatus({ kind: 'storage-full' });
         else setStatus({ kind: 'failed', message: describe(error) });
+        return false;
       });
 
     inFlightRef.current = save;
-    await save;
+    return await save;
   }, [store]);
 
   useEffect(() => {
@@ -91,7 +96,7 @@ export function useAutosave(store: SessionStore, state: SessionState): SaveStatu
     return () => document.removeEventListener('visibilitychange', onHide);
   }, [flush]);
 
-  return status;
+  return { status, flush };
 }
 
 function describe(error: unknown): string {
