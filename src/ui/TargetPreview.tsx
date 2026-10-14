@@ -1,5 +1,5 @@
 /**
- * The finished drawing, shown as reference.
+ * The drawing reference, shown as a step-by-step example.
  *
  * PRD section 9 is explicit that the target illustration is never exported as
  * the child's artwork, and section 9.3 that the example must not cover the area
