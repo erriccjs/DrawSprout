@@ -269,7 +269,7 @@ describe('resume notice', () => {
   it.each(['step', 'stroke'] as const)(
     'keeps stored preferences while their read settles after a %s change', async (activity) => {
       stubLayoutBox();
-      const savedPreferences = { ...DEFAULT_PREFERENCES, hintDurationMs: 8000 };
+      const savedPreferences = { ...DEFAULT_PREFERENCES, hintDurationMs: 10000 as const };
       await store.savePreferences(savedPreferences);
       const savePreferences = vi.spyOn(store, 'savePreferences');
       let release: (value: typeof savedPreferences) => void = () => {};
@@ -288,8 +288,50 @@ describe('resume notice', () => {
 
       await act(async () => release(savedPreferences));
       expect(savePreferences).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
+      await waitFor(() => expect(savePreferences).toHaveBeenCalled());
+      expect(savePreferences.mock.lastCall?.[0].inputMode).toBe('pencil');
     },
   );
+
+  it('saves a later preference change after a pending read fails', async () => {
+    let rejectPreferences: (error: Error) => void = () => {};
+    vi.spyOn(store, 'loadPreferences').mockImplementation(() => new Promise((_resolve, reject) => {
+      rejectPreferences = reject;
+    }));
+    const savePreferences = vi.spyOn(store, 'savePreferences');
+
+    render(<App />);
+    await open('Kucing');
+    fireEvent.click(screen.getByRole('button', { name: /Lanjut/ }));
+    await act(async () => rejectPreferences(new Error('unavailable')));
+    expect(savePreferences).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
+    await waitFor(() => expect(savePreferences).toHaveBeenCalled());
+    expect(savePreferences.mock.lastCall?.[0].inputMode).toBe('pencil');
+  });
+
+  it('keeps an explicit control change when both lesson reads finish late', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    let releasePreferences: (value: typeof DEFAULT_PREFERENCES) => void = () => {};
+    let releaseSession: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
+    vi.spyOn(store, 'loadPreferences').mockImplementation(() => new Promise((resolve) => { releasePreferences = resolve; }));
+    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { releaseSession = resolve; }));
+
+    render(<App />);
+    await open('Kucing');
+    fireEvent.click(screen.getByRole('radio', { name: /Mandiri/ }));
+    expect((screen.getByRole('radio', { name: /Mandiri/ }) as HTMLInputElement).checked).toBe(true);
+
+    await act(async () => releasePreferences(DEFAULT_PREFERENCES));
+    await act(async () => releaseSession({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] }));
+    expect((screen.getByRole('radio', { name: /Mandiri/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.queryByText(RESUMED)).toBeNull();
+  });
 
   it('opens a blank drawing silently after leaving and coming back', async () => {
     render(<App />);

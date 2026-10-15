@@ -57,8 +57,7 @@ export function App() {
       if (selectionRef.current !== selection) return;
       setOpenLesson((current) => {
         if (!current) return current;
-        if (touchedRef.current) return current;
-        if (!preferences || current.initialState.sessionId !== initialState.sessionId) {
+        if (touchedRef.current || !preferences || current.initialState.sessionId !== initialState.sessionId) {
           return { ...current, preferencesPending: false };
         }
         return { ...current, preferencesPending: false,
@@ -66,9 +65,7 @@ export function App() {
       });
     }).catch(() => {
       if (selectionRef.current === selection) {
-        setOpenLesson((current) => current && !touchedRef.current
-          ? { ...current, preferencesPending: false }
-          : current);
+        setOpenLesson((current) => current ? { ...current, preferencesPending: false } : current);
       }
     });
 

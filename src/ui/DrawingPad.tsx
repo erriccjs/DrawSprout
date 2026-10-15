@@ -64,7 +64,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const [state, setState] = useState(initialState);
   const dispatch = useCallback(
     (action: SessionAction) => {
-      if (action.type === 'commit-stroke' || action.type === 'next-step' || action.type === 'prev-step') onActivity();
+      onActivity();
       setState((previous) => reduceSession(lesson, previous, action));
     },
     [lesson, onActivity],
@@ -83,8 +83,13 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     () => ({ assistanceMode, hintDurationMs, inputMode, toolPreferences }),
     [assistanceMode, hintDurationMs, inputMode, toolPreferences],
   );
+  const preferencesReadyRef = useRef(!preferencesPending);
   useEffect(() => {
     if (preferencesPending) return;
+    if (!preferencesReadyRef.current) {
+      preferencesReadyRef.current = true;
+      return;
+    }
     // Preferences outlive the session, so they are stored on their own and on
     // their own cadence — not once per stroke (FR-04, FR-07, FR-22).
     void store.savePreferences(preferences);
