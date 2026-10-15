@@ -46,6 +46,7 @@ function setup() {
       notice={null}
       restorePending={false}
       preferencesPending={false}
+      pendingSave={null}
       onActivity={() => undefined}
       onChoosePicture={() => undefined}
     />,
@@ -320,6 +321,7 @@ describe('the pointermove path', () => {
           notice={null}
           restorePending={false}
           preferencesPending={false}
+          pendingSave={null}
           onActivity={() => undefined}
           onChoosePicture={() => undefined}
         />
@@ -627,6 +629,7 @@ describe('autosave and resume', () => {
         notice={null}
         restorePending={false}
         preferencesPending={false}
+        pendingSave={null}
         onActivity={() => undefined}
         onChoosePicture={() => undefined}
       />,

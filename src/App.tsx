@@ -26,6 +26,7 @@ export function App() {
   const [openLesson, setOpenLesson] = useState<OpenLesson | null>(null);
   const selectionRef = useRef(0);
   const touchedRef = useRef(false);
+  const handoffRef = useRef<{ state: SessionState; saved: Promise<boolean> } | null>(null);
   const [exitNotice, setExitNotice] = useState<string | null>(null);
 
   if (bootstrap.status === 'loading') {
@@ -47,11 +48,12 @@ export function App() {
 
   const selectLesson = (lessonId: string) => {
     const selection = ++selectionRef.current;
-    touchedRef.current = false;
+    const handoff = handoffRef.current?.state.lessonId === lessonId ? handoffRef.current : null;
+    touchedRef.current = handoff !== null;
     setExitNotice(null);
     const lesson = getLesson(lessonId);
-    const initialState = createSession(lesson, newId(), DEFAULT_PREFERENCES);
-    setOpenLesson({ lesson, initialState, notice: null, restorePending: true, preferencesPending: true, revision: 0 });
+    const initialState = handoff?.state ?? createSession(lesson, newId(), DEFAULT_PREFERENCES);
+    setOpenLesson({ lesson, initialState, notice: null, restorePending: handoff === null, preferencesPending: true, revision: 0 });
 
     void bootstrap.store.loadPreferences().then((preferences) => {
       if (selectionRef.current !== selection) return;
@@ -68,6 +70,8 @@ export function App() {
         setOpenLesson((current) => current ? { ...current, preferencesPending: false } : current);
       }
     });
+
+    if (handoff) return;
 
     void bootstrap.store.loadLatestSessionForLesson(lessonId).then((restored) => {
       if (selectionRef.current !== selection) return;
@@ -117,17 +121,23 @@ export function App() {
           notice={openLesson.notice}
           restorePending={openLesson.restorePending}
           preferencesPending={openLesson.preferencesPending}
+          pendingSave={handoffRef.current?.state.sessionId === openLesson.initialState.sessionId
+            ? handoffRef.current.saved
+            : null}
           onActivity={() => {
             touchedRef.current = true;
             setOpenLesson((current) => current && current.restorePending
               ? { ...current, restorePending: false }
               : current);
           }}
-          onChoosePicture={(saved) => {
+          onChoosePicture={(saved, state) => {
+            const handoff = { state, saved };
+            handoffRef.current = openLesson.restorePending && !touchedRef.current ? null : handoff;
             selectionRef.current += 1;
             setOpenLesson(null);
             setExitNotice(null);
             void saved.then((wasSaved) => {
+              if (wasSaved && handoffRef.current === handoff) handoffRef.current = null;
               if (!wasSaved) {
                 setExitNotice(
                   'Gambar tadi mungkin belum tersimpan. Tidak apa-apa, kamu bisa menggambar lagi.',

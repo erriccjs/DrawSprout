@@ -25,6 +25,7 @@ export function useAutosave(
   store: SessionStore,
   state: SessionState,
   enabled = true,
+  pendingSave: Promise<boolean> | null = null,
 ): { status: SaveStatus; flush: () => Promise<boolean> } {
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
 
@@ -38,7 +39,7 @@ export function useAutosave(
   const revisionRef = useRef(0);
   const savedStrokeIdsRef = useRef(new Set<string>());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inFlightRef = useRef<Promise<boolean> | null>(null);
+  const inFlightRef = useRef<Promise<boolean> | null>(pendingSave);
 
   const flush = useCallback(async (): Promise<boolean> => {
     // Serialise saves: two overlapping transactions could otherwise land in the

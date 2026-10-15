@@ -49,8 +49,9 @@ interface DrawingPadProps {
   readonly notice: string | null;
   readonly restorePending: boolean;
   readonly preferencesPending: boolean;
+  readonly pendingSave: Promise<boolean> | null;
   readonly onActivity: () => void;
-  readonly onChoosePicture: (saved: Promise<boolean>) => void;
+  readonly onChoosePicture: (saved: Promise<boolean>, state: SessionState) => void;
 }
 
 /** What the pointer began drawing, frozen at pointer-down (FR-03). */
@@ -60,20 +61,27 @@ interface PendingStroke {
   readonly tool: Stroke['tool'];
 }
 
-export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, onActivity, onChoosePicture }: DrawingPadProps) {
+export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, onActivity, onChoosePicture }: DrawingPadProps) {
   const [state, setState] = useState(initialState);
+  const stateRef = useRef(state);
+  const preferencesDirtyRef = useRef(false);
   const dispatch = useCallback(
     (action: SessionAction) => {
+      const previous = stateRef.current;
+      const next = reduceSession(lesson, previous, action);
+      if (next === previous) return;
+      stateRef.current = next;
+      if (isPreferenceAction(action)) preferencesDirtyRef.current = true;
       onActivity();
-      setState((previous) => reduceSession(lesson, previous, action));
+      setState(next);
     },
     [lesson, onActivity],
   );
 
-  const { status: saveStatus, flush } = useAutosave(store, state, !restorePending);
+  const { status: saveStatus, flush } = useAutosave(store, state, !restorePending, pendingSave);
   // Leaving never waits on storage: the child reaches the picker immediately
   // and the save result follows it there.
-  const choosePicture = () => onChoosePicture(restorePending ? Promise.resolve(true) : flush());
+  const choosePicture = () => onChoosePicture(restorePending ? Promise.resolve(true) : flush(), stateRef.current);
   const step = activeStep(lesson, state);
   const preset = effectiveToolPreset(lesson, state);
   const isColorStep = step.phase === 'color';
@@ -83,13 +91,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     () => ({ assistanceMode, hintDurationMs, inputMode, toolPreferences }),
     [assistanceMode, hintDurationMs, inputMode, toolPreferences],
   );
-  const preferencesReadyRef = useRef(!preferencesPending);
   useEffect(() => {
-    if (preferencesPending) return;
-    if (!preferencesReadyRef.current) {
-      preferencesReadyRef.current = true;
-      return;
-    }
+    if (preferencesPending || !preferencesDirtyRef.current) return;
+    preferencesDirtyRef.current = false;
     // Preferences outlive the session, so they are stored on their own and on
     // their own cadence — not once per stroke (FR-04, FR-07, FR-22).
     void store.savePreferences(preferences);
@@ -363,6 +367,23 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
       </div>
     </div>
   );
+}
+
+function isPreferenceAction(action: SessionAction): boolean {
+  switch (action.type) {
+    case 'set-assistance-mode':
+    case 'set-hint-duration':
+    case 'set-input-mode':
+    case 'set-tool':
+    case 'set-custom-color':
+    case 'use-guide-color':
+    case 'set-custom-width':
+    case 'clear-custom-width':
+    case 'set-boundary-assist':
+      return true;
+    default:
+      return false;
+  }
 }
 
 function sizeCanvas(canvas: HTMLCanvasElement, viewport: Viewport): void {
