@@ -12,7 +12,7 @@ export type Bootstrap =
       readonly store: SessionStore;
       readonly durable: boolean;
     }
-  | { readonly status: 'error'; readonly message: string };
+  | { readonly status: 'error' };
 
 export function useSessionBootstrap(): Bootstrap {
   const [bootstrap, setBootstrap] = useState<Bootstrap>({ status: 'loading' });
@@ -31,10 +31,8 @@ export function useSessionBootstrap(): Bootstrap {
         setBootstrap({ status: 'ready', store, durable });
       } catch (error) {
         if (!cancelled) {
-          setBootstrap({
-            status: 'error',
-            message: error instanceof Error ? error.message : String(error),
-          });
+          console.error('DrawSprout could not start:', error);
+          setBootstrap({ status: 'error' });
         }
       }
     })();

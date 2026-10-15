@@ -19,6 +19,7 @@ interface OpenLesson {
   readonly revision: number;
 }
 
+const BOOTSTRAP_FAILURE_NOTICE = 'Maaf, pelajaran belum bisa dibuka sekarang. Coba lagi nanti ya.';
 const LOAD_FAILURE_NOTICE = 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mulai menggambar lagi.';
 
 export function App() {
@@ -41,7 +42,7 @@ export function App() {
     return (
       <main className="shell shell--centered">
         <h1>Pelajaran tidak dapat dibuka</h1>
-        <p className="banner banner--warning">{bootstrap.message}</p>
+        <p className="banner banner--warning">{BOOTSTRAP_FAILURE_NOTICE}</p>
       </main>
     );
   }
@@ -79,7 +80,9 @@ export function App() {
       let notice: string | null = null;
       if (restored) {
         if (restored.checkpoint.lessonContentVersion !== lesson.contentVersion) {
-          notice = 'Pelajaran sudah diperbarui, jadi karya lama dibuka sebagai karya baru.';
+          if (hasProgress(restored.checkpoint)) {
+            notice = 'Pelajaran sudah diperbarui, jadi karya lama dibuka sebagai karya baru.';
+          }
         } else {
           try {
             state = fromRestoredSession(restored);

@@ -107,7 +107,8 @@ describe('lesson picker', () => {
     });
   });
 
-  it('refuses with the child-facing message when a bundled package is broken', async () => {
+  it('refuses with a calm line and logs the technical detail when a bundled package is broken', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     lessons.splice(0, lessons.length, {
       ...lessonData.CAT_LESSON,
       coordinateSpace: { ...lessonData.CAT_LESSON.coordinateSpace, width: 0 },
@@ -116,7 +117,12 @@ describe('lesson picker', () => {
     render(<App />);
 
     await screen.findByRole('heading', { name: 'Pelajaran tidak dapat dibuka' });
-    expect(screen.getByText(/positive width and height/)).toBeTruthy();
+    expect(screen.getByText(/pelajaran belum bisa dibuka/)).toBeTruthy();
+    expect(screen.queryByText(/positive width and height/)).toBeNull();
+    expect(logged.mock.calls.some((call) => call.some(
+      (arg) => arg instanceof Error && /positive width and height/.test(arg.message),
+    ))).toBe(true);
+    logged.mockRestore();
     expect(screen.queryByRole('heading', { name: 'Mau gambar apa hari ini?' })).toBeNull();
   });
 
@@ -248,6 +254,36 @@ describe('resume notice', () => {
 
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
     expect(screen.getByText(RESUMED)).toBeTruthy();
+  });
+
+  it('opens an outdated checkpoint without progress silently', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    await store.saveProgress({
+      checkpoint: { ...toCheckpoint(createSession(cat, 'old-untouched'), 1, 123), lessonContentVersion: 'older' },
+      newStrokes: [],
+    });
+
+    render(<App />);
+    await open('Kucing');
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.queryByText(/Pelajaran sudah diperbarui/)).toBeNull();
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+  });
+
+  it('tells the child when an outdated checkpoint with progress opens as new', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const worked = reduceSession(cat, createSession(cat, 'old-worked'), { type: 'next-step' });
+    await store.saveProgress({
+      checkpoint: { ...toCheckpoint(worked, 1, 123), lessonContentVersion: 'older' },
+      newStrokes: [],
+    });
+
+    render(<App />);
+    await open('Kucing');
+
+    expect(await screen.findByText(/Pelajaran sudah diperbarui/)).toBeTruthy();
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
   });
 
   it('opens fresh with one calm notice when loading fails', async () => {
