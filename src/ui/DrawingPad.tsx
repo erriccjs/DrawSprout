@@ -184,7 +184,6 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     begin: (point) => {
       const surface = surfaceRef.current;
       if (!surface) return;
-      onActivity();
       // Guarded: calling setState with the value it already holds still costs a
       // render before React bails out, and pointer-down is on the hot path.
       if (rejection !== null) setRejection(null);

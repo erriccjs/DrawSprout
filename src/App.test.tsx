@@ -8,7 +8,7 @@ import { toCheckpoint } from './persistence/mapping';
 import { MemorySessionStore } from './persistence/memory-store';
 import { StorageFullError } from './persistence/types';
 import { strokeInput } from './test/factories';
-import { drawStroke, stubLayoutBox } from './test/pointer';
+import { drawStroke, pointerDown, stubLayoutBox } from './test/pointer';
 import { App } from './App';
 
 const lessons = vi.hoisted(() => [] as LessonPackage[]);
@@ -303,6 +303,57 @@ describe('resume notice', () => {
       const latest = await loadLatestSessionForLesson(cat.id);
       expect(latest?.checkpoint.sessionId).toBe(saved.sessionId);
       expect(latest?.checkpoint.committedStrokeIds).toEqual([saved.strokes[0]!.id]);
+    });
+  });
+
+  it('keeps saved work when a pointer goes down but the child leaves before lifting', async () => {
+    stubLayoutBox();
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const stepped = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    const saved = reduceSession(cat, stepped, {
+      type: 'commit-stroke', stroke: strokeInput(cat.steps[1]!.id),
+    });
+    await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: saved.strokes });
+    const loadLatestSessionForLesson = store.loadLatestSessionForLesson.bind(store);
+    const save = vi.spyOn(store, 'saveProgress');
+    let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
+    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+
+    render(<App />);
+    await open('Kucing');
+    act(() => pointerDown(screen.getByRole('img', { name: /Kanvas gambar/ }),
+      { x: 100, y: 100 }, { pointerType: 'touch' }));
+    await returnToPicker();
+    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));
+
+    expect(save).not.toHaveBeenCalled();
+    const latest = await loadLatestSessionForLesson(cat.id);
+    expect(latest?.checkpoint.sessionId).toBe(saved.sessionId);
+    expect(latest?.checkpoint.committedStrokeIds).toEqual([saved.strokes[0]!.id]);
+  });
+
+  it('keeps a committed new stroke when an older saved drawing arrives late', async () => {
+    stubLayoutBox();
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    const loadLatestSessionForLesson = store.loadLatestSessionForLesson.bind(store);
+    let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
+    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+
+    render(<App />);
+    await open('Kucing');
+    act(() => drawStroke(screen.getByRole('img', { name: /Kanvas gambar/ }), [
+      { x: 100, y: 100 }, { x: 200, y: 200 },
+    ], { pointerType: 'touch' }));
+    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] })));
+
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    expect(screen.queryByText(RESUMED)).toBeNull();
+    await waitFor(async () => {
+      const latest = await loadLatestSessionForLesson(cat.id);
+      expect(latest?.checkpoint.currentStepIndex).toBe(0);
+      expect(latest?.strokes).toHaveLength(1);
     });
   });
 
