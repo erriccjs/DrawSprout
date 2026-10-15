@@ -19,6 +19,8 @@ interface OpenLesson {
   readonly revision: number;
 }
 
+const LOAD_FAILURE_NOTICE = 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mulai menggambar lagi.';
+
 export function App() {
   const bootstrap = useSessionBootstrap();
   const [openLesson, setOpenLesson] = useState<OpenLesson | null>(null);
@@ -55,7 +57,8 @@ export function App() {
       if (selectionRef.current !== selection) return;
       setOpenLesson((current) => {
         if (!current) return current;
-        if (!preferences || touchedRef.current || current.initialState.sessionId !== initialState.sessionId) {
+        if (touchedRef.current) return current;
+        if (!preferences || current.initialState.sessionId !== initialState.sessionId) {
           return { ...current, preferencesPending: false };
         }
         return { ...current, preferencesPending: false,
@@ -63,12 +66,14 @@ export function App() {
       });
     }).catch(() => {
       if (selectionRef.current === selection) {
-        setOpenLesson((current) => current ? { ...current, preferencesPending: false } : current);
+        setOpenLesson((current) => current && !touchedRef.current
+          ? { ...current, preferencesPending: false }
+          : current);
       }
     });
 
     void bootstrap.store.loadLatestSessionForLesson(lessonId).then((restored) => {
-      if (selectionRef.current !== selection || touchedRef.current) return;
+      if (selectionRef.current !== selection) return;
       let state: SessionState | null = null;
       let notice: string | null = null;
       if (restored) {
@@ -81,18 +86,24 @@ export function App() {
               notice = 'Karya terakhirmu dilanjutkan dari tempat kamu berhenti.';
             }
           } catch {
-            notice = 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mulai menggambar lagi.';
+            notice = LOAD_FAILURE_NOTICE;
           }
         }
       }
-      setOpenLesson((current) => current && selectionRef.current === selection && !touchedRef.current
-        ? { ...current, initialState: state ?? current.initialState, notice, restorePending: false,
-            revision: state ? current.revision + 1 : current.revision }
-        : current);
+      setOpenLesson((current) => {
+        if (!current || selectionRef.current !== selection) return current;
+        if (touchedRef.current) {
+          return notice === LOAD_FAILURE_NOTICE
+            ? { ...current, notice, restorePending: false }
+            : current;
+        }
+        return { ...current, initialState: state ?? current.initialState, notice, restorePending: false,
+          revision: state ? current.revision + 1 : current.revision };
+      });
     }).catch(() => {
-      if (selectionRef.current !== selection || touchedRef.current) return;
-      setOpenLesson((current) => current && selectionRef.current === selection && !touchedRef.current
-        ? { ...current, notice: 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mulai menggambar lagi.', restorePending: false }
+      if (selectionRef.current !== selection) return;
+      setOpenLesson((current) => current && selectionRef.current === selection
+        ? { ...current, notice: LOAD_FAILURE_NOTICE, restorePending: false }
         : current);
     });
   };
@@ -111,8 +122,8 @@ export function App() {
           preferencesPending={openLesson.preferencesPending}
           onActivity={() => {
             touchedRef.current = true;
-            setOpenLesson((current) => current && (current.restorePending || current.preferencesPending)
-              ? { ...current, restorePending: false, preferencesPending: false }
+            setOpenLesson((current) => current && current.restorePending
+              ? { ...current, restorePending: false }
               : current);
           }}
           onChoosePicture={(saved) => {
