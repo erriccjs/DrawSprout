@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { getLesson } from './lesson-data';
 import type { LessonPackage } from './lesson-data/schema';
 import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
@@ -14,13 +14,16 @@ interface OpenLesson {
   readonly lesson: LessonPackage;
   readonly initialState: SessionState;
   readonly notice: string | null;
+  readonly restorePending: boolean;
+  readonly preferencesPending: boolean;
+  readonly revision: number;
 }
 
 export function App() {
   const bootstrap = useSessionBootstrap();
   const [openLesson, setOpenLesson] = useState<OpenLesson | null>(null);
-  const [opening, setOpening] = useState(false);
-  const [openError, setOpenError] = useState<string | null>(null);
+  const selectionRef = useRef(0);
+  const touchedRef = useRef(false);
   const [exitNotice, setExitNotice] = useState<string | null>(null);
 
   if (bootstrap.status === 'loading') {
@@ -40,54 +43,80 @@ export function App() {
     );
   }
 
-  const selectLesson = async (lessonId: string) => {
-    if (opening) return;
-    setOpening(true);
-    setOpenError(null);
+  const selectLesson = (lessonId: string) => {
+    const selection = ++selectionRef.current;
+    touchedRef.current = false;
     setExitNotice(null);
-    try {
-      const lesson = getLesson(lessonId);
-      const restored = await bootstrap.store.loadLatestSessionForLesson(lessonId);
-      const preferences = (await bootstrap.store.loadPreferences()) ?? DEFAULT_PREFERENCES;
-      let initialState = createSession(lesson, newId(), preferences);
-      let notice: string | null = null;
+    const lesson = getLesson(lessonId);
+    const initialState = createSession(lesson, newId(), DEFAULT_PREFERENCES);
+    setOpenLesson({ lesson, initialState, notice: null, restorePending: true, preferencesPending: true, revision: 0 });
 
+    void bootstrap.store.loadPreferences().then((preferences) => {
+      if (selectionRef.current !== selection) return;
+      setOpenLesson((current) => {
+        if (!current) return current;
+        if (!preferences || touchedRef.current || current.initialState.sessionId !== initialState.sessionId) {
+          return { ...current, preferencesPending: false };
+        }
+        return { ...current, preferencesPending: false,
+          initialState: createSession(lesson, initialState.sessionId, preferences), revision: current.revision + 1 };
+      });
+    }).catch(() => {
+      if (selectionRef.current === selection) {
+        setOpenLesson((current) => current ? { ...current, preferencesPending: false } : current);
+      }
+    });
+
+    void bootstrap.store.loadLatestSessionForLesson(lessonId).then((restored) => {
+      if (selectionRef.current !== selection || touchedRef.current) return;
+      let state: SessionState | null = null;
+      let notice: string | null = null;
       if (restored) {
         if (restored.checkpoint.lessonContentVersion !== lesson.contentVersion) {
           notice = 'Pelajaran sudah diperbarui, jadi karya lama dibuka sebagai karya baru.';
         } else {
           try {
-            initialState = fromRestoredSession(restored);
-            notice = 'Karya terakhirmu dilanjutkan dari tempat kamu berhenti.';
-          } catch (error) {
-            notice = `Karya tersimpan tidak dapat dibuka: ${describe(error)}`;
+            state = fromRestoredSession(restored);
+            if (hasProgress(restored.checkpoint)) {
+              notice = 'Karya terakhirmu dilanjutkan dari tempat kamu berhenti.';
+            }
+          } catch {
+            notice = 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mulai menggambar lagi.';
           }
         }
       }
-
-      setOpenLesson({
-        lesson,
-        initialState,
-        notice: restored && hasProgress(restored.checkpoint) ? notice : null,
-      });
-    } catch (error) {
-      setOpenError(`Gagal membuka gambar: ${describe(error)}`);
-    } finally {
-      setOpening(false);
-    }
+      setOpenLesson((current) => current && selectionRef.current === selection && !touchedRef.current
+        ? { ...current, initialState: state ?? current.initialState, notice, restorePending: false,
+            revision: state ? current.revision + 1 : current.revision }
+        : current);
+    }).catch(() => {
+      if (selectionRef.current !== selection || touchedRef.current) return;
+      setOpenLesson((current) => current && selectionRef.current === selection && !touchedRef.current
+        ? { ...current, notice: 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mulai menggambar lagi.', restorePending: false }
+        : current);
+    });
   };
 
   return (
     <main className="shell">
       {openLesson ? (
         <DrawingPad
-          key={openLesson.initialState.sessionId}
+          key={`${openLesson.initialState.sessionId}:${openLesson.revision}`}
           lesson={openLesson.lesson}
           store={bootstrap.store}
           initialState={openLesson.initialState}
           durable={bootstrap.durable}
           notice={openLesson.notice}
+          restorePending={openLesson.restorePending}
+          preferencesPending={openLesson.preferencesPending}
+          onActivity={() => {
+            touchedRef.current = true;
+            setOpenLesson((current) => current && (current.restorePending || current.preferencesPending)
+              ? { ...current, restorePending: false, preferencesPending: false }
+              : current);
+          }}
           onChoosePicture={(saved) => {
+            selectionRef.current += 1;
             setOpenLesson(null);
             setExitNotice(null);
             void saved.then((wasSaved) => {
@@ -101,9 +130,7 @@ export function App() {
         />
       ) : (
         <LessonPicker
-          onSelect={(lessonId) => void selectLesson(lessonId)}
-          opening={opening}
-          error={openError}
+          onSelect={selectLesson}
           notice={exitNotice}
         />
       )}
@@ -118,8 +145,4 @@ function hasProgress(checkpoint: SessionCheckpoint): boolean {
     checkpoint.redoStrokeIds.length > 0 ||
     checkpoint.currentStepIndex > 0
   );
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -47,6 +47,9 @@ interface DrawingPadProps {
   readonly initialState: SessionState;
   readonly durable: boolean;
   readonly notice: string | null;
+  readonly restorePending: boolean;
+  readonly preferencesPending: boolean;
+  readonly onActivity: () => void;
   readonly onChoosePicture: (saved: Promise<boolean>) => void;
 }
 
@@ -57,17 +60,20 @@ interface PendingStroke {
   readonly tool: Stroke['tool'];
 }
 
-export function DrawingPad({ lesson, store, initialState, durable, notice, onChoosePicture }: DrawingPadProps) {
+export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, onActivity, onChoosePicture }: DrawingPadProps) {
   const [state, setState] = useState(initialState);
   const dispatch = useCallback(
-    (action: SessionAction) => setState((previous) => reduceSession(lesson, previous, action)),
-    [lesson],
+    (action: SessionAction) => {
+      if (action.type === 'commit-stroke' || action.type === 'next-step' || action.type === 'prev-step') onActivity();
+      setState((previous) => reduceSession(lesson, previous, action));
+    },
+    [lesson, onActivity],
   );
 
-  const { status: saveStatus, flush } = useAutosave(store, state);
+  const { status: saveStatus, flush } = useAutosave(store, state, !restorePending);
   // Leaving never waits on storage: the child reaches the picker immediately
   // and the save result follows it there.
-  const choosePicture = () => onChoosePicture(flush());
+  const choosePicture = () => onChoosePicture(restorePending ? Promise.resolve(true) : flush());
   const step = activeStep(lesson, state);
   const preset = effectiveToolPreset(lesson, state);
   const isColorStep = step.phase === 'color';
@@ -78,10 +84,11 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, onCho
     [assistanceMode, hintDurationMs, inputMode, toolPreferences],
   );
   useEffect(() => {
+    if (preferencesPending) return;
     // Preferences outlive the session, so they are stored on their own and on
     // their own cadence — not once per stroke (FR-04, FR-07, FR-22).
     void store.savePreferences(preferences);
-  }, [store, preferences]);
+  }, [store, preferences, preferencesPending]);
 
   // --- canvas plumbing -------------------------------------------------------
 
@@ -163,6 +170,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, onCho
     begin: (point) => {
       const surface = surfaceRef.current;
       if (!surface) return;
+      onActivity();
       // Guarded: calling setState with the value it already holds still costs a
       // render before React bails out, and pointer-down is on the hot path.
       if (rejection !== null) setRejection(null);
@@ -295,7 +303,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, onCho
         </p>
       )}
       {saveStatus.kind === 'failed' && (
-        <p className="banner banner--warning">Gagal menyimpan: {saveStatus.message}</p>
+        <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
       )}
       {rejection !== null && <p className="banner">{rejection}</p>}
 

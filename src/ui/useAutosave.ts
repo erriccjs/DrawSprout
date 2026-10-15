@@ -19,11 +19,12 @@ export type SaveStatus =
   | { readonly kind: 'saving' }
   | { readonly kind: 'saved'; readonly at: number }
   | { readonly kind: 'storage-full' }
-  | { readonly kind: 'failed'; readonly message: string };
+  | { readonly kind: 'failed' };
 
 export function useAutosave(
   store: SessionStore,
   state: SessionState,
+  enabled = true,
 ): { status: SaveStatus; flush: () => Promise<boolean> } {
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
 
@@ -63,7 +64,7 @@ export function useAutosave(
       })
       .catch((error: unknown) => {
         if (error instanceof StorageFullError) setStatus({ kind: 'storage-full' });
-        else setStatus({ kind: 'failed', message: describe(error) });
+        else setStatus({ kind: 'failed' });
         return false;
       });
 
@@ -72,6 +73,7 @@ export function useAutosave(
   }, [store]);
 
   useEffect(() => {
+    if (!enabled) return;
     const hasUnsavedStroke = [...state.strokes, ...state.redoStack].some(
       (stroke) => !savedStrokeIdsRef.current.has(stroke.id),
     );
@@ -84,21 +86,17 @@ export function useAutosave(
     return () => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
     };
-  }, [state, flush]);
+  }, [state, flush, enabled]);
 
   useEffect(() => {
     // Best effort only: PRD section 13 says not to rely on `beforeunload` or on
     // anything running after the page is hidden.
     const onHide = () => {
-      if (document.visibilityState === 'hidden') void flush();
+      if (enabled && document.visibilityState === 'hidden') void flush();
     };
     document.addEventListener('visibilitychange', onHide);
     return () => document.removeEventListener('visibilitychange', onHide);
-  }, [flush]);
+  }, [flush, enabled]);
 
   return { status, flush };
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

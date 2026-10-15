@@ -2,17 +2,14 @@ import { BUNDLED_LESSONS } from '../lesson-data';
 
 interface LessonPickerProps {
   readonly onSelect: (lessonId: string) => void;
-  readonly opening: boolean;
-  readonly error: string | null;
   readonly notice: string | null;
 }
 
-export function LessonPicker({ onSelect, opening, error, notice }: LessonPickerProps) {
+export function LessonPicker({ onSelect, notice }: LessonPickerProps) {
   return (
     <section className="lesson-picker" aria-labelledby="lesson-picker-title">
       <h1 id="lesson-picker-title">Mau gambar apa hari ini?</h1>
       <p>Pilih gambar yang kamu suka, lalu ikuti langkahnya.</p>
-      {error && <p className="banner banner--warning" role="alert">{error}</p>}
       {notice && <p className="banner" role="status">{notice}</p>}
       <div className="lesson-picker__choices">
         {BUNDLED_LESSONS.map((lesson) => (
@@ -20,7 +17,6 @@ export function LessonPicker({ onSelect, opening, error, notice }: LessonPickerP
             className="lesson-picker__choice"
             key={lesson.id}
             type="button"
-            disabled={opening}
             onClick={() => onSelect(lesson.id)}
           >
             <svg
@@ -46,7 +42,6 @@ export function LessonPicker({ onSelect, opening, error, notice }: LessonPickerP
           </button>
         ))}
       </div>
-      {opening && <p role="status">Membuka gambar…</p>}
     </section>
   );
 }

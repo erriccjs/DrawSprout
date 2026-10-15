@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as lessonData from './lesson-data';
 import type { LessonPackage } from './lesson-data/schema';
 import { createSession, reduceSession } from './lesson-engine/session';
@@ -164,6 +164,64 @@ describe('leaving a drawing', () => {
 
 describe('resume notice', () => {
   const RESUMED = /Karya terakhirmu dilanjutkan/;
+
+  it('opens immediately while a saved drawing is stalled and keeps a changed step', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: [] });
+    let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
+    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+
+    render(<App />);
+    await open('Kucing');
+    fireEvent.click(screen.getByRole('button', { name: /Lanjut/ }));
+    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+
+    await act(async () => release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] }));
+    expect(screen.queryByText(RESUMED)).toBeNull();
+    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+  });
+
+  it('applies a late saved drawing when the child has not started', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
+    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+
+    render(<App />);
+    await open('Kucing');
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] });
+
+    expect(await screen.findByText(RESUMED)).toBeTruthy();
+    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+  });
+
+  it('opens fresh with one calm notice when loading fails', async () => {
+    vi.spyOn(store, 'loadLatestSessionForLesson').mockRejectedValue(new Error('secret database failure'));
+
+    render(<App />);
+    await open('Kucing');
+
+    expect(await screen.findByText(/Karya sebelumnya tidak dapat dibuka/)).toBeTruthy();
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.queryByText(/secret database failure/)).toBeNull();
+  });
+
+  it('hides technical details when a saved checkpoint is broken', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    vi.spyOn(store, 'loadLatestSessionForLesson').mockResolvedValue({
+      checkpoint: { ...toCheckpoint(saved, 1, 123), committedStrokeIds: ['missing-stroke'] },
+      strokes: [],
+    });
+
+    render(<App />);
+    await open('Kucing');
+
+    expect(await screen.findByText(/Karya sebelumnya tidak dapat dibuka/)).toBeTruthy();
+    expect(screen.queryByText(/missing-stroke/)).toBeNull();
+  });
 
   it('opens a blank drawing silently after leaving and coming back', async () => {
     render(<App />);
