@@ -1,11 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { CAT_LESSON } from './cat-lesson';
+import { FLOWER_LESSON } from './flower-lesson';
 import { LESSON_SCHEMA_VERSION, type LessonPackage } from './schema';
 import { LessonValidationError, assertValidLessons, findLessonProblems } from './validate';
 
 describe('lesson package validation', () => {
   it('accepts the hand-authored cat lesson', () => {
     expect(findLessonProblems(CAT_LESSON)).toEqual([]);
+  });
+
+  it('accepts the flower lesson with outline, detail, then colour steps', () => {
+    expect(findLessonProblems(FLOWER_LESSON)).toEqual([]);
+    expect(FLOWER_LESSON.steps.map((step) => step.phase)).toEqual([
+      'outline', 'outline', 'outline', 'outline', 'detail', 'detail', 'color', 'color', 'color',
+    ]);
+  });
+
+  it('gives every flower colour step existing closed regions', () => {
+    const regions = new Map(FLOWER_LESSON.colorRegions.map((region) => [region.id, region]));
+    for (const step of FLOWER_LESSON.steps.filter((item) => item.phase === 'color')) {
+      expect(step.colorRegionIds.length).toBeGreaterThan(0);
+      for (const id of step.colorRegionIds) {
+        expect(regions.get(id)?.d.trim().endsWith('Z')).toBe(true);
+      }
+    }
   });
 
   it('authors the cat lesson with 7 shape and detail steps plus colour steps', () => {
@@ -89,8 +107,7 @@ describe('lesson package validation', () => {
   });
 
   it('accepts a list of distinct valid packages', () => {
-    const flower: LessonPackage = { ...CAT_LESSON, id: 'flower', title: 'Bunga' };
-    expect(() => assertValidLessons([CAT_LESSON, flower])).not.toThrow();
+    expect(() => assertValidLessons([CAT_LESSON, FLOWER_LESSON])).not.toThrow();
   });
 });
 
