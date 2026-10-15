@@ -544,8 +544,8 @@ describe('finishing', () => {
     const revokeObjectURL = vi.fn();
     const originalCreate = URL.createObjectURL;
     const originalRevoke = URL.revokeObjectURL;
-    URL.createObjectURL = createObjectURL as unknown as typeof URL.createObjectURL;
-    URL.revokeObjectURL = revokeObjectURL as unknown as typeof URL.revokeObjectURL;
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
     const clicks: string[] = [];
     const originalClick = HTMLAnchorElement.prototype.click;
     HTMLAnchorElement.prototype.click = function recordClick(this: HTMLAnchorElement) {
@@ -796,7 +796,7 @@ describe('finishing', () => {
       const { view } = setup();
       act(() => screen.getByRole('radio', { name: /Petunjuk sementara/ }).click());
       expect(canvasGuides(view.container).length).toBeGreaterThan(0);
-      act(() => vi.advanceTimersByTime(5000));
+      await act(() => vi.advanceTimersByTime(5000));
       expect(canvasGuides(view.container)).toHaveLength(0);
       vi.useRealTimers();
 
