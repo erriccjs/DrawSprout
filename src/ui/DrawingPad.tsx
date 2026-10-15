@@ -39,7 +39,7 @@ import { StepPanel } from './StepPanel';
 import { Toolbar } from './Toolbar';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 import { newId } from './ids';
-import { useAutosave } from './useAutosave';
+import { useAutosave, type SaveStatus } from './useAutosave';
 
 interface DrawingPadProps {
   readonly lesson: LessonPackage;
@@ -47,6 +47,11 @@ interface DrawingPadProps {
   readonly initialState: SessionState;
   readonly durable: boolean;
   readonly notice: string | null;
+  readonly restorePending: boolean;
+  readonly preferencesPending: boolean;
+  readonly pendingSave: Promise<boolean> | null;
+  readonly onActivity: () => void;
+  readonly onChoosePicture: (saved: Promise<boolean>, state: SessionState) => void;
 }
 
 /** What the pointer began drawing, frozen at pointer-down (FR-03). */
@@ -56,14 +61,27 @@ interface PendingStroke {
   readonly tool: Stroke['tool'];
 }
 
-export function DrawingPad({ lesson, store, initialState, durable, notice }: DrawingPadProps) {
+export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, onActivity, onChoosePicture }: DrawingPadProps) {
   const [state, setState] = useState(initialState);
+  const stateRef = useRef(state);
+  const preferencesDirtyRef = useRef(false);
   const dispatch = useCallback(
-    (action: SessionAction) => setState((previous) => reduceSession(lesson, previous, action)),
-    [lesson],
+    (action: SessionAction) => {
+      const previous = stateRef.current;
+      const next = reduceSession(lesson, previous, action);
+      if (next === previous) return;
+      stateRef.current = next;
+      if (isPreferenceAction(action)) preferencesDirtyRef.current = true;
+      onActivity();
+      setState(next);
+    },
+    [lesson, onActivity],
   );
 
-  const saveStatus = useAutosave(store, state);
+  const { status: saveStatus, flush } = useAutosave(store, state, !restorePending, pendingSave);
+  // Leaving never waits on storage: the child reaches the picker immediately
+  // and the save result follows it there.
+  const choosePicture = () => onChoosePicture(restorePending ? Promise.resolve(true) : flush(), stateRef.current);
   const step = activeStep(lesson, state);
   const preset = effectiveToolPreset(lesson, state);
   const isColorStep = step.phase === 'color';
@@ -74,10 +92,12 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
     [assistanceMode, hintDurationMs, inputMode, toolPreferences],
   );
   useEffect(() => {
+    if (preferencesPending || !preferencesDirtyRef.current) return;
+    preferencesDirtyRef.current = false;
     // Preferences outlive the session, so they are stored on their own and on
     // their own cadence — not once per stroke (FR-04, FR-07, FR-22).
     void store.savePreferences(preferences);
-  }, [store, preferences]);
+  }, [store, preferences, preferencesPending]);
 
   // --- canvas plumbing -------------------------------------------------------
 
@@ -159,6 +179,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
     begin: (point) => {
       const surface = surfaceRef.current;
       if (!surface) return;
+      onActivity();
       // Guarded: calling setState with the value it already holds still costs a
       // render before React bails out, and pointer-down is on the hot path.
       if (rejection !== null) setRejection(null);
@@ -257,6 +278,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
         state={state}
         clipPaths={clipPaths}
         onKeepDrawing={() => dispatch({ type: 'reopen' })}
+        onChoosePicture={choosePicture}
       />
     );
   }
@@ -264,6 +286,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
   return (
     <div className="pad">
       <header className="pad__header">
+        <button type="button" className="button" onClick={choosePicture}>
+          ← Pilih gambar
+        </button>
         <div>
           <h1 className="pad__title">{lesson.title}</h1>
           <p className="pad__subtitle">{lesson.subtitle}</p>
@@ -287,7 +312,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
         </p>
       )}
       {saveStatus.kind === 'failed' && (
-        <p className="banner banner--warning">Gagal menyimpan: {saveStatus.message}</p>
+        <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
       )}
       {rejection !== null && <p className="banner">{rejection}</p>}
 
@@ -344,6 +369,23 @@ export function DrawingPad({ lesson, store, initialState, durable, notice }: Dra
   );
 }
 
+function isPreferenceAction(action: SessionAction): boolean {
+  switch (action.type) {
+    case 'set-assistance-mode':
+    case 'set-hint-duration':
+    case 'set-input-mode':
+    case 'set-tool':
+    case 'set-custom-color':
+    case 'use-guide-color':
+    case 'set-custom-width':
+    case 'clear-custom-width':
+    case 'set-boundary-assist':
+      return true;
+    default:
+      return false;
+  }
+}
+
 function sizeCanvas(canvas: HTMLCanvasElement, viewport: Viewport): void {
   const { width, height } = backingSize(viewport);
   canvas.width = width;
@@ -352,7 +394,7 @@ function sizeCanvas(canvas: HTMLCanvasElement, viewport: Viewport): void {
   canvas.style.height = `${viewport.cssHeight}px`;
 }
 
-function statusLabel(status: ReturnType<typeof useAutosave>, durable: boolean): string {
+function statusLabel(status: SaveStatus, durable: boolean): string {
   if (!durable) return 'Tidak tersimpan permanen';
   switch (status.kind) {
     case 'idle':

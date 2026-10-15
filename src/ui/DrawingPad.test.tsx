@@ -44,6 +44,11 @@ function setup() {
       initialState={initialState}
       durable
       notice={null}
+      restorePending={false}
+      preferencesPending={false}
+      pendingSave={null}
+      onActivity={() => undefined}
+      onChoosePicture={() => undefined}
     />,
   );
   const canvas = view.container.querySelector('canvas')!;
@@ -314,6 +319,11 @@ describe('the pointermove path', () => {
           initialState={createSession(CAT_LESSON, 'profiled-session')}
           durable
           notice={null}
+          restorePending={false}
+          preferencesPending={false}
+          pendingSave={null}
+          onActivity={() => undefined}
+          onChoosePicture={() => undefined}
         />
       </Profiler>,
     );
@@ -617,6 +627,11 @@ describe('autosave and resume', () => {
         initialState={createSession(CAT_LESSON, 'failing-session')}
         durable
         notice={null}
+        restorePending={false}
+        preferencesPending={false}
+        pendingSave={null}
+        onActivity={() => undefined}
+        onChoosePicture={() => undefined}
       />,
     );
     const canvas = container.querySelector('canvas')!;
@@ -627,7 +642,8 @@ describe('autosave and resume', () => {
       ]),
     );
 
-    const banner = await screen.findByText(/Gagal menyimpan: disk gone/);
+    const banner = await screen.findByText(/Karya terbaru mungkin belum tersimpan/);
     expect(banner.className).toContain('banner--warning');
+    expect(screen.queryByText(/disk gone/)).toBeNull();
   });
 });

@@ -46,6 +46,16 @@ export class MemorySessionStore implements SessionStore {
     return latest === null ? Promise.resolve(null) : this.loadSession(latest.sessionId);
   }
 
+  loadLatestSessionForLesson(lessonId: string): Promise<RestoredSession | null> {
+    let latest: SessionCheckpoint | null = null;
+    for (const checkpoint of this.checkpoints.values()) {
+      if (checkpoint.lessonId === lessonId && (!latest || checkpoint.updatedAt >= latest.updatedAt)) {
+        latest = checkpoint;
+      }
+    }
+    return latest === null ? Promise.resolve(null) : this.loadSession(latest.sessionId);
+  }
+
   deleteSession(sessionId: string): Promise<void> {
     this.checkpoints.delete(sessionId);
     this.strokes.delete(sessionId);

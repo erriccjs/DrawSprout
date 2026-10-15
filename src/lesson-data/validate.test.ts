@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CAT_LESSON } from './cat-lesson';
 import { LESSON_SCHEMA_VERSION, type LessonPackage } from './schema';
-import { LessonValidationError, assertValidLesson, findLessonProblems } from './validate';
+import { LessonValidationError, assertValidLessons, findLessonProblems } from './validate';
 
 describe('lesson package validation', () => {
   it('accepts the hand-authored cat lesson', () => {
@@ -54,9 +54,43 @@ describe('lesson package validation', () => {
     );
   });
 
+  it('rejects the picker fields a tile would otherwise render empty', () => {
+    expect(findLessonProblems({ ...CAT_LESSON, title: ' ' })).toContain(
+      'lesson has an empty title',
+    );
+    expect(findLessonProblems({ ...CAT_LESSON, subtitle: '' })).toContain(
+      'lesson has an empty subtitle',
+    );
+    expect(
+      findLessonProblems({ ...CAT_LESSON, targetPreview: { ...CAT_LESSON.targetPreview, paths: [] } }),
+    ).toContain('targetPreview has no paths to draw');
+  });
+
+  it('rejects duplicate path ids in the target preview', () => {
+    const preview = CAT_LESSON.targetPreview.paths[0]!;
+    const lesson: LessonPackage = {
+      ...CAT_LESSON,
+      targetPreview: { ...CAT_LESSON.targetPreview, paths: [preview, preview] },
+    };
+
+    expect(findLessonProblems(lesson)).toContain(`duplicate target preview path id "${preview.id}"`);
+  });
+
   it('refuses to open a package built for another schema version', () => {
     const lesson: LessonPackage = { ...CAT_LESSON, schemaVersion: LESSON_SCHEMA_VERSION + 1 };
-    expect(() => assertValidLesson(lesson)).toThrow(LessonValidationError);
+    expect(() => assertValidLessons([lesson])).toThrow(LessonValidationError);
+  });
+
+  it('refuses a list where two packages claim the same lesson id', () => {
+    const twin: LessonPackage = { ...CAT_LESSON, title: 'Kucing lain' };
+    expect(() => assertValidLessons([CAT_LESSON, twin])).toThrow(
+      new RegExp(`duplicate lesson id "${CAT_LESSON.id}"`),
+    );
+  });
+
+  it('accepts a list of distinct valid packages', () => {
+    const flower: LessonPackage = { ...CAT_LESSON, id: 'flower', title: 'Bunga' };
+    expect(() => assertValidLessons([CAT_LESSON, flower])).not.toThrow();
   });
 });
 

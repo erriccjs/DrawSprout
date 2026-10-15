@@ -17,12 +17,13 @@ interface FinishScreenProps {
   readonly state: SessionState;
   readonly clipPaths: Record<string, string>;
   readonly onKeepDrawing: () => void;
+  readonly onChoosePicture: () => void;
 }
 
 /** Small enough to render instantly, large enough to look right on a tablet. */
 const PREVIEW_WIDTH_PX = 900;
 
-export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing }: FinishScreenProps) {
+export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoosePicture }: FinishScreenProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
@@ -82,6 +83,9 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing }: Finish
         </button>
         <button type="button" className="button" onClick={onKeepDrawing}>
           ← Gambar lagi
+        </button>
+        <button type="button" className="button" onClick={onChoosePicture}>
+          Pilih gambar lain
         </button>
       </div>
 

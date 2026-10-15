@@ -116,31 +116,43 @@ export function reduceSession(
         : { ...state, assistanceMode: action.mode };
 
     case 'set-hint-duration':
-      return { ...state, hintDurationMs: action.ms };
+      return state.hintDurationMs === action.ms ? state : { ...state, hintDurationMs: action.ms };
 
     case 'set-input-mode':
       // FR-22: switching input mode never resets the artwork.
       return state.inputMode === action.mode ? state : { ...state, inputMode: action.mode };
 
     case 'set-tool':
-      return withToolPreferences(state, { activeTool: action.tool });
+      return state.toolPreferences.activeTool === action.tool
+        ? state
+        : withToolPreferences(state, { activeTool: action.tool });
 
     case 'set-custom-color':
       // FR-04: an explicit colour choice sticks until the child asks for the
       // guide colour back, including across steps.
-      return withToolPreferences(state, { colorSource: 'custom', customColor: action.color });
+      return state.toolPreferences.colorSource === 'custom' && state.toolPreferences.customColor === action.color
+        ? state
+        : withToolPreferences(state, { colorSource: 'custom', customColor: action.color });
 
     case 'use-guide-color':
-      return withToolPreferences(state, { colorSource: 'guide' });
+      return state.toolPreferences.colorSource === 'guide'
+        ? state
+        : withToolPreferences(state, { colorSource: 'guide' });
 
     case 'set-custom-width':
-      return withToolPreferences(state, { customWidth: action.width });
+      return state.toolPreferences.customWidth === action.width
+        ? state
+        : withToolPreferences(state, { customWidth: action.width });
 
     case 'clear-custom-width':
-      return withToolPreferences(state, { customWidth: null });
+      return state.toolPreferences.customWidth === null
+        ? state
+        : withToolPreferences(state, { customWidth: null });
 
     case 'set-boundary-assist':
-      return withToolPreferences(state, { colorBoundaryAssist: action.enabled });
+      return state.toolPreferences.colorBoundaryAssist === action.enabled
+        ? state
+        : withToolPreferences(state, { colorBoundaryAssist: action.enabled });
 
     case 'finish':
       return state.finished ? state : { ...state, finished: true };

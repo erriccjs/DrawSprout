@@ -155,8 +155,9 @@ Noted here rather than built, per the scope given:
 2. **Service worker, offline packaging, cold offline launch** (FR-23, AT-19).
 3. **Project backup export/import** (FR-24, AT-20) — the stroke log and
    checkpoint are already a complete, serialisable project.
-4. **Lesson catalogue and local gallery** (FR-14 gallery half) — `BUNDLED_LESSONS`
-   is already a list; the screen is what is missing.
+4. **Local gallery** (FR-14 gallery half) — the picture-choosing screen
+   (`src/ui/LessonPicker.tsx`) reads `BUNDLED_LESSONS`; a gallery of past
+   artworks is what is missing.
 5. **Audio instructions** (FR-20).
 6. **Free-creation phase** (FR-12) and "repeat this step" / "start over"
    (PRD section 7 edit behaviours).

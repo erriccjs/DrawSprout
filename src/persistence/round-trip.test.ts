@@ -7,7 +7,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
-import { reduceSession } from '../lesson-engine/session';
+import { createSession, reduceSession } from '../lesson-engine/session';
 import type { SessionState } from '../lesson-engine/types';
 import { IndexedDbSessionStore } from './indexeddb-store';
 import { MemorySessionStore } from './memory-store';
@@ -89,6 +89,24 @@ describe.each([
 
     const latest = await store.loadLatestSession();
     expect(latest?.checkpoint.sessionId).toBe('newer');
+  });
+
+  it('finds the latest session for each lesson in the existing checkpoint format', async () => {
+    const oldCat = draw(newSessionState(), stepIdAt(0));
+    const otherLesson = { ...lesson, id: 'another-lesson' };
+    const other = createSession(otherLesson, 'other-session');
+    const newerCat = { ...oldCat, sessionId: 'newer-cat' };
+    await save(store, oldCat, 1);
+    await save(store, other, 2);
+    await save(store, newerCat, 3);
+
+    const restoredCat = await store.loadLatestSessionForLesson(lesson.id);
+    const restoredOther = await store.loadLatestSessionForLesson(otherLesson.id);
+    expect(restoredCat?.checkpoint.sessionId).toBe('newer-cat');
+    expect(restoredCat?.strokes).toHaveLength(1);
+    expect(restoredOther?.checkpoint.sessionId).toBe('other-session');
+    expect(restoredOther?.strokes).toHaveLength(0);
+    expect(await store.loadLatestSessionForLesson('missing')).toBeNull();
   });
 
   it('keeps sessions apart and deletes only the one asked for', async () => {

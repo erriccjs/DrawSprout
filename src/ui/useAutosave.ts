@@ -19,9 +19,14 @@ export type SaveStatus =
   | { readonly kind: 'saving' }
   | { readonly kind: 'saved'; readonly at: number }
   | { readonly kind: 'storage-full' }
-  | { readonly kind: 'failed'; readonly message: string };
+  | { readonly kind: 'failed' };
 
-export function useAutosave(store: SessionStore, state: SessionState): SaveStatus {
+export function useAutosave(
+  store: SessionStore,
+  state: SessionState,
+  enabled = true,
+  pendingSave: Promise<boolean> | null = null,
+): { status: SaveStatus; flush: () => Promise<boolean> } {
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
 
   // Written in an effect rather than during render; the save effect below is
@@ -34,9 +39,9 @@ export function useAutosave(store: SessionStore, state: SessionState): SaveStatu
   const revisionRef = useRef(0);
   const savedStrokeIdsRef = useRef(new Set<string>());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  const inFlightRef = useRef<Promise<boolean> | null>(pendingSave);
 
-  const flush = useCallback(async (): Promise<void> => {
+  const flush = useCallback(async (): Promise<boolean> => {
     // Serialise saves: two overlapping transactions could otherwise land in the
     // wrong order and leave an older checkpoint on top.
     await inFlightRef.current;
@@ -56,17 +61,20 @@ export function useAutosave(store: SessionStore, state: SessionState): SaveStatu
       .then(() => {
         for (const stroke of newStrokes) savedStrokeIdsRef.current.add(stroke.id);
         setStatus({ kind: 'saved', at: Date.now() });
+        return true;
       })
       .catch((error: unknown) => {
         if (error instanceof StorageFullError) setStatus({ kind: 'storage-full' });
-        else setStatus({ kind: 'failed', message: describe(error) });
+        else setStatus({ kind: 'failed' });
+        return false;
       });
 
     inFlightRef.current = save;
-    await save;
+    return await save;
   }, [store]);
 
   useEffect(() => {
+    if (!enabled) return;
     const hasUnsavedStroke = [...state.strokes, ...state.redoStack].some(
       (stroke) => !savedStrokeIdsRef.current.has(stroke.id),
     );
@@ -79,21 +87,17 @@ export function useAutosave(store: SessionStore, state: SessionState): SaveStatu
     return () => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
     };
-  }, [state, flush]);
+  }, [state, flush, enabled]);
 
   useEffect(() => {
     // Best effort only: PRD section 13 says not to rely on `beforeunload` or on
     // anything running after the page is hidden.
     const onHide = () => {
-      if (document.visibilityState === 'hidden') void flush();
+      if (enabled && document.visibilityState === 'hidden') void flush();
     };
     document.addEventListener('visibilitychange', onHide);
     return () => document.removeEventListener('visibilitychange', onHide);
-  }, [flush]);
+  }, [flush, enabled]);
 
-  return status;
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return { status, flush };
 }
