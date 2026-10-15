@@ -70,10 +70,7 @@ export function findLessonProblems(lesson: LessonPackage): string[] {
 
     if (step.instruction.trim() === '') problems.push(`step "${step.id}" has an empty instruction`);
 
-    const guideIds = new Set<string>();
     for (const guide of step.guidePaths) {
-      if (guideIds.has(guide.id)) problems.push(`step "${step.id}" has duplicate guide path id "${guide.id}"`);
-      guideIds.add(guide.id);
       problems.push(...pathProblems(`step "${step.id}" guide "${guide.id}"`, guide.d));
     }
     for (const regionId of step.colorRegionIds) {

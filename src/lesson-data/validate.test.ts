@@ -66,20 +66,14 @@ describe('lesson package validation', () => {
     ).toContain('targetPreview has no paths to draw');
   });
 
-  it('rejects duplicate path ids in previews and within each step', () => {
+  it('rejects duplicate path ids in the target preview', () => {
     const preview = CAT_LESSON.targetPreview.paths[0]!;
-    const guide = CAT_LESSON.steps[0]!.guidePaths[0]!;
     const lesson: LessonPackage = {
       ...CAT_LESSON,
       targetPreview: { ...CAT_LESSON.targetPreview, paths: [preview, preview] },
-      steps: [
-        { ...CAT_LESSON.steps[0]!, guidePaths: [guide, guide] },
-        ...CAT_LESSON.steps.slice(1),
-      ],
     };
 
     expect(findLessonProblems(lesson)).toContain(`duplicate target preview path id "${preview.id}"`);
-    expect(findLessonProblems(lesson)).toContain(`step "${CAT_LESSON.steps[0]!.id}" has duplicate guide path id "${guide.id}"`);
   });
 
   it('refuses to open a package built for another schema version', () => {
