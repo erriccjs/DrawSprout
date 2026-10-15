@@ -7,6 +7,7 @@ import * as persistence from './persistence';
 import { toCheckpoint } from './persistence/mapping';
 import { MemorySessionStore } from './persistence/memory-store';
 import { StorageFullError } from './persistence/types';
+import { strokeInput } from './test/factories';
 import { drawStroke, stubLayoutBox } from './test/pointer';
 import { App } from './App';
 
@@ -266,19 +267,43 @@ describe('resume notice', () => {
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
   });
 
-  it('keeps a saved drawing after an already selected control is tapped', async () => {
+  it('keeps a saved drawing latest after repeated selected-control taps during its load', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;
-    const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    const stepped = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    const saved = reduceSession(cat, stepped, {
+      type: 'commit-stroke', stroke: strokeInput(cat.steps[1]!.id),
+    });
+    await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: saved.strokes });
+    const saveProgress = store.saveProgress.bind(store);
+    let releaseSave: () => void = () => {};
+    const pendingSave = new Promise<void>((resolve) => { releaseSave = resolve; });
+    const save = vi.spyOn(store, 'saveProgress').mockImplementation((input) =>
+      pendingSave.then(() => saveProgress(input)));
+    const loadLatestSessionForLesson = store.loadLatestSessionForLesson.bind(store);
     let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
     vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
 
     render(<App />);
     await open('Kucing');
     fireEvent.click(screen.getByRole('button', { name: /Mode jari/ }));
-    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] })));
+    fireEvent.click(screen.getByRole('button', { name: 'Pen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ikuti panduan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sedang' }));
+    expect(save).not.toHaveBeenCalled();
+
+    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));
 
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
     expect(screen.getByText(RESUMED)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.lastCall?.[0].checkpoint.sessionId).toBe(saved.sessionId);
+    await act(() => Promise.resolve(releaseSave()));
+    await waitFor(async () => {
+      const latest = await loadLatestSessionForLesson(cat.id);
+      expect(latest?.checkpoint.sessionId).toBe(saved.sessionId);
+      expect(latest?.checkpoint.committedStrokeIds).toEqual([saved.strokes[0]!.id]);
+    });
   });
 
   it('opens an outdated checkpoint without progress silently', async () => {
