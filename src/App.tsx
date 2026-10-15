@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import type { ArtworkSurface } from './renderer/artwork-surface';
 import { getLesson } from './lesson-data';
 import type { LessonPackage } from './lesson-data/schema';
 import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
@@ -28,6 +29,7 @@ export function App() {
   const [openLesson, setOpenLesson] = useState<OpenLesson | null>(null);
   const selectionRef = useRef(0);
   const touchedRef = useRef(false);
+  const surfaceRef = useRef<ArtworkSurface | null>(null);
   const handoffRef = useRef<{ state: SessionState; saved: Promise<boolean> } | null>(null);
   const [exitNotice, setExitNotice] = useState<string | null>(null);
 
@@ -62,7 +64,7 @@ export function App() {
       if (selectionRef.current !== selection) return;
       setOpenLesson((current) => {
         if (!current) return current;
-        if (touchedRef.current || !preferences || current.initialState.sessionId !== initialState.sessionId) {
+        if (touchedRef.current || surfaceRef.current?.hasLiveStroke() || !preferences || current.initialState.sessionId !== initialState.sessionId) {
           return { ...current, preferencesPending: false };
         }
         return { ...current, preferencesPending: false,
@@ -98,6 +100,10 @@ export function App() {
       }
       setOpenLesson((current) => {
         if (!current || selectionRef.current !== selection) return current;
+        if (surfaceRef.current?.hasLiveStroke()) {
+          touchedRef.current = true;
+          return notice === LOAD_FAILURE_NOTICE ? { ...current, notice } : current;
+        }
         if (touchedRef.current) {
           return notice === LOAD_FAILURE_NOTICE
             ? { ...current, notice, restorePending: false }
@@ -127,6 +133,7 @@ export function App() {
           restorePending={openLesson.restorePending}
           preferencesPending={openLesson.preferencesPending}
           pendingSave={openLesson.pendingSave}
+          surfaceRef={surfaceRef}
           onActivity={() => {
             touchedRef.current = true;
             setOpenLesson((current) => current && current.restorePending
@@ -135,7 +142,7 @@ export function App() {
           }}
           onChoosePicture={(saved, state) => {
             const handoff = { state, saved };
-            handoffRef.current = openLesson.restorePending && !touchedRef.current ? null : handoff;
+            handoffRef.current = openLesson.restorePending && (!touchedRef.current || state === openLesson.initialState) ? null : handoff;
             selectionRef.current += 1;
             setOpenLesson(null);
             setExitNotice(null);

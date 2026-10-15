@@ -8,7 +8,7 @@ import { toCheckpoint } from './persistence/mapping';
 import { MemorySessionStore } from './persistence/memory-store';
 import { StorageFullError } from './persistence/types';
 import { strokeInput } from './test/factories';
-import { drawStroke, pointerDown, stubLayoutBox } from './test/pointer';
+import { drawStroke, pointerDown, pointerMove, pointerUp, stubLayoutBox } from './test/pointer';
 import { App } from './App';
 
 const lessons = vi.hoisted(() => [] as LessonPackage[]);
@@ -354,6 +354,43 @@ describe('resume notice', () => {
       const latest = await loadLatestSessionForLesson(cat.id);
       expect(latest?.checkpoint.currentStepIndex).toBe(0);
       expect(latest?.strokes).toHaveLength(1);
+    });
+  });
+
+  it('keeps a live stroke when the saved drawing arrives before pointer-up', async () => {
+    stubLayoutBox();
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const stepped = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    const saved = reduceSession(cat, stepped, {
+      type: 'commit-stroke', stroke: strokeInput(cat.steps[1]!.id),
+    });
+    await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: saved.strokes });
+    const loadLatestSessionForLesson = store.loadLatestSessionForLesson.bind(store);
+    const save = vi.spyOn(store, 'saveProgress');
+    let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
+    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+
+    render(<App />);
+    await open('Kucing');
+    const canvas = screen.getByRole('img', { name: /Kanvas gambar/ });
+    act(() => {
+      pointerDown(canvas, { x: 100, y: 100 }, { pointerType: 'touch' });
+      pointerMove(canvas, { x: 150, y: 150 }, { pointerType: 'touch' });
+    });
+
+    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));
+    expect(screen.getByRole('img', { name: /Kanvas gambar/ })).toBe(canvas);
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.queryByText(RESUMED)).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+
+    act(() => pointerUp(canvas, { x: 200, y: 200 }, { pointerType: 'touch' }));
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    await waitFor(async () => {
+      const latest = await loadLatestSessionForLesson(cat.id);
+      expect(latest?.checkpoint.currentStepIndex).toBe(0);
+      expect(latest?.strokes).toHaveLength(1);
+      expect(latest?.strokes[0]?.points).toHaveLength(2);
     });
   });
 
