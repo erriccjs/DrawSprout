@@ -165,7 +165,7 @@ describe('leaving a drawing', () => {
     act(() => drawStroke(screen.getByRole('img', { name: /Kanvas gambar/ }), [
       { x: 250, y: 250 }, { x: 300, y: 300 },
     ], { pointerType: 'touch' }));
-    await act(async () => releaseSave());
+    await act(() => Promise.resolve(releaseSave()));
     expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
 
     await returnToPicker();
@@ -221,7 +221,7 @@ describe('resume notice', () => {
     fireEvent.click(screen.getByRole('button', { name: /Lanjut/ }));
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
 
-    await act(async () => release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] }));
+    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] })));
     expect(screen.queryByText(RESUMED)).toBeNull();
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
   });
@@ -250,7 +250,7 @@ describe('resume notice', () => {
     render(<App />);
     await open('Kucing');
     fireEvent.click(screen.getByRole('button', { name: /Mode jari/ }));
-    await act(async () => release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] }));
+    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] })));
 
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
     expect(screen.getByText(RESUMED)).toBeTruthy();
@@ -326,7 +326,7 @@ describe('resume notice', () => {
     ], { pointerType: 'touch' }));
     expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
 
-    await act(async () => rejectLoad(new Error('secret database failure')));
+    await act(() => Promise.resolve(rejectLoad(new Error('secret database failure'))));
     expect(screen.getAllByText(/Karya sebelumnya tidak dapat dibuka/)).toHaveLength(1);
     expect(screen.queryByText(/secret database failure/)).toBeNull();
     expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
@@ -342,10 +342,10 @@ describe('resume notice', () => {
     await open('Kucing');
     fireEvent.click(screen.getByRole('button', { name: /Lanjut/ }));
 
-    await act(async () => release({
+    await act(() => Promise.resolve(release({
       checkpoint: { ...toCheckpoint(saved, 1, 123), committedStrokeIds: ['missing-stroke'] },
       strokes: [],
-    }));
+    })));
     expect(screen.getAllByText(/Karya sebelumnya tidak dapat dibuka/)).toHaveLength(1);
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
     expect(screen.queryByText(/missing-stroke/)).toBeNull();
@@ -371,7 +371,7 @@ describe('resume notice', () => {
       }
       expect(savePreferences).not.toHaveBeenCalled();
 
-      await act(async () => release(savedPreferences));
+      await act(() => Promise.resolve(release(savedPreferences)));
       expect(savePreferences).not.toHaveBeenCalled();
 
       fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
@@ -390,7 +390,7 @@ describe('resume notice', () => {
     render(<App />);
     await open('Kucing');
     fireEvent.click(screen.getByRole('button', { name: /Lanjut/ }));
-    await act(async () => rejectPreferences(new Error('unavailable')));
+    await act(() => Promise.resolve(rejectPreferences(new Error('unavailable'))));
     expect(savePreferences).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
@@ -410,12 +410,12 @@ describe('resume notice', () => {
     render(<App />);
     await open('Kucing');
     fireEvent.click(screen.getByRole('radio', { name: /Mandiri/ }));
-    expect((screen.getByRole('radio', { name: /Mandiri/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole<HTMLInputElement>('radio', { name: /Mandiri/ }).checked).toBe(true);
 
-    await act(async () => releasePreferences(DEFAULT_PREFERENCES));
+    await act(() => Promise.resolve(releasePreferences(DEFAULT_PREFERENCES)));
     await waitFor(() => expect(savePreferences.mock.lastCall?.[0].assistanceMode).toBe('independent'));
-    await act(async () => releaseSession({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] }));
-    expect((screen.getByRole('radio', { name: /Mandiri/ }) as HTMLInputElement).checked).toBe(true);
+    await act(() => Promise.resolve(releaseSession({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] })));
+    expect(screen.getByRole<HTMLInputElement>('radio', { name: /Mandiri/ }).checked).toBe(true);
     expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
     expect(screen.queryByText(RESUMED)).toBeNull();
   });

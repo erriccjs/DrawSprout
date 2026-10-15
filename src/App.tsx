@@ -16,6 +16,7 @@ interface OpenLesson {
   readonly notice: string | null;
   readonly restorePending: boolean;
   readonly preferencesPending: boolean;
+  readonly pendingSave: Promise<boolean> | null;
   readonly revision: number;
 }
 
@@ -54,7 +55,8 @@ export function App() {
     setExitNotice(null);
     const lesson = getLesson(lessonId);
     const initialState = handoff?.state ?? createSession(lesson, newId(), DEFAULT_PREFERENCES);
-    setOpenLesson({ lesson, initialState, notice: null, restorePending: handoff === null, preferencesPending: true, revision: 0 });
+    setOpenLesson({ lesson, initialState, notice: null, restorePending: handoff === null, preferencesPending: true,
+      pendingSave: handoff?.saved ?? null, revision: 0 });
 
     void bootstrap.store.loadPreferences().then((preferences) => {
       if (selectionRef.current !== selection) return;
@@ -124,9 +126,7 @@ export function App() {
           notice={openLesson.notice}
           restorePending={openLesson.restorePending}
           preferencesPending={openLesson.preferencesPending}
-          pendingSave={handoffRef.current?.state.sessionId === openLesson.initialState.sessionId
-            ? handoffRef.current.saved
-            : null}
+          pendingSave={openLesson.pendingSave}
           onActivity={() => {
             touchedRef.current = true;
             setOpenLesson((current) => current && current.restorePending
