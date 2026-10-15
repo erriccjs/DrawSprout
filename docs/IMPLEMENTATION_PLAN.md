@@ -159,7 +159,8 @@ Noted here rather than built, per the scope given:
    artworks is what is missing.
 5. **Audio instructions** (FR-20).
 6. **Free-creation phase** (FR-12) and "repeat this step" / "start over"
-   (PRD section 7 edit behaviours).
+   (PRD section 7 edit behaviours). Start-over exists only on the finish
+   screen, behind *Gambar lagi*; there is no in-lesson control yet.
 7. **Update flow and data migration** (FR-25, AT-21) — versions are checked and
    refused, but nothing migrates yet.
 8. **Parent area and privacy controls** (FR-19) — nothing to govern until photos
