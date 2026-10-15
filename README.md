@@ -13,6 +13,10 @@ export that contains the child's drawing and nothing else.
 
 ## What works today
 
+- A picture-choosing screen ("Mau gambar apa hari ini?") listing every bundled
+  lesson with its preview. Choosing a picture opens it straight away and
+  reopens that picture's latest saved drawing; leaving a drawing returns to the
+  screen without waiting on storage.
 - Canvas drawing with Pointer Events, pen / brush / eraser, undo and redo.
 - **Pencil mode** (stylus only) and **finger mode**, switchable at any time
   without losing the drawing.
@@ -27,7 +31,7 @@ export that contains the child's drawing and nothing else.
   while the inner ears and nose stay blank; the next step adds pink to those
   parts. An outline marks only the current step's regions. These colours are
   suggestions — the child can still pick another colour.
-- Autosave and resume through IndexedDB.
+- Autosave and resume through IndexedDB, per picture.
 - PNG export of the artwork alone — no guides, no example illustration.
 
 ## What does not work yet
@@ -36,7 +40,8 @@ export that contains the child's drawing and nothing else.
   Home Screen, but there is no service worker.
 - No photo-to-lesson transformation, no backend, no accounts, no cloud sync.
 - No automatic "step finished" detection — the child presses *Lanjut*.
-- One lesson only; no catalogue, no gallery, no project backup file, no audio.
+- One lesson only (the picker shows just the cat); no gallery, no project
+  backup file, no audio.
 
 See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) §6 for the full
 follow-up list.
@@ -97,11 +102,13 @@ build.
 | Export containing artwork only | `src/renderer/export.test.ts` |
 | Coordinate mapping across sizes and orientations | `src/renderer/coordinates.test.ts` |
 | Pencil / finger input filter | `src/input/pointer-mode.test.ts` |
-| The whole slice at component level | `src/ui/DrawingPad.test.tsx` |
+| The picker, leaving and reopening a picture, resume notices | `src/App.test.tsx` |
+| The drawing screen at component level | `src/ui/DrawingPad.test.tsx` |
 
 ### Testing by hand on a tablet
 
-1. `npm run dev`, then open the **Network** URL on the tablet.
+1. `npm run dev`, then open the **Network** URL on the tablet and choose the
+   cat picture.
 2. Draw step 1 with a finger. Switch to pencil mode and confirm a finger no
    longer draws while the stylus does.
 3. Walk all nine steps with *Lanjut*, colour the cat, press *Selesai ✓*, then

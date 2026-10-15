@@ -54,8 +54,8 @@ more than one layer. The renderer receives clip paths as an opaque
 `LessonPackage` carries `schemaVersion` (the shape) and `contentVersion` (this
 lesson's geometry). It is a literal in `cat-lesson.ts` with no code in it, so the
 future authoring step or the photo pipeline in PRD section 11 can emit the same
-JSON without the app changing. `BUNDLED_LESSONS` is already a list; a second
-lesson is a data addition.
+JSON without the app changing. `BUNDLED_LESSONS` is already a list the picker
+reads; a second lesson is a data addition.
 
 ### D-06 — The engine is a pure reducer
 
