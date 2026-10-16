@@ -91,6 +91,10 @@ npm run typecheck
 `npm run build` runs the type check before bundling, so a type error fails the
 build.
 
+All four run in GitHub Actions on every push to `main` and on every pull
+request ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), each as its
+own job so one failure still shows the state of the rest.
+
 ### What the tests cover
 
 | Area | File |
