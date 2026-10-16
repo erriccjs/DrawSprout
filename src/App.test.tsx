@@ -137,6 +137,31 @@ describe('lesson picker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pilih gambar lain' }));
     await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
   });
+
+  it('opens the picker from the restart question without changing the drawing', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const drawn = reduceSession(cat, createSession(cat, 'finished-cat'), {
+      type: 'commit-stroke',
+      stroke: {
+        id: 'saved-stroke', stepId: cat.steps[0]!.id, layerId: 'ink',
+        points: [{ x: 100, y: 100 }, { x: 200, y: 160 }],
+        color: '#000000', width: 4, tool: 'pen', clipRegionIds: [],
+      },
+    });
+    const finished = reduceSession(cat, reduceSession(cat, drawn, { type: 'next-step' }), { type: 'finish' });
+    await store.saveProgress({ checkpoint: toCheckpoint(finished, 1, 123), newStrokes: [...finished.strokes] });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Kucing/ }));
+    await screen.findByRole('heading', { name: 'Selesai! Ini karyamu.' });
+    fireEvent.click(screen.getByRole('button', { name: /Gambar lagi/ }));
+    expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Pilih gambar lain' }));
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    const saved = await store.loadSession('finished-cat');
+    expect(saved?.checkpoint.currentStepIndex).toBe(finished.currentStepIndex);
+    expect(saved?.strokes.map((stroke) => stroke.id)).toEqual(['saved-stroke']);
+  });
 });
 
 describe('leaving a drawing', () => {

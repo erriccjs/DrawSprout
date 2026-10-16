@@ -18,15 +18,18 @@ interface FinishScreenProps {
   readonly clipPaths: Record<string, string>;
   readonly onKeepDrawing: () => void;
   readonly onChoosePicture: () => void;
+  readonly onStartFresh: () => void;
+  readonly restartError: string | null;
 }
 
 /** Small enough to render instantly, large enough to look right on a tablet. */
 const PREVIEW_WIDTH_PX = 900;
 
-export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoosePicture }: FinishScreenProps) {
+export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoosePicture, onStartFresh, restartError }: FinishScreenProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
+  const [askingToClear, setAskingToClear] = useState(false);
 
   useEffect(() => {
     const host = previewRef.current;
@@ -81,13 +84,29 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
         <button type="button" className="button button--primary" onClick={() => void save()}>
           Simpan gambar (PNG)
         </button>
-        <button type="button" className="button" onClick={onKeepDrawing}>
-          ← Gambar lagi
-        </button>
         <button type="button" className="button" onClick={onChoosePicture}>
           Pilih gambar lain
         </button>
+        {!askingToClear && (
+          <button type="button" className="button" onClick={() => setAskingToClear(true)}>
+            ← Gambar lagi
+          </button>
+        )}
       </div>
+
+      {askingToClear && (
+        <div className="finish__choice" role="group" aria-label="Pilihan gambar lagi">
+          <h2>Mau mulai dengan gambar kosong?</h2>
+          <div className="finish__actions">
+            <button type="button" className="button" onClick={onKeepDrawing} autoFocus>
+              Gambar lama tetap ada
+            </button>
+            <button type="button" className="button" onClick={onStartFresh}>
+              Ya, mulai gambar baru
+            </button>
+          </div>
+        </div>
+      )}
 
       {savedName !== null && (
         <p className="banner" role="status">
@@ -98,6 +117,7 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
       {exportError !== null && (
         <p className="banner banner--warning">Gagal menyimpan gambar: {exportError}</p>
       )}
+      {restartError !== null && <p className="banner banner--warning" role="alert">{restartError}</p>}
     </div>
   );
 }

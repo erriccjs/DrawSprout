@@ -32,6 +32,8 @@ drawing.
   parts. An outline marks only the current step's regions. These colours are
   suggestions — the child can still pick another colour.
 - Autosave and resume through IndexedDB, per picture.
+- After finishing, *Gambar lagi* asks whether to keep the current drawing or
+  clear it and start again from the first step.
 - PNG export of the artwork alone — no guides, no example illustration.
 
 ## What does not work yet

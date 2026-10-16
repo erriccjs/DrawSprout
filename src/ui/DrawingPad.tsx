@@ -78,10 +78,15 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     [lesson, onActivity],
   );
 
-  const { status: saveStatus, flush } = useAutosave(store, state, !restorePending, pendingSave);
+  const { status: saveStatus, flush, clearSession } = useAutosave(store, state, !restorePending, pendingSave);
+  const [restartError, setRestartError] = useState<string | null>(null);
+  const restartingRef = useRef(false);
   // Leaving never waits on storage: the child reaches the picker immediately
   // and the save result follows it there.
-  const choosePicture = () => onChoosePicture(restorePending ? Promise.resolve(true) : flush(), stateRef.current);
+  const choosePicture = () => {
+    if (restartingRef.current) return;
+    onChoosePicture(restorePending ? Promise.resolve(true) : flush(), stateRef.current);
+  };
   const step = activeStep(lesson, state);
   const preset = effectiveToolPreset(lesson, state);
   const isColorStep = step.phase === 'color';
@@ -277,8 +282,27 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         lesson={lesson}
         state={state}
         clipPaths={clipPaths}
-        onKeepDrawing={() => dispatch({ type: 'reopen' })}
+        onKeepDrawing={() => {
+          if (restartingRef.current) return;
+          setRestartError(null);
+          dispatch({ type: 'reopen' });
+        }}
         onChoosePicture={choosePicture}
+        onStartFresh={() => {
+          if (restartingRef.current) return;
+          restartingRef.current = true;
+          setRestartError(null);
+          void clearSession(reduceSession(lesson, state, { type: 'restart' }))
+            .then(() => {
+              setHintWindow({ key: '', open: false, nonce: 0 });
+              dispatch({ type: 'restart' });
+            })
+            .catch(() => setRestartError('Belum bisa mulai gambar baru. Coba lagi.'))
+            .finally(() => {
+              restartingRef.current = false;
+            });
+        }}
+        restartError={restartError}
       />
     );
   }

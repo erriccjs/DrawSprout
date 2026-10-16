@@ -442,6 +442,21 @@ body {
   justify-content: center;
 }
 
+.finish__choice {
+  display: grid;
+  gap: 12px;
+}
+
+.finish__choice h2 {
+  margin: 0;
+}
+
+.finish__choice .button {
+  min-height: 64px;
+  padding: 12px 20px;
+  font-weight: 600;
+}
+
 /* Portrait and narrow windows stack instead of shrinking the canvas away. */
 @media (max-width: 1000px), (orientation: portrait) {
   .pad__body {

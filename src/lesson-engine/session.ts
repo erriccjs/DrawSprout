@@ -159,6 +159,21 @@ export function reduceSession(
 
     case 'reopen':
       return state.finished ? { ...state, finished: false } : state;
+
+    case 'restart':
+      return {
+        ...state,
+        currentStepIndex: 0,
+        strokes: [],
+        redoStack: [],
+        nextSequence: 1,
+        finished: false,
+        toolPreferences: {
+          ...state.toolPreferences,
+          activeTool: lesson.steps[0]!.toolPreset.tool,
+          customWidth: null,
+        },
+      };
   }
 }
 

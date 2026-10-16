@@ -26,7 +26,7 @@ export function useAutosave(
   state: SessionState,
   enabled = true,
   pendingSave: Promise<boolean> | null = null,
-): { status: SaveStatus; flush: () => Promise<boolean> } {
+): { status: SaveStatus; flush: () => Promise<boolean>; clearSession: (fresh: SessionState) => Promise<void> } {
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
 
   // Written in an effect rather than during render; the save effect below is
@@ -40,11 +40,13 @@ export function useAutosave(
   const savedStrokeIdsRef = useRef(new Set<string>());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightRef = useRef<Promise<boolean> | null>(pendingSave);
+  const clearingRef = useRef(false);
 
   const flush = useCallback(async (): Promise<boolean> => {
     // Serialise saves: two overlapping transactions could otherwise land in the
     // wrong order and leave an older checkpoint on top.
     await inFlightRef.current;
+    if (clearingRef.current) return false;
 
     const current = stateRef.current;
     revisionRef.current += 1;
@@ -73,6 +75,24 @@ export function useAutosave(
     return await save;
   }, [store]);
 
+  const clearSession = useCallback(async (fresh: SessionState): Promise<void> => {
+    clearingRef.current = true;
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    try {
+      await inFlightRef.current;
+      await store.deleteSession(stateRef.current.sessionId);
+      savedStrokeIdsRef.current.clear();
+      revisionRef.current = 0;
+      stateRef.current = fresh;
+      setStatus({ kind: 'idle' });
+    } catch (error) {
+      clearingRef.current = false;
+      await flush();
+      throw error;
+    }
+    clearingRef.current = false;
+  }, [store, flush]);
+
   useEffect(() => {
     if (!enabled) return;
     const hasUnsavedStroke = [...state.strokes, ...state.redoStack].some(
@@ -99,5 +119,5 @@ export function useAutosave(
     return () => document.removeEventListener('visibilitychange', onHide);
   }, [flush, enabled]);
 
-  return { status, flush };
+  return { status, flush, clearSession };
 }

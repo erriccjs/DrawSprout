@@ -534,7 +534,57 @@ describe('finishing', () => {
     expect(screen.getByText(/Garis panduan dan contoh tidak ikut tersimpan/)).toBeTruthy();
 
     act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
     expect(screen.getByRole('button', { name: /Selesai/ })).toBeTruthy();
+  });
+
+  it('keeps the PNG save action usable while the question is on screen', async () => {
+    const createObjectURL = vi.fn(() => 'blob:artwork');
+    const revokeObjectURL = vi.fn();
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
+    const clicks: string[] = [];
+    const originalClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function recordClick(this: HTMLAnchorElement) {
+      clicks.push(this.download);
+    };
+    try {
+      setup();
+      advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+      act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+      act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+
+      expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
+      const saveWhileAsking = screen.getByRole('button', { name: /Simpan gambar/ });
+      expect(saveWhileAsking.hasAttribute('disabled')).toBe(false);
+      act(() => saveWhileAsking.click());
+      expect(await screen.findByText(/dikirim ke unduhan browser/)).toBeTruthy();
+      expect(clicks).toHaveLength(1);
+      expect(clicks[0]).toMatch(/\.png$/);
+
+      act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
+      act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+      act(() => screen.getByRole('button', { name: /Simpan gambar/ }).click());
+      expect(await screen.findByText(/dikirim ke unduhan browser/)).toBeTruthy();
+      expect(clicks).toHaveLength(2);
+    } finally {
+      HTMLAnchorElement.prototype.click = originalClick;
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+    }
+  });
+
+  it('focuses the first choice after asking to draw again', () => {
+    setup();
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    const drawAgain = screen.getByRole('button', { name: /Gambar lagi/ });
+    drawAgain.focus();
+    act(() => drawAgain.click());
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Gambar lama tetap ada' }));
   });
 
   it('gives back a sized, repainted canvas that still draws after Gambar lagi', async () => {
@@ -550,6 +600,7 @@ describe('finishing', () => {
     }
     act(() => screen.getByRole('button', { name: /Selesai/ }).click());
     act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
 
     const reopened = stageCanvas(view.container);
     const expected = backingSize(
@@ -575,6 +626,191 @@ describe('finishing', () => {
       const restored = await store.loadSession('test-session');
       expect(restored?.checkpoint.committedStrokeIds).toHaveLength(2);
     });
+  });
+
+  it('asks before changing the drawing, then keeps the old strokes and step when chosen', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /Karyamu:/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Selesai/ })).toBeNull();
+    expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
+    expect(screen.getByText(`Tahap ${CAT_LESSON.steps.length} dari ${CAT_LESSON.steps.length}`, { exact: false })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Selesai/ })).toBeTruthy();
+    expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+  });
+
+  it('clears the canvas and stored strokes and returns to the first step when chosen', async () => {
+    const { store, canvas, view } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+
+    await waitFor(() => {
+      expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    });
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
+    const composites = recordedCalls(stageCanvas(view.container)).filter((call) => call.op === 'drawImage');
+    const inkLayer = composites.at(-1)!.args[0] as HTMLCanvasElement;
+    const inkCalls = recordedCalls(inkLayer);
+    const lastClear = inkCalls.map((call) => call.op).lastIndexOf('clearRect');
+    expect(inkCalls.slice(lastClear + 1).filter((call) => call.op === 'stroke')).toHaveLength(0);
+    await waitFor(async () => {
+      const restored = await store.loadSession('test-session');
+      expect(restored?.checkpoint.currentStepIndex).toBe(0);
+      expect(restored?.checkpoint.committedStrokeIds).toHaveLength(0);
+      expect(restored?.strokes).toHaveLength(0);
+    }, { timeout: 4000 });
+  });
+
+  it('starts fresh only once when the choice is tapped twice in a row', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    let release = () => {};
+    const pending = new Promise<void>((resolve) => {
+      release = () => resolve();
+    });
+    const realDelete = store.deleteSession.bind(store);
+    const deleteSession = vi.fn(async (id: string) => {
+      await pending;
+      await realDelete(id);
+    });
+    store.deleteSession = deleteSession;
+
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    const startFresh = screen.getByRole('button', { name: 'Ya, mulai gambar baru' });
+    act(() => startFresh.click());
+    await waitFor(() => expect(deleteSession).toHaveBeenCalledTimes(1));
+    act(() => startFresh.click());
+
+    await act(async () => {
+      release();
+      await pending;
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    });
+    expect(deleteSession).toHaveBeenCalledTimes(1);
+    const restored = await store.loadSession('test-session');
+    expect(restored?.strokes ?? []).toHaveLength(0);
+  });
+
+  it('ignores the keep choice once a fresh start is under way', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    let release = () => {};
+    const pending = new Promise<void>((resolve) => {
+      release = () => resolve();
+    });
+    const realDelete = store.deleteSession.bind(store);
+    const deleteSession = vi.fn(async (id: string) => {
+      await pending;
+      await realDelete(id);
+    });
+    store.deleteSession = deleteSession;
+
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+    await waitFor(() => expect(deleteSession).toHaveBeenCalledTimes(1));
+
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
+    expect(screen.getByRole('heading', { name: /Ini karyamu/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Selesai/ })).toBeNull();
+
+    await act(async () => {
+      release();
+      await pending;
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    });
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('saves the finished drawing when starting fresh fails', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    store.deleteSession = vi.fn().mockRejectedValue(new Error('delete failed'));
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+
+    expect(await screen.findByText(/Belum bisa mulai gambar baru/)).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(/Belum bisa mulai gambar baru/);
+    expect(screen.getByRole('heading', { name: /Ini karyamu/ })).toBeTruthy();
+    const restored = await store.loadSession('test-session');
+    expect(restored?.checkpoint.finished).toBe(true);
+    expect(restored?.checkpoint.currentStepIndex).toBe(CAT_LESSON.steps.length - 1);
+    expect(restored?.strokes).toHaveLength(1);
+  });
+
+  it('clears a failed restart message when keeping the drawing', async () => {
+    const { store } = setup();
+    advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    store.deleteSession = vi.fn().mockRejectedValue(new Error('delete failed'));
+    act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+    act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+    expect(await screen.findByText(/Belum bisa mulai gambar baru/)).toBeTruthy();
+
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
+    act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+    expect(screen.queryByText(/Belum bisa mulai gambar baru/)).toBeNull();
+  });
+
+  it('shows a fresh temporary guide after restarting', async () => {
+    vi.useFakeTimers();
+    try {
+      const { view } = setup();
+      act(() => screen.getByRole('radio', { name: /Petunjuk sementara/ }).click());
+      expect(canvasGuides(view.container).length).toBeGreaterThan(0);
+      await act(() => vi.advanceTimersByTime(5000));
+      expect(canvasGuides(view.container)).toHaveLength(0);
+      vi.useRealTimers();
+
+      advanceToStep(CAT_LESSON.steps.at(-1)!.id);
+      act(() => screen.getByRole('button', { name: /Selesai/ }).click());
+      act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
+      act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+
+      await waitFor(() => expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy());
+      expect(canvasGuides(view.container).length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
