@@ -7,13 +7,13 @@ const GREEN = '#68b86c';
 
 const CENTER = 'M 435 250 A 65 65 0 1 1 565 250 A 65 65 0 1 1 435 250';
 const PETALS = [
-  'M 455 190 C 420 145 445 75 500 65 C 555 75 580 145 545 190 Z',
-  'M 440 215 C 375 155 305 165 290 225 C 295 285 365 305 440 270 Z',
-  'M 560 215 C 625 155 695 165 710 225 C 705 285 635 305 560 270 Z',
-  'M 450 285 C 375 275 315 325 340 385 C 380 435 455 390 485 310 Z',
-  'M 550 285 C 625 275 685 325 660 385 C 620 435 545 390 515 310 Z',
+  { outline: 'M 455 190 C 420 145 445 75 500 65 C 555 75 580 145 545 190', innerEdge: 'Q 500 160 455 190' },
+  { outline: 'M 440 215 C 375 155 305 165 290 225 C 295 285 365 305 438 270', innerEdge: 'Q 400 250 440 215' },
+  { outline: 'M 560 215 C 625 155 695 165 710 225 C 705 285 635 305 562 270', innerEdge: 'Q 600 250 560 215' },
+  { outline: 'M 447 288 C 375 275 315 325 340 385 C 380 435 455 390 480 312', innerEdge: 'Q 455 322 447 288' },
+  { outline: 'M 553 288 C 625 275 685 325 660 385 C 620 435 545 390 520 312', innerEdge: 'Q 545 322 553 288' },
 ] as const;
-const STEM = 'M 489 310 C 486 410 485 545 488 665 L 512 665 C 515 545 514 410 511 310 Z';
+const STEM = 'M 489 315 C 486 410 485 545 488 665 L 512 665 C 515 545 514 410 511 315';
 const LEFT_LEAF = 'M 490 535 C 435 450 355 445 330 495 C 350 555 415 575 490 535 Z';
 const RIGHT_LEAF = 'M 510 575 C 565 485 650 475 680 525 C 655 590 585 610 510 575 Z';
 const EYES = [
@@ -23,9 +23,9 @@ const EYES = [
 const SMILE = 'M 472 270 Q 500 295 528 270';
 const VEINS = ['M 490 535 Q 420 500 355 495', 'M 510 575 Q 590 535 650 525'] as const;
 
-const PETAL_GUIDES = PETALS.map((d, index) => ({
+const PETAL_GUIDES = PETALS.map((petal, index) => ({
   id: `petal-${index + 1}`,
-  d,
+  d: petal.outline,
   role: 'final-outline' as const,
 }));
 const LEAF_GUIDES = [
@@ -43,14 +43,14 @@ const VEIN_GUIDES = VEINS.map((d, index) => ({
 }));
 
 const COLOR_REGIONS = [
-  ...PETALS.map((d, index) => ({
+  ...PETALS.map((petal, index) => ({
     id: `petal-${index + 1}`,
     label: `Kelopak ${index + 1}`,
-    d,
+    d: `${petal.outline} ${petal.innerEdge} Z`,
     suggestedColor: PINK,
   })),
   { id: 'center', label: 'Tengah bunga', d: `${CENTER} Z`, suggestedColor: YELLOW },
-  { id: 'stem', label: 'Batang', d: STEM, suggestedColor: GREEN },
+  { id: 'stem', label: 'Batang', d: `${STEM} Z`, suggestedColor: GREEN },
   { id: 'leaf-left', label: 'Daun kiri', d: LEFT_LEAF, suggestedColor: GREEN },
   { id: 'leaf-right', label: 'Daun kanan', d: RIGHT_LEAF, suggestedColor: GREEN },
 ] as const;

@@ -26,6 +26,22 @@ describe('lesson package validation', () => {
     }
   });
 
+  it('keeps flower petal and stem closures out of visible outlines', () => {
+    const visible = FLOWER_LESSON.steps.flatMap((step) => step.guidePaths);
+    const preview = new Map(FLOWER_LESSON.targetPreview.paths.map((path) => [path.id, path]));
+    const regions = new Map(FLOWER_LESSON.colorRegions.map((region) => [region.id, region]));
+
+    const flowerParts = visible.filter((path) => path.id.startsWith('petal-') || path.id === 'stem');
+    expect(flowerParts).toHaveLength(6);
+
+    for (const guide of flowerParts) {
+      expect(guide.d.trim().endsWith('Z')).toBe(false);
+      expect(preview.get(guide.id)?.d).toBe(guide.d);
+      expect(regions.get(guide.id)?.d.trim().endsWith('Z')).toBe(true);
+      expect(regions.get(guide.id)?.d).not.toBe(guide.d);
+    }
+  });
+
   it('authors the cat lesson with 7 shape and detail steps plus colour steps', () => {
     // PRD section 5 Tahap A and section 20 item 2 ask for 6-8 shape/detail
     // steps plus a colour phase.
