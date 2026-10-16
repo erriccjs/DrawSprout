@@ -79,7 +79,7 @@ export function Toolbar({
         ))}
       </fieldset>
 
-      <fieldset className="toolbar__group">
+      <fieldset className="toolbar__group toolbar__group--color">
         <legend>Warna</legend>
         <button
           type="button"
@@ -112,51 +112,53 @@ export function Toolbar({
         </p>
       </fieldset>
 
-      <fieldset className="toolbar__group">
-        <legend>Ketebalan</legend>
-        {WIDTH_CHOICES.map((choice) => {
-          const width = round(stepWidth * choice.factor);
-          const active =
-            toolPreferences.customWidth === null
-              ? choice.factor === 1
-              : toolPreferences.customWidth === width;
-          return (
-            <button
-              key={choice.label}
-              type="button"
-              className="chip"
-              aria-pressed={active}
-              onClick={() =>
-                choice.factor === 1
-                  ? dispatch({ type: 'clear-custom-width' })
-                  : dispatch({ type: 'set-custom-width', width })
-              }
-            >
-              {choice.label}
-            </button>
-          );
-        })}
-      </fieldset>
+      <div className="toolbar__row">
+        <fieldset className="toolbar__group">
+          <legend>Ketebalan</legend>
+          {WIDTH_CHOICES.map((choice) => {
+            const width = round(stepWidth * choice.factor);
+            const active =
+              toolPreferences.customWidth === null
+                ? choice.factor === 1
+                : toolPreferences.customWidth === width;
+            return (
+              <button
+                key={choice.label}
+                type="button"
+                className="chip"
+                aria-pressed={active}
+                onClick={() =>
+                  choice.factor === 1
+                    ? dispatch({ type: 'clear-custom-width' })
+                    : dispatch({ type: 'set-custom-width', width })
+                }
+              >
+                {choice.label}
+              </button>
+            );
+          })}
+        </fieldset>
 
-      <fieldset className="toolbar__group">
-        <legend>Riwayat</legend>
-        <button
-          type="button"
-          className="chip"
-          disabled={!canUndo}
-          onClick={() => dispatch({ type: 'undo' })}
-        >
-          ↶ Batalkan
-        </button>
-        <button
-          type="button"
-          className="chip"
-          disabled={!canRedo}
-          onClick={() => dispatch({ type: 'redo' })}
-        >
-          ↷ Ulangi
-        </button>
-      </fieldset>
+        <fieldset className="toolbar__group">
+          <legend>Riwayat</legend>
+          <button
+            type="button"
+            className="chip"
+            disabled={!canUndo}
+            onClick={() => dispatch({ type: 'undo' })}
+          >
+            ↶ Batalkan
+          </button>
+          <button
+            type="button"
+            className="chip"
+            disabled={!canRedo}
+            onClick={() => dispatch({ type: 'redo' })}
+          >
+            ↷ Ulangi
+          </button>
+        </fieldset>
+      </div>
     </div>
   );
 }
@@ -184,8 +186,7 @@ export function ToolbarSettings({ state, isColorStep, dispatch }: ToolbarSetting
           Mode pensil
         </button>
         <p className="toolbar__readout toolbar__readout--muted">
-          Mode pensil hanya menerima stylus pen. Telapak tangan yang terbaca sebagai sentuhan
-          tidak menggambar, tetapi aplikasi tidak menjanjikan palm rejection.
+          Mode pensil: hanya stylus. Telapak tangan tidak menggambar; palm rejection tak dijamin.
         </p>
       </fieldset>
 
@@ -206,7 +207,7 @@ export function ToolbarSettings({ state, isColorStep, dispatch }: ToolbarSetting
             {toolPreferences.colorBoundaryAssist ? 'Batas area: aktif' : 'Batas area: nonaktif'}
           </button>
           <p className="toolbar__readout toolbar__readout--muted">
-            Batas area menahan warna di dalam bentuk contoh. Kalau garismu berbeda, matikan saja.
+            Warna tetap di dalam bentuk contoh. Matikan jika garismu berbeda.
           </p>
         </fieldset>
       )}

@@ -12,9 +12,9 @@ import type { AssistanceMode, HintDurationMs, SessionAction, SessionState } from
 import { TargetPreview } from './TargetPreview';
 
 const ASSISTANCE_CHOICES: readonly { mode: AssistanceMode; label: string; help: string }[] = [
-  { mode: 'visible', label: 'Garis terlihat', help: 'Garis putus-putus tetap tampil.' },
-  { mode: 'temporary', label: 'Petunjuk sementara', help: 'Garis tampil sebentar, lalu hilang.' },
-  { mode: 'independent', label: 'Mandiri', help: 'Hanya contoh di panel, tanpa garis di kanvas.' },
+  { mode: 'visible', label: 'Garis terlihat', help: 'Garis tetap tampil.' },
+  { mode: 'temporary', label: 'Petunjuk sementara', help: 'Garis tampil sebentar.' },
+  { mode: 'independent', label: 'Mandiri', help: 'Tanpa garis di kanvas.' },
 ];
 
 const HINT_DURATIONS: readonly HintDurationMs[] = [3000, 5000, 10000];

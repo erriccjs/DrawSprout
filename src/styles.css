@@ -139,7 +139,7 @@ body {
 
 .pad__body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 12px;
   min-height: 0;
   flex: 1;
@@ -183,7 +183,7 @@ body {
 .pad__side {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-height: 0;
   min-width: 0;
 }
@@ -199,11 +199,14 @@ body {
 }
 
 .pad__control-panel {
-  min-height: 0;
-}
-
-.pad__control-panel .toolbar--settings {
-  margin-top: 8px;
+  flex: none;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 /* --- step panel ----------------------------------------------------------- */
@@ -222,10 +225,6 @@ body {
 
 .toolbar,
 .step-controls {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -276,7 +275,7 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.step-panel__group > :is(.button, .field) {
+.step-panel__group > .field {
   grid-column: 1 / -1;
 }
 
@@ -286,6 +285,20 @@ body {
   font-weight: 600;
   color: var(--muted);
   padding: 0 4px;
+}
+
+.step-controls .step-panel__group {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.step-controls legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .target-preview {
@@ -310,14 +323,11 @@ body {
   flex: none;
 }
 
-.radio small,
-.toolbar__readout.toolbar__readout--muted {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
+.radio small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
 
 .toolbar__group .chip {
@@ -326,14 +336,33 @@ body {
 }
 
 .toolbar__group .swatches {
+  display: grid;
+  grid-template-columns: repeat(5, var(--tap));
   justify-content: space-between;
-  gap: 5px;
+  gap: 4px;
+}
+
+.toolbar__row {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 6px;
+}
+
+.toolbar__row .toolbar__group {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.toolbar__row .chip {
+  min-width: 0;
+  font-size: 0.8125rem;
 }
 
 .field {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   font-size: 0.875rem;
   color: var(--muted);
@@ -419,7 +448,8 @@ body {
 
 .toolbar__readout--muted {
   color: var(--muted);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
 }
 
 .dot {
@@ -514,18 +544,49 @@ body {
   font-weight: 600;
 }
 
+/* Portrait: instruction and example stay on top, the canvas takes the middle,
+   and the controls sit below it in two columns instead of a side column. */
 @media (orientation: portrait) {
-  .pad__stage {
+  .pad__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .pad__side {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
   }
-}
 
-@media (max-width: 700px) {
-  .pad__body {
-    grid-template-columns: minmax(0, 1fr) 280px;
+  .pad__control-panel {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: start;
   }
 
-  .step-panel {
-    grid-template-columns: minmax(0, 1fr) 130px;
+  .pad__control-panel > * {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .toolbar:not(.toolbar--settings) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'tool color'
+      'row color';
+    align-items: start;
+  }
+
+  .toolbar:not(.toolbar--settings) > :nth-child(1) {
+    grid-area: tool;
+  }
+
+  .toolbar__group--color {
+    grid-area: color;
+  }
+
+  .toolbar__row {
+    grid-area: row;
   }
 }
