@@ -1,8 +1,10 @@
 export * from './schema';
 export * from './validate';
 export { CAT_LESSON } from './cat-lesson';
+export { FLOWER_LESSON } from './flower-lesson';
 
 import { CAT_LESSON } from './cat-lesson';
+import { FLOWER_LESSON } from './flower-lesson';
 import type { LessonPackage } from './schema';
 
 /**
@@ -11,7 +13,7 @@ import type { LessonPackage } from './schema';
  * rendered: PRD section 14 requires an invalid package to refuse rather than be
  * rendered partially.
  */
-export const BUNDLED_LESSONS: readonly LessonPackage[] = [CAT_LESSON];
+export const BUNDLED_LESSONS: readonly LessonPackage[] = [CAT_LESSON, FLOWER_LESSON];
 
 /** Looks a lesson up; bootstrap has already validated the list it comes from. */
 export function getLesson(lessonId: string): LessonPackage {

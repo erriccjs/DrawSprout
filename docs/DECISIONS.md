@@ -52,10 +52,10 @@ more than one layer. The renderer receives clip paths as an opaque
 ### D-05 — Lesson data is plain versioned data
 
 `LessonPackage` carries `schemaVersion` (the shape) and `contentVersion` (this
-lesson's geometry). It is a literal in `cat-lesson.ts` with no code in it, so the
+lesson's geometry). Lessons are authored as data in `src/lesson-data/`, so the
 future authoring step or the photo pipeline in PRD section 11 can emit the same
-JSON without the app changing. `BUNDLED_LESSONS` is already a list the picker
-reads; a second lesson is a data addition.
+JSON without the app changing. `BUNDLED_LESSONS` is the list the picker reads;
+adding a lesson is a data addition.
 
 ### D-06 — The engine is a pure reducer
 
@@ -202,7 +202,7 @@ PRD section 13 permits only a geometry subset and forbids script, external URLs
 or active markup from lesson content; PRD section 14 says an invalid path must
 stop the package opening. `validate.ts` enforces the SVG path command subset and
 refuses the package rather than rendering it partially. This matters more later
-than now — today the only lesson is a local literal, but the photo pipeline is
+than now — today's lessons are local literals, but the photo pipeline is
 meant to generate these.
 
 ### D-24 — Manual advance only

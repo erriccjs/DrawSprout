@@ -1,11 +1,45 @@
 import { describe, expect, it } from 'vitest';
 import { CAT_LESSON } from './cat-lesson';
+import { FLOWER_LESSON } from './flower-lesson';
 import { LESSON_SCHEMA_VERSION, type LessonPackage } from './schema';
 import { LessonValidationError, assertValidLessons, findLessonProblems } from './validate';
 
 describe('lesson package validation', () => {
   it('accepts the hand-authored cat lesson', () => {
     expect(findLessonProblems(CAT_LESSON)).toEqual([]);
+  });
+
+  it('accepts the flower lesson with outline, detail, then colour steps', () => {
+    expect(findLessonProblems(FLOWER_LESSON)).toEqual([]);
+    expect(FLOWER_LESSON.steps.map((step) => step.phase)).toEqual([
+      'outline', 'outline', 'outline', 'outline', 'detail', 'detail', 'color', 'color', 'color',
+    ]);
+  });
+
+  it('gives every flower colour step existing closed regions', () => {
+    const regions = new Map(FLOWER_LESSON.colorRegions.map((region) => [region.id, region]));
+    for (const step of FLOWER_LESSON.steps.filter((item) => item.phase === 'color')) {
+      expect(step.colorRegionIds.length).toBeGreaterThan(0);
+      for (const id of step.colorRegionIds) {
+        expect(regions.get(id)?.d.trim().endsWith('Z')).toBe(true);
+      }
+    }
+  });
+
+  it('keeps flower petal and stem closures out of visible outlines', () => {
+    const visible = FLOWER_LESSON.steps.flatMap((step) => step.guidePaths);
+    const preview = new Map(FLOWER_LESSON.targetPreview.paths.map((path) => [path.id, path]));
+    const regions = new Map(FLOWER_LESSON.colorRegions.map((region) => [region.id, region]));
+
+    const flowerParts = visible.filter((path) => path.id.startsWith('petal-') || path.id === 'stem');
+    expect(flowerParts).toHaveLength(6);
+
+    for (const guide of flowerParts) {
+      expect(guide.d.trim().endsWith('Z')).toBe(false);
+      expect(preview.get(guide.id)?.d).toBe(guide.d);
+      expect(regions.get(guide.id)?.d.trim().endsWith('Z')).toBe(true);
+      expect(regions.get(guide.id)?.d).not.toBe(guide.d);
+    }
   });
 
   it('authors the cat lesson with 7 shape and detail steps plus colour steps', () => {
@@ -89,8 +123,7 @@ describe('lesson package validation', () => {
   });
 
   it('accepts a list of distinct valid packages', () => {
-    const flower: LessonPackage = { ...CAT_LESSON, id: 'flower', title: 'Bunga' };
-    expect(() => assertValidLessons([CAT_LESSON, flower])).not.toThrow();
+    expect(() => assertValidLessons([CAT_LESSON, FLOWER_LESSON])).not.toThrow();
   });
 });
 

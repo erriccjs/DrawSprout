@@ -28,9 +28,8 @@ Two cautions carried over from the PRD itself:
 | M4 — Photo spike | section 16 phase 4 | Photo → illustration candidates, geometry extraction, step sequencing, 30-photo rubric evaluation | Deferred |
 | M5 — Beta integration | section 16 phase 5 | Backend, job queue, privacy and retention, parent area, device test matrix | Deferred |
 
-Anything the ask did not require — a second lesson, a generalised authoring
-pipeline, a hardening pass — is M2+ work listed here rather than scope added to
-M1.
+A generalised authoring pipeline and a hardening pass are M2+ work listed here
+rather than scope added to M1.
 
 ## 2. Functional requirements
 
