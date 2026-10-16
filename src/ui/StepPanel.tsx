@@ -23,9 +23,19 @@ interface StepPanelProps {
   readonly lesson: LessonPackage;
   readonly state: SessionState;
   readonly step: LessonStep;
+}
+
+interface StepNavigationProps {
+  readonly lesson: LessonPackage;
+  readonly state: SessionState;
+  readonly onFinish: () => void;
+  readonly dispatch: (action: SessionAction) => void;
+}
+
+interface StepControlsProps {
+  readonly state: SessionState;
   readonly guidesVisible: boolean;
   readonly onShowHint: () => void;
-  readonly onFinish: () => void;
   readonly dispatch: (action: SessionAction) => void;
 }
 
@@ -33,14 +43,9 @@ export function StepPanel({
   lesson,
   state,
   step,
-  guidesVisible,
-  onShowHint,
-  onFinish,
-  dispatch,
 }: StepPanelProps) {
   const stepNumber = state.currentStepIndex + 1;
   const stepCount = lesson.steps.length;
-  const isLastStep = state.currentStepIndex === stepCount - 1;
 
   return (
     <div className="step-panel">
@@ -53,30 +58,6 @@ export function StepPanel({
         {step.hint !== undefined && <p className="step-panel__hint">{step.hint}</p>}
       </div>
 
-      <div className="step-panel__nav">
-        <button
-          type="button"
-          className="button"
-          disabled={state.currentStepIndex === 0}
-          onClick={() => dispatch({ type: 'prev-step' })}
-        >
-          ← Kembali
-        </button>
-        {isLastStep ? (
-          <button type="button" className="button button--primary" onClick={onFinish}>
-            Selesai ✓
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="button button--primary"
-            onClick={() => dispatch({ type: 'next-step' })}
-          >
-            Lanjut →
-          </button>
-        )}
-      </div>
-
       <TargetPreview
         space={lesson.coordinateSpace}
         paths={lesson.targetPreview.paths}
@@ -85,7 +66,43 @@ export function StepPanel({
         steps={lesson.steps}
         colorRegions={lesson.colorRegions}
       />
+    </div>
+  );
+}
 
+export function StepNavigation({ lesson, state, onFinish, dispatch }: StepNavigationProps) {
+  const isLastStep = state.currentStepIndex === lesson.steps.length - 1;
+
+  return (
+    <div className="step-panel__nav">
+      <button
+        type="button"
+        className="button"
+        disabled={state.currentStepIndex === 0}
+        onClick={() => dispatch({ type: 'prev-step' })}
+      >
+        ← Kembali
+      </button>
+      {isLastStep ? (
+        <button type="button" className="button button--primary" onClick={onFinish}>
+          Selesai ✓
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="button button--primary"
+          onClick={() => dispatch({ type: 'next-step' })}
+        >
+          Lanjut →
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function StepControls({ state, guidesVisible, onShowHint, dispatch }: StepControlsProps) {
+  return (
+    <div className="step-controls">
       <fieldset className="step-panel__group">
         <legend>Bantuan</legend>
         {ASSISTANCE_CHOICES.map((choice) => (

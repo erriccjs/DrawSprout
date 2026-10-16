@@ -40,9 +40,14 @@ interface ToolbarProps {
   readonly lesson: LessonPackage;
   readonly state: SessionState;
   readonly preset: ToolPreset;
-  readonly isColorStep: boolean;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
+  readonly dispatch: (action: SessionAction) => void;
+}
+
+interface ToolbarSettingsProps {
+  readonly state: SessionState;
+  readonly isColorStep: boolean;
   readonly dispatch: (action: SessionAction) => void;
 }
 
@@ -50,7 +55,6 @@ export function Toolbar({
   lesson,
   state,
   preset,
-  isColorStep,
   canUndo,
   canRedo,
   dispatch,
@@ -153,7 +157,14 @@ export function Toolbar({
           ↷ Ulangi
         </button>
       </fieldset>
+    </div>
+  );
+}
 
+export function ToolbarSettings({ state, isColorStep, dispatch }: ToolbarSettingsProps) {
+  const { toolPreferences } = state;
+  return (
+    <div className="toolbar toolbar--settings">
       <fieldset className="toolbar__group">
         <legend>Cara menggambar</legend>
         <button

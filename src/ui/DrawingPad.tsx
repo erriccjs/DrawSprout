@@ -35,8 +35,8 @@ import { acceptsPointerType, rejectionMessage } from '../input/pointer-mode';
 import { useStrokeInput } from '../input/useStrokeInput';
 import { FinishScreen } from './FinishScreen';
 import { GuideOverlay } from './GuideOverlay';
-import { StepPanel } from './StepPanel';
-import { Toolbar } from './Toolbar';
+import { StepControls, StepNavigation, StepPanel } from './StepPanel';
+import { Toolbar, ToolbarSettings } from './Toolbar';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 import { newId } from './ids';
 import { useAutosave, type SaveStatus } from './useAutosave';
@@ -176,6 +176,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
 
   const pendingRef = useRef<PendingStroke | null>(null);
   const [rejection, setRejection] = useState<string | null>(null);
+  const [controlTab, setControlTab] = useState<'drawing' | 'help'>('drawing');
 
   useStrokeInput(canvas, lesson.coordinateSpace, {
     accepts: (pointerType) => acceptsPointerType(state.inputMode, pointerType),
@@ -340,6 +341,8 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
       )}
       {rejection !== null && <p className="banner">{rejection}</p>}
 
+      <StepPanel lesson={lesson} state={state} step={step} />
+
       <div className="pad__body">
         <div className="pad__stage" ref={setStage}>
           <div
@@ -369,24 +372,53 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         </div>
 
         <aside className="pad__side">
-          <StepPanel
+          <StepNavigation
             lesson={lesson}
             state={state}
-            step={step}
-            guidesVisible={guidesVisible}
-            onShowHint={showHint}
             onFinish={() => dispatch({ type: 'finish' })}
             dispatch={dispatch}
           />
-          <Toolbar
-            lesson={lesson}
-            state={state}
-            preset={preset}
-            isColorStep={isColorStep}
-            canUndo={canUndo(lesson, state)}
-            canRedo={canRedo(state)}
-            dispatch={dispatch}
-          />
+          <div className="pad__tabs" aria-label="Kelompok kontrol">
+            <button
+              type="button"
+              className="chip"
+              aria-pressed={controlTab === 'drawing'}
+              onClick={() => setControlTab('drawing')}
+            >
+              Alat gambar
+            </button>
+            <button
+              type="button"
+              className="chip"
+              aria-pressed={controlTab === 'help'}
+              onClick={() => setControlTab('help')}
+            >
+              Bantuan
+            </button>
+          </div>
+          <div className="pad__control-panel" data-active={controlTab === 'drawing'}>
+            <Toolbar
+              lesson={lesson}
+              state={state}
+              preset={preset}
+              canUndo={canUndo(lesson, state)}
+              canRedo={canRedo(state)}
+              dispatch={dispatch}
+            />
+          </div>
+          <div className="pad__control-panel" data-active={controlTab === 'help'}>
+            <StepControls
+              state={state}
+              guidesVisible={guidesVisible}
+              onShowHint={showHint}
+              dispatch={dispatch}
+            />
+            <ToolbarSettings
+              state={state}
+              isColorStep={isColorStep}
+              dispatch={dispatch}
+            />
+          </div>
         </aside>
       </div>
     </div>

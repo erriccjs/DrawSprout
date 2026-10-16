@@ -114,6 +114,7 @@ body {
   flex-direction: column;
   gap: 8px;
   height: 100%;
+  min-height: 0;
 }
 
 .pad__header {
@@ -138,7 +139,7 @@ body {
 
 .pad__body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 280px;
   gap: 12px;
   min-height: 0;
   flex: 1;
@@ -182,23 +183,52 @@ body {
 .pad__side {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
+  gap: 8px;
   min-height: 0;
-  padding-right: 4px;
+  min-width: 0;
+}
+
+.pad__tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pad__control-panel[data-active='false'] {
+  display: none;
+}
+
+.pad__control-panel {
+  min-height: 0;
+}
+
+.pad__control-panel .toolbar--settings {
+  margin-top: 8px;
 }
 
 /* --- step panel ----------------------------------------------------------- */
 
-.step-panel,
-.toolbar {
+.step-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  align-items: center;
+  gap: 16px;
+  min-height: 0;
+  padding: 8px 12px;
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 12px;
+}
+
+.toolbar,
+.step-controls {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 
 .step-panel__counter {
@@ -210,14 +240,15 @@ body {
 }
 
 .step-panel__instruction {
-  margin: 4px 0 0;
-  font-size: 1.375rem;
+  margin: 2px 0 0;
+  font-size: 1.25rem;
   line-height: 1.25;
 }
 
 .step-panel__hint {
-  margin: 6px 0 0;
+  margin: 2px 0 0;
   color: var(--muted);
+  font-size: 0.875rem;
 }
 
 .step-panel__nav {
@@ -231,13 +262,22 @@ body {
 
 .step-panel__group,
 .toolbar__group {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 8px 10px 10px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  padding: 2px 0 0;
   margin: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px;
+}
+
+.step-panel__group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.step-panel__group > :is(.button, .field) {
+  grid-column: 1 / -1;
 }
 
 .step-panel__group legend,
@@ -252,8 +292,6 @@ body {
   width: 100%;
   height: auto;
   background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
 }
 
 .radio {
@@ -272,9 +310,24 @@ body {
   flex: none;
 }
 
-.radio small {
-  display: block;
-  color: var(--muted);
+.radio small,
+.toolbar__readout.toolbar__readout--muted {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.toolbar__group .chip {
+  flex: 1;
+  padding-inline: 4px;
+}
+
+.toolbar__group .swatches {
+  justify-content: space-between;
+  gap: 5px;
 }
 
 .field {
@@ -422,13 +475,17 @@ body {
 
 .finish__preview {
   width: 100%;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 0;
+  flex: 1;
 }
 
 .finish__canvas {
   max-width: 100%;
+  max-height: 100%;
+  width: auto;
   height: auto;
   background: var(--paper);
   border: 1px solid var(--line);
@@ -457,14 +514,18 @@ body {
   font-weight: 600;
 }
 
-/* Portrait and narrow windows stack instead of shrinking the canvas away. */
-@media (max-width: 1000px), (orientation: portrait) {
+@media (orientation: portrait) {
+  .pad__stage {
+    align-items: start;
+  }
+}
+
+@media (max-width: 700px) {
   .pad__body {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(240px, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) 280px;
   }
 
-  .pad__side {
-    overflow-y: visible;
+  .step-panel {
+    grid-template-columns: minmax(0, 1fr) 130px;
   }
 }
