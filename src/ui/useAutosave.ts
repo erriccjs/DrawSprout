@@ -28,6 +28,7 @@ export function useAutosave(
   pendingSave: Promise<boolean> | null = null,
 ): { status: SaveStatus; flush: () => Promise<boolean>; clearSession: (fresh: SessionState) => Promise<void> } {
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
+  const settledStatusRef = useRef<SaveStatus>({ kind: 'idle' });
 
   // Written in an effect rather than during render; the save effect below is
   // declared after this one, so it always reads the committed state.
@@ -60,14 +61,21 @@ export function useAutosave(
     setStatus({ kind: 'saving' });
     const save = store
       .saveProgress({ checkpoint, newStrokes })
-      .then(() => {
+      .then((wrote) => {
+        if (!wrote) {
+          setStatus(settledStatusRef.current);
+          return true;
+        }
         for (const stroke of newStrokes) savedStrokeIdsRef.current.add(stroke.id);
-        setStatus({ kind: 'saved', at: Date.now() });
+        settledStatusRef.current = { kind: 'saved', at: Date.now() };
+        setStatus(settledStatusRef.current);
         return true;
       })
       .catch((error: unknown) => {
-        if (error instanceof StorageFullError) setStatus({ kind: 'storage-full' });
-        else setStatus({ kind: 'failed' });
+        settledStatusRef.current = error instanceof StorageFullError
+          ? { kind: 'storage-full' }
+          : { kind: 'failed' };
+        setStatus(settledStatusRef.current);
         return false;
       });
 

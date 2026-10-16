@@ -60,7 +60,7 @@ export interface SessionStore {
    * failure leaves the previous valid checkpoint untouched rather than half
    * updated (FR-13, AT-14).
    */
-  saveProgress(input: SaveProgressInput): Promise<void>;
+  saveProgress(input: SaveProgressInput): Promise<boolean>;
   loadSession(sessionId: string): Promise<RestoredSession | null>;
   /** Most recently updated session, for the "lanjutkan karya" entry point. */
   loadLatestSession(): Promise<RestoredSession | null>;

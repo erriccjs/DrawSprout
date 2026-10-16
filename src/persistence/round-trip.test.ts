@@ -174,11 +174,12 @@ describe('IndexedDB specifics', () => {
     const drawn = draw(newSessionState(), stepIdAt(0));
     const empty = { ...newSessionState(), sessionId: 'empty' };
 
-    await Promise.all([
+    const outcomes = await Promise.all([
       store.saveProgress({ checkpoint: toCheckpoint(drawn, 1, 100), newStrokes: drawn.strokes }),
       store.saveProgress({ checkpoint: toCheckpoint(empty, 1, 200), newStrokes: [] }),
     ]);
 
+    expect(outcomes).toEqual([true, false]);
     expect((await store.loadLatestSessionForLesson(drawn.lessonId))?.checkpoint.sessionId)
       .toBe(drawn.sessionId);
     expect(await store.loadSession(empty.sessionId)).toBeNull();
