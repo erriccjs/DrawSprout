@@ -117,7 +117,7 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
       {exportError !== null && (
         <p className="banner banner--warning">Gagal menyimpan gambar: {exportError}</p>
       )}
-      {restartError !== null && <p className="banner banner--warning">{restartError}</p>}
+      {restartError !== null && <p className="banner banner--warning" role="alert">{restartError}</p>}
     </div>
   );
 }

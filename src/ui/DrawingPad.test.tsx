@@ -769,6 +769,7 @@ describe('finishing', () => {
     act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
 
     expect(await screen.findByText(/Belum bisa mulai gambar baru/)).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(/Belum bisa mulai gambar baru/);
     expect(screen.getByRole('heading', { name: /Ini karyamu/ })).toBeTruthy();
     const restored = await store.loadSession('test-session');
     expect(restored?.checkpoint.finished).toBe(true);
