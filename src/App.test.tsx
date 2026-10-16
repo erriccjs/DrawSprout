@@ -332,6 +332,27 @@ describe('resume notice', () => {
     expect(latest?.checkpoint.committedStrokeIds).toEqual([saved.strokes[0]!.id]);
   });
 
+  it('restores a saved drawing under a changed control selected during loading', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const stepped = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    const saved = reduceSession(cat, stepped, {
+      type: 'commit-stroke', stroke: strokeInput(cat.steps[1]!.id),
+    });
+    await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: saved.strokes });
+    let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
+    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+
+    render(<App />);
+    await open('Kucing');
+    fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
+    expect(screen.getByRole('button', { name: /Mode pensil/ }).getAttribute('aria-pressed')).toBe('true');
+
+    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));
+    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('button', { name: /Mode pensil/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('keeps a committed new stroke when an older saved drawing arrives late', async () => {
     stubLayoutBox();
     const cat = lessonData.BUNDLED_LESSONS[0]!;
@@ -384,6 +405,7 @@ describe('resume notice', () => {
     expect(screen.queryByText(RESUMED)).toBeNull();
     expect(save).not.toHaveBeenCalled();
 
+    fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
     act(() => pointerUp(canvas, { x: 200, y: 200 }, { pointerType: 'touch' }));
     expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
     await waitFor(async () => {
@@ -433,6 +455,26 @@ describe('resume notice', () => {
     expect(await screen.findByText(/Karya sebelumnya tidak dapat dibuka/)).toBeTruthy();
     expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
     expect(screen.queryByText(/secret database failure/)).toBeNull();
+  });
+
+  it('leaves a saved drawing latest after a failed load of an empty session', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const saved = reduceSession(cat, createSession(cat, 'saved-cat'), {
+      type: 'commit-stroke', stroke: strokeInput(cat.steps[0]!.id),
+    });
+    await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: saved.strokes });
+    const loadLatest = store.loadLatestSessionForLesson.bind(store);
+    vi.spyOn(store, 'loadLatestSessionForLesson').mockRejectedValueOnce(new Error('load failed'));
+    const save = vi.spyOn(store, 'saveProgress');
+
+    render(<App />);
+    await open('Kucing');
+    expect(await screen.findByText(/Karya sebelumnya tidak dapat dibuka/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
+    await returnToPicker();
+
+    expect(save).not.toHaveBeenCalled();
+    expect((await loadLatest(cat.id))?.checkpoint.sessionId).toBe(saved.sessionId);
   });
 
   it('hides technical details when a saved checkpoint is broken', async () => {
@@ -554,8 +596,8 @@ describe('resume notice', () => {
     await waitFor(() => expect(savePreferences.mock.lastCall?.[0].assistanceMode).toBe('independent'));
     await act(() => Promise.resolve(releaseSession({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] })));
     expect(screen.getByRole<HTMLInputElement>('radio', { name: /Mandiri/ }).checked).toBe(true);
-    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
-    expect(screen.queryByText(RESUMED)).toBeNull();
+    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.getByText(RESUMED)).toBeTruthy();
   });
 
   it('does not replace stored preferences with an older checkpoint on restore', async () => {

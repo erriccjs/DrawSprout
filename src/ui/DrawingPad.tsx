@@ -53,6 +53,7 @@ interface DrawingPadProps {
   readonly pendingSave: Promise<boolean> | null;
   readonly surfaceRef: RefObject<ArtworkSurface | null>;
   readonly onActivity: () => void;
+  readonly onControlChange: (action: SessionAction, state: SessionState) => void;
   readonly onChoosePicture: (saved: Promise<boolean>, state: SessionState) => void;
 }
 
@@ -63,7 +64,7 @@ interface PendingStroke {
   readonly tool: Stroke['tool'];
 }
 
-export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onChoosePicture }: DrawingPadProps) {
+export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onControlChange, onChoosePicture }: DrawingPadProps) {
   const [state, setState] = useState(initialState);
   const stateRef = useRef(state);
   const preferencesDirtyRef = useRef(false);
@@ -73,11 +74,15 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
       const next = reduceSession(lesson, previous, action);
       if (next === previous) return;
       stateRef.current = next;
-      if (isPreferenceAction(action)) preferencesDirtyRef.current = true;
-      onActivity();
+      if (isPreferenceAction(action)) {
+        preferencesDirtyRef.current = true;
+        onControlChange(action, next);
+      } else {
+        onActivity();
+      }
       setState(next);
     },
-    [lesson, onActivity],
+    [lesson, onActivity, onControlChange],
   );
 
   const { status: saveStatus, flush, clearSession } = useAutosave(store, state, !restorePending, pendingSave);

@@ -49,6 +49,15 @@ export function useAutosave(
     if (clearingRef.current) return false;
 
     const current = stateRef.current;
+    if (current.strokes.length === 0 && current.redoStack.length === 0) {
+      try {
+        const latest = await store.loadLatestSessionForLesson(current.lessonId);
+        if (latest && (latest.checkpoint.committedStrokeIds.length > 0 || latest.checkpoint.redoStrokeIds.length > 0)) return true;
+      } catch {
+        setStatus({ kind: 'failed' });
+        return false;
+      }
+    }
     revisionRef.current += 1;
     const checkpoint = toCheckpoint(current, revisionRef.current, Date.now());
     // The redo stack is persisted too, so a stroke that is currently undone
