@@ -169,6 +169,21 @@ describe('checkpoint integrity', () => {
 });
 
 describe('IndexedDB specifics', () => {
+  it('keeps a concurrent empty save from superseding a drawing', async () => {
+    const store = new IndexedDbSessionStore(new IDBFactory());
+    const drawn = draw(newSessionState(), stepIdAt(0));
+    const empty = { ...newSessionState(), sessionId: 'empty' };
+
+    await Promise.all([
+      store.saveProgress({ checkpoint: toCheckpoint(drawn, 1, 100), newStrokes: drawn.strokes }),
+      store.saveProgress({ checkpoint: toCheckpoint(empty, 1, 200), newStrokes: [] }),
+    ]);
+
+    expect((await store.loadLatestSessionForLesson(drawn.lessonId))?.checkpoint.sessionId)
+      .toBe(drawn.sessionId);
+    expect(await store.loadSession(empty.sessionId)).toBeNull();
+  });
+
   it('writes strokes and the checkpoint in one transaction', async () => {
     // A rolled-back transaction must leave nothing behind, so a crash mid-save
     // cannot produce a checkpoint that names strokes the log does not have

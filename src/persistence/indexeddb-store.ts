@@ -70,7 +70,15 @@ export class IndexedDbSessionStore implements SessionStore {
 
   async saveProgress({ checkpoint, newStrokes }: SaveProgressInput): Promise<void> {
     const db = await this.dbPromise;
-    await runTransaction(db, [STROKES, CHECKPOINTS], 'readwrite', (tx) => {
+    await runTransaction(db, [STROKES, CHECKPOINTS], 'readwrite', async (tx) => {
+      const checkpoints = tx.objectStore(CHECKPOINTS);
+      if (checkpoint.committedStrokeIds.length === 0 && checkpoint.redoStrokeIds.length === 0) {
+        const existing = await request<SessionCheckpoint[]>(checkpoints.getAll());
+        if (existing.some((saved) =>
+          saved.lessonId === checkpoint.lessonId &&
+          (saved.committedStrokeIds.length > 0 || saved.redoStrokeIds.length > 0)
+        )) return;
+      }
       const strokes = tx.objectStore(STROKES);
       for (const stroke of newStrokes) {
         const row: StrokeRow = {
@@ -82,7 +90,7 @@ export class IndexedDbSessionStore implements SessionStore {
         // not abort the transaction and lose the checkpoint with it.
         strokes.put(row);
       }
-      tx.objectStore(CHECKPOINTS).put(checkpoint);
+      checkpoints.put(checkpoint);
     });
   }
 
