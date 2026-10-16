@@ -2,10 +2,10 @@
 
 A tablet-first web app that teaches a child to draw, one small step at a time.
 
-This repository currently holds **milestone 1**: a single hand-authored lesson
-("Kucing Duduk" — a sitting cat) that can be played from the first line to a
-saved PNG. Seven line steps, two colouring steps, autosave and resume, and an
-export that contains the child's drawing and nothing else.
+This repository has two hand-authored lessons: "Kucing Duduk" (a sitting cat)
+and "Bunga Ceria" (a smiling flower). Each can be played from the first line to
+a saved PNG, with autosave and resume and an export containing only the child's
+drawing.
 
 - Product requirements: [`docs/PRD_Aplikasi_Belajar_Menggambar_Anak.md`](docs/PRD_Aplikasi_Belajar_Menggambar_Anak.md)
 - Requirement and acceptance-test mapping: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
@@ -40,8 +40,7 @@ export that contains the child's drawing and nothing else.
   Home Screen, but there is no service worker.
 - No photo-to-lesson transformation, no backend, no accounts, no cloud sync.
 - No automatic "step finished" detection — the child presses *Lanjut*.
-- One lesson only (the picker shows just the cat); no gallery, no project
-  backup file, no audio.
+- No gallery, project backup file, or audio.
 
 See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) §6 for the full
 follow-up list.
@@ -94,7 +93,7 @@ build.
 
 | Area | File |
 | --- | --- |
-| Lesson package validation and the authored cat lesson | `src/lesson-data/validate.test.ts` |
+| Lesson package validation and the authored lessons | `src/lesson-data/validate.test.ts` |
 | Step navigation, state machine, tool presets, colour preference | `src/lesson-engine/session.test.ts` |
 | Undo / redo, redo invalidation, step-scoped history | `src/lesson-engine/history.test.ts` |
 | IndexedDB round trip, transaction atomicity, resume | `src/persistence/round-trip.test.ts` |
@@ -143,7 +142,7 @@ src/
   test/           Fixtures and environment shims.
 ```
 
-Adding a second lesson is a data change in `src/lesson-data/` plus an entry in
+Adding a lesson is a data change in `src/lesson-data/` plus an entry in
 `BUNDLED_LESSONS`.
 
 ## A note on language

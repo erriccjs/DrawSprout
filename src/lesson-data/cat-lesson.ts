@@ -5,7 +5,7 @@
  *
  * Everything here is plain data in the 1000x750 coordinate space. It is written
  * the way an authoring tool would emit it, so no code outside `lesson-data`
- * needs to change when a second lesson arrives.
+ * needs to change as lessons are added.
  *
  * Pedagogy follows PRD section 9: big shapes first, then detail, then colour;
  * one speakable goal per step; no step demands an identical line.
