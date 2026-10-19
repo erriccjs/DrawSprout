@@ -2,10 +2,10 @@
 
 A tablet-first web app that teaches a child to draw, one small step at a time.
 
-This repository has two hand-authored lessons: "Kucing Duduk" (a sitting cat)
-and "Bunga Ceria" (a smiling flower). Each can be played from the first line to
-a saved PNG, with autosave and resume and an export containing only the child's
-drawing.
+This repository has three hand-authored lessons: "Kucing Duduk" (a sitting
+cat), "Bunga Ceria" (a smiling flower) and "Ikan Lucu" (a cheerful fish). Each
+can be played from the first line to a saved PNG, with autosave and resume and
+an export containing only the child's drawing.
 
 - Product requirements: [`docs/PRD_Aplikasi_Belajar_Menggambar_Anak.md`](docs/PRD_Aplikasi_Belajar_Menggambar_Anak.md)
 - Requirement and acceptance-test mapping: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
@@ -100,7 +100,7 @@ own job so one failure still shows the state of the rest.
 
 | Area | File |
 | --- | --- |
-| Lesson package validation and the authored lessons | `src/lesson-data/validate.test.ts` |
+| Lesson package validation and bundled lessons | `src/lesson-data/validate.test.ts`, `src/lesson-data/index.test.ts` |
 | Step navigation, state machine, tool presets, colour preference | `src/lesson-engine/session.test.ts` |
 | Undo / redo, redo invalidation, step-scoped history | `src/lesson-engine/history.test.ts` |
 | IndexedDB round trip, transaction atomicity, resume | `src/persistence/round-trip.test.ts` |
