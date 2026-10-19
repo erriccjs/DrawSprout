@@ -407,15 +407,15 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
             />
           </div>
           <div className="pad__control-panel" data-active={controlTab === 'help'}>
+            <ToolbarSettings
+              state={state}
+              isColorStep={isColorStep}
+              dispatch={dispatch}
+            />
             <StepControls
               state={state}
               guidesVisible={guidesVisible}
               onShowHint={showHint}
-              dispatch={dispatch}
-            />
-            <ToolbarSettings
-              state={state}
-              isColorStep={isColorStep}
               dispatch={dispatch}
             />
           </div>

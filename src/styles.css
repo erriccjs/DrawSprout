@@ -42,6 +42,10 @@ body {
   padding: 12px;
 }
 
+.shell:has(> .pad) {
+  overflow: hidden;
+}
+
 .shell--centered {
   display: grid;
   place-content: center;
@@ -193,6 +197,9 @@ body {
   gap: 6px;
   min-height: 0;
   min-width: 0;
+  position: relative;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .pad__tabs {
@@ -588,8 +595,9 @@ body {
   font-weight: 600;
 }
 
-/* Portrait: instruction and example stay on top, the canvas takes the middle,
-   and the controls sit below it in two columns instead of a side column. */
+/* Portrait and short landscape: instruction and example stay on top and the
+   controls sit in two columns instead of one tall column, so tools, colours and
+   undo stay above the fold. */
 @media (orientation: portrait) {
   .pad__body {
     grid-template-columns: minmax(0, 1fr);
@@ -597,8 +605,21 @@ body {
   }
 
   .pad__side {
+    max-height: 50vh;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 619px) {
+  .pad__body {
+    grid-template-columns: minmax(0, 1fr) 548px;
+  }
+}
+
+@media (orientation: portrait), (max-height: 619px) {
+  .pad__side {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
     align-items: start;
   }
 
@@ -615,7 +636,7 @@ body {
 
   .toolbar:not(.toolbar--settings) {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) calc(var(--tap) * 5 + 16px);
     grid-template-areas:
       'tool color'
       'row color';
