@@ -125,6 +125,13 @@ body {
   flex-wrap: wrap;
 }
 
+.pad__header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
 .pad__title {
   font-size: 1.25rem;
   margin: 0;
@@ -203,10 +210,10 @@ body {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 6px 8px;
+  padding: 4px 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 /* --- step panel ----------------------------------------------------------- */
@@ -227,7 +234,7 @@ body {
 .step-controls {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .step-panel__counter {
@@ -355,7 +362,44 @@ body {
 
 .toolbar__row .chip {
   min-width: 0;
-  font-size: 0.8125rem;
+}
+
+.toolbar:not(.toolbar--settings) legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.toolbar:not(.toolbar--settings) .toolbar__group {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.chip--icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.chip--icon[aria-pressed='true']::after {
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.width-icon {
+  display: block;
+  width: 26px;
+  border-radius: 999px;
+  background: currentColor;
 }
 
 .field {

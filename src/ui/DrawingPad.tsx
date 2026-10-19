@@ -378,7 +378,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
             onFinish={() => dispatch({ type: 'finish' })}
             dispatch={dispatch}
           />
-          <div className="pad__tabs" aria-label="Kelompok kontrol">
+          <div className="pad__tabs" role="group" aria-label="Kelompok kontrol">
             <button
               type="button"
               className="chip"

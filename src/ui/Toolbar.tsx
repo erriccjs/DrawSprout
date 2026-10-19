@@ -25,9 +25,9 @@ export const PALETTE = [
 
 /** Multipliers on the step's prepared width, so "tipis" scales with the step. */
 const WIDTH_CHOICES = [
-  { label: 'Tipis', factor: 0.5 },
-  { label: 'Sedang', factor: 1 },
-  { label: 'Tebal', factor: 2 },
+  { label: 'Tipis', factor: 0.5, bar: 2 },
+  { label: 'Sedang', factor: 1, bar: 5 },
+  { label: 'Tebal', factor: 2, bar: 9 },
 ] as const;
 
 const TOOLS: readonly { kind: ToolKind; label: string; icon: string }[] = [
@@ -125,7 +125,8 @@ export function Toolbar({
               <button
                 key={choice.label}
                 type="button"
-                className="chip"
+                className="chip chip--icon"
+                aria-label={choice.label}
                 aria-pressed={active}
                 onClick={() =>
                   choice.factor === 1
@@ -133,7 +134,11 @@ export function Toolbar({
                     : dispatch({ type: 'set-custom-width', width })
                 }
               >
-                {choice.label}
+                <span
+                  className="width-icon"
+                  aria-hidden="true"
+                  style={{ height: `${choice.bar}px` }}
+                />
               </button>
             );
           })}
@@ -143,19 +148,21 @@ export function Toolbar({
           <legend>Riwayat</legend>
           <button
             type="button"
-            className="chip"
+            className="chip chip--icon"
+            aria-label="Batalkan"
             disabled={!canUndo}
             onClick={() => dispatch({ type: 'undo' })}
           >
-            ↶ Batalkan
+            <span aria-hidden="true">↶</span>
           </button>
           <button
             type="button"
-            className="chip"
+            className="chip chip--icon"
+            aria-label="Ulangi"
             disabled={!canRedo}
             onClick={() => dispatch({ type: 'redo' })}
           >
-            ↷ Ulangi
+            <span aria-hidden="true">↷</span>
           </button>
         </fieldset>
       </div>
