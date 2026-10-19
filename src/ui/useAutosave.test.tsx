@@ -64,4 +64,26 @@ describe('useAutosave', () => {
     expect(result.current.status).toEqual(priorStatus);
     expect((await store.loadLatestSessionForLesson(CAT_LESSON.id))?.checkpoint.sessionId).toBe(drawn.sessionId);
   });
+
+  it.each([
+    ['IndexedDB', () => new IndexedDbSessionStore(new IDBFactory())],
+    ['memory', () => new MemorySessionStore()],
+  ])('does not restore a deleted session status after restart in %s', async (_name, makeStore: () => SessionStore) => {
+    const store = makeStore();
+    const current = createSession(CAT_LESSON, 'current');
+    const { result } = renderHook(() => useAutosave(store, current, false));
+    await act(async () => { expect(await result.current.flush()).toBe(true); });
+    expect(result.current.status.kind).toBe('saved');
+
+    const drawn = reduceSession(CAT_LESSON, createSession(CAT_LESSON, 'drawn'), {
+      type: 'commit-stroke', stroke: strokeInput(CAT_LESSON.steps[0]!.id),
+    });
+    await store.saveProgress({ checkpoint: toCheckpoint(drawn, 1, Date.now() + 1), newStrokes: drawn.strokes });
+    await act(async () => { await result.current.clearSession(createSession(CAT_LESSON, 'fresh')); });
+    await act(async () => { expect(await result.current.flush()).toBe(true); });
+
+    expect(result.current.status).toEqual({ kind: 'idle' });
+    expect(await store.loadSession(current.sessionId)).toBeNull();
+    expect(await store.loadSession('fresh')).toBeNull();
+  });
 });

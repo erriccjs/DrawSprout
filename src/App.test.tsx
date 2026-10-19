@@ -600,6 +600,36 @@ describe('resume notice', () => {
     expect(screen.getByText(RESUMED)).toBeTruthy();
   });
 
+  it.each(['null', 'failure'] as const)(
+    'keeps a control choice for later lessons when preferences load with %s after restore', async (outcome) => {
+      const cat = lessonData.BUNDLED_LESSONS[0]!;
+      const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+      await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: [] });
+      let releasePreferences: (value: typeof DEFAULT_PREFERENCES | null) => void = () => {};
+      let rejectPreferences: (error: Error) => void = () => {};
+      vi.spyOn(store, 'loadPreferences').mockImplementationOnce(() => new Promise((resolve, reject) => {
+        releasePreferences = resolve;
+        rejectPreferences = reject;
+      }));
+
+      render(<App />);
+      await open('Kucing');
+      fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
+      expect(await screen.findByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+
+      if (outcome === 'null') {
+        await act(() => Promise.resolve(releasePreferences(null)));
+      } else {
+        await act(() => Promise.resolve(rejectPreferences(new Error('unavailable'))));
+      }
+      await waitFor(async () => expect((await store.loadPreferences())?.inputMode).toBe('pencil'));
+
+      await returnToPicker();
+      await open('Bunga');
+      expect(screen.getByRole('button', { name: /Mode pensil/ }).getAttribute('aria-pressed')).toBe('true');
+    },
+  );
+
   it('does not replace stored preferences with an older checkpoint on restore', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;
     const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });

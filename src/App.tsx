@@ -70,8 +70,8 @@ export function App() {
     void bootstrap.store.loadPreferences().then((preferences) => {
       if (selectionRef.current !== selection) return;
       const selected = preferences && applyControls(preferences, controlsRef.current);
-      if (selected && (Object.keys(controlsRef.current.preferences).length || Object.keys(controlsRef.current.tools).length)) {
-        void bootstrap.store.savePreferences(selected);
+      if (Object.keys(controlsRef.current.preferences).length || Object.keys(controlsRef.current.tools).length) {
+        void bootstrap.store.savePreferences(selected ?? applyControls(DEFAULT_PREFERENCES, controlsRef.current));
       }
       setOpenLesson((current) => {
         if (!current) return current;
@@ -83,6 +83,9 @@ export function App() {
       });
     }).catch(() => {
       if (selectionRef.current === selection) {
+        if (Object.keys(controlsRef.current.preferences).length || Object.keys(controlsRef.current.tools).length) {
+          void bootstrap.store.savePreferences(applyControls(DEFAULT_PREFERENCES, controlsRef.current));
+        }
         setOpenLesson((current) => current ? { ...current, preferencesPending: false } : current);
       }
     });

@@ -92,7 +92,8 @@ export function useAutosave(
       savedStrokeIdsRef.current.clear();
       revisionRef.current = 0;
       stateRef.current = fresh;
-      setStatus({ kind: 'idle' });
+      settledStatusRef.current = { kind: 'idle' };
+      setStatus(settledStatusRef.current);
     } catch (error) {
       clearingRef.current = false;
       await flush();
