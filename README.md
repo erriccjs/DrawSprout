@@ -100,7 +100,7 @@ own job so one failure still shows the state of the rest.
 
 | Area | File |
 | --- | --- |
-| Lesson package validation and the authored lessons | `src/lesson-data/validate.test.ts` |
+| Lesson package validation and bundled lessons | `src/lesson-data/validate.test.ts`, `src/lesson-data/index.test.ts` |
 | Step navigation, state machine, tool presets, colour preference | `src/lesson-engine/session.test.ts` |
 | Undo / redo, redo invalidation, step-scoped history | `src/lesson-engine/history.test.ts` |
 | IndexedDB round trip, transaction atomicity, resume | `src/persistence/round-trip.test.ts` |
