@@ -20,12 +20,20 @@ export class MemorySessionStore implements SessionStore {
   private readonly strokes = new Map<string, Map<string, Stroke>>();
   private preferences: SessionPreferences | null = null;
 
-  saveProgress({ checkpoint, newStrokes }: SaveProgressInput): Promise<void> {
+  saveProgress({ checkpoint, newStrokes }: SaveProgressInput): Promise<boolean> {
+    if (checkpoint.committedStrokeIds.length === 0 && checkpoint.redoStrokeIds.length === 0) {
+      for (const saved of this.checkpoints.values()) {
+        if (saved.lessonId === checkpoint.lessonId &&
+            (saved.committedStrokeIds.length > 0 || saved.redoStrokeIds.length > 0)) {
+          return Promise.resolve(false);
+        }
+      }
+    }
     const log = this.strokes.get(checkpoint.sessionId) ?? new Map<string, Stroke>();
     for (const stroke of newStrokes) log.set(stroke.id, stroke);
     this.strokes.set(checkpoint.sessionId, log);
     this.checkpoints.set(checkpoint.sessionId, checkpoint);
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
   loadSession(sessionId: string): Promise<RestoredSession | null> {

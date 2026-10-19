@@ -47,7 +47,9 @@ function setup() {
       restorePending={false}
       preferencesPending={false}
       pendingSave={null}
+      surfaceRef={{ current: null }}
       onActivity={() => undefined}
+      onControlChange={() => undefined}
       onChoosePicture={() => undefined}
     />,
   );
@@ -322,7 +324,9 @@ describe('the pointermove path', () => {
           restorePending={false}
           preferencesPending={false}
           pendingSave={null}
+          surfaceRef={{ current: null }}
           onActivity={() => undefined}
+          onControlChange={() => undefined}
           onChoosePicture={() => undefined}
         />
       </Profiler>,
@@ -866,7 +870,9 @@ describe('autosave and resume', () => {
         restorePending={false}
         preferencesPending={false}
         pendingSave={null}
+        surfaceRef={{ current: null }}
         onActivity={() => undefined}
+        onControlChange={() => undefined}
         onChoosePicture={() => undefined}
       />,
     );

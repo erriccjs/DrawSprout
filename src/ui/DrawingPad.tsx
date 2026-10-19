@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import type { LessonPackage } from '../lesson-data/schema';
 import {
   activeClipRegionIds,
@@ -50,7 +51,9 @@ interface DrawingPadProps {
   readonly restorePending: boolean;
   readonly preferencesPending: boolean;
   readonly pendingSave: Promise<boolean> | null;
+  readonly surfaceRef: RefObject<ArtworkSurface | null>;
   readonly onActivity: () => void;
+  readonly onControlChange: (action: SessionAction, state: SessionState) => void;
   readonly onChoosePicture: (saved: Promise<boolean>, state: SessionState) => void;
 }
 
@@ -61,7 +64,7 @@ interface PendingStroke {
   readonly tool: Stroke['tool'];
 }
 
-export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, onActivity, onChoosePicture }: DrawingPadProps) {
+export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onControlChange, onChoosePicture }: DrawingPadProps) {
   const [state, setState] = useState(initialState);
   const stateRef = useRef(state);
   const preferencesDirtyRef = useRef(false);
@@ -71,11 +74,15 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
       const next = reduceSession(lesson, previous, action);
       if (next === previous) return;
       stateRef.current = next;
-      if (isPreferenceAction(action)) preferencesDirtyRef.current = true;
-      onActivity();
+      if (isPreferenceAction(action)) {
+        preferencesDirtyRef.current = true;
+        onControlChange(action, next);
+      } else {
+        onActivity();
+      }
       setState(next);
     },
-    [lesson, onActivity],
+    [lesson, onActivity, onControlChange],
   );
 
   const { status: saveStatus, flush, clearSession } = useAutosave(store, state, !restorePending, pendingSave);
@@ -111,8 +118,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   // the element that is actually on screen.
   const [stage, setStage] = useState<HTMLDivElement | null>(null);
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
-  const surfaceRef = useRef<ArtworkSurface | null>(null);
   const [viewport, setViewport] = useState<Viewport | null>(null);
+
+  useEffect(() => () => { surfaceRef.current = null; }, [surfaceRef]);
 
   const clipPaths = useMemo(() => clipPathsFromLesson(lesson), [lesson]);
   const renderStrokes = useMemo(() => toRenderStrokes(state.strokes), [state.strokes]);
@@ -139,7 +147,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     if (!canvas || !surface) return;
     const ctx = canvas.getContext('2d');
     if (ctx) surface.compositeTo(ctx);
-  }, [canvas]);
+  }, [canvas, surfaceRef]);
 
   const paintScheduledRef = useRef(false);
   const schedulePaint = useCallback(() => {
@@ -170,7 +178,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     // log, and costs nothing on the pointermove path.
     surface.replay(renderStrokes);
     paint();
-  }, [canvas, viewport, renderStrokes, clipPaths, lesson.coordinateSpace, paint]);
+  }, [canvas, viewport, renderStrokes, clipPaths, lesson.coordinateSpace, paint, surfaceRef]);
 
   // --- pointer input ---------------------------------------------------------
 
@@ -185,7 +193,6 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     begin: (point) => {
       const surface = surfaceRef.current;
       if (!surface) return;
-      onActivity();
       // Guarded: calling setState with the value it already holds still costs a
       // render before React bails out, and pointer-down is on the hot path.
       if (rejection !== null) setRejection(null);

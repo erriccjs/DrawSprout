@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
+import type { ArtworkSurface } from './renderer/artwork-surface';
 import { getLesson } from './lesson-data';
 import type { LessonPackage } from './lesson-data/schema';
 import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
-import type { SessionState } from './lesson-engine/types';
+import type { SessionPreferences, SessionState, ToolPreferences } from './lesson-engine/types';
 import { fromRestoredSession } from './persistence/mapping';
 import type { SessionCheckpoint } from './persistence/types';
 import { DrawingPad } from './ui/DrawingPad';
@@ -20,6 +21,11 @@ interface OpenLesson {
   readonly revision: number;
 }
 
+interface ControlOverrides {
+  preferences: { -readonly [K in keyof SessionPreferences]?: SessionPreferences[K] };
+  tools: { -readonly [K in keyof ToolPreferences]?: ToolPreferences[K] };
+}
+
 const BOOTSTRAP_FAILURE_NOTICE = 'Maaf, pelajaran belum bisa dibuka sekarang. Coba lagi nanti ya.';
 const LOAD_FAILURE_NOTICE = 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mulai menggambar lagi.';
 
@@ -28,6 +34,8 @@ export function App() {
   const [openLesson, setOpenLesson] = useState<OpenLesson | null>(null);
   const selectionRef = useRef(0);
   const touchedRef = useRef(false);
+  const controlsRef = useRef<ControlOverrides>({ preferences: {}, tools: {} });
+  const surfaceRef = useRef<ArtworkSurface | null>(null);
   const handoffRef = useRef<{ state: SessionState; saved: Promise<boolean> } | null>(null);
   const [exitNotice, setExitNotice] = useState<string | null>(null);
 
@@ -52,6 +60,7 @@ export function App() {
     const selection = ++selectionRef.current;
     const handoff = handoffRef.current?.state.lessonId === lessonId ? handoffRef.current : null;
     touchedRef.current = handoff !== null;
+    controlsRef.current = { preferences: {}, tools: {} };
     setExitNotice(null);
     const lesson = getLesson(lessonId);
     const initialState = handoff?.state ?? createSession(lesson, newId(), DEFAULT_PREFERENCES);
@@ -60,16 +69,23 @@ export function App() {
 
     void bootstrap.store.loadPreferences().then((preferences) => {
       if (selectionRef.current !== selection) return;
+      const selected = preferences && applyControls(preferences, controlsRef.current);
+      if (Object.keys(controlsRef.current.preferences).length || Object.keys(controlsRef.current.tools).length) {
+        void bootstrap.store.savePreferences(selected ?? applyControls(DEFAULT_PREFERENCES, controlsRef.current));
+      }
       setOpenLesson((current) => {
         if (!current) return current;
-        if (touchedRef.current || !preferences || current.initialState.sessionId !== initialState.sessionId) {
+        if (touchedRef.current || surfaceRef.current?.hasLiveStroke() || !selected || current.initialState.sessionId !== initialState.sessionId) {
           return { ...current, preferencesPending: false };
         }
         return { ...current, preferencesPending: false,
-          initialState: createSession(lesson, initialState.sessionId, preferences), revision: current.revision + 1 };
+          initialState: createSession(lesson, initialState.sessionId, selected), revision: current.revision + 1 };
       });
     }).catch(() => {
       if (selectionRef.current === selection) {
+        if (Object.keys(controlsRef.current.preferences).length || Object.keys(controlsRef.current.tools).length) {
+          void bootstrap.store.savePreferences(applyControls(DEFAULT_PREFERENCES, controlsRef.current));
+        }
         setOpenLesson((current) => current ? { ...current, preferencesPending: false } : current);
       }
     });
@@ -98,12 +114,16 @@ export function App() {
       }
       setOpenLesson((current) => {
         if (!current || selectionRef.current !== selection) return current;
+        if (surfaceRef.current?.hasLiveStroke()) {
+          return notice === LOAD_FAILURE_NOTICE ? { ...current, notice } : current;
+        }
         if (touchedRef.current) {
           return notice === LOAD_FAILURE_NOTICE
             ? { ...current, notice, restorePending: false }
             : current;
         }
-        return { ...current, initialState: state ?? current.initialState, notice, restorePending: false,
+        const restoredState = state ? applyControls(state, controlsRef.current) : current.initialState;
+        return { ...current, initialState: restoredState, notice, restorePending: false,
           revision: state ? current.revision + 1 : current.revision };
       });
     }).catch(() => {
@@ -127,15 +147,33 @@ export function App() {
           restorePending={openLesson.restorePending}
           preferencesPending={openLesson.preferencesPending}
           pendingSave={openLesson.pendingSave}
+          surfaceRef={surfaceRef}
           onActivity={() => {
             touchedRef.current = true;
             setOpenLesson((current) => current && current.restorePending
               ? { ...current, restorePending: false }
               : current);
           }}
+          onControlChange={(action, state) => {
+            const controls = controlsRef.current;
+            switch (action.type) {
+              case 'set-assistance-mode': controls.preferences.assistanceMode = state.assistanceMode; break;
+              case 'set-hint-duration': controls.preferences.hintDurationMs = state.hintDurationMs; break;
+              case 'set-input-mode': controls.preferences.inputMode = state.inputMode; break;
+              case 'set-tool': controls.tools.activeTool = state.toolPreferences.activeTool; break;
+              case 'set-custom-color':
+              case 'use-guide-color':
+                controls.tools.colorSource = state.toolPreferences.colorSource;
+                controls.tools.customColor = state.toolPreferences.customColor;
+                break;
+              case 'set-custom-width':
+              case 'clear-custom-width': controls.tools.customWidth = state.toolPreferences.customWidth; break;
+              case 'set-boundary-assist': controls.tools.colorBoundaryAssist = state.toolPreferences.colorBoundaryAssist; break;
+            }
+          }}
           onChoosePicture={(saved, state) => {
             const handoff = { state, saved };
-            handoffRef.current = openLesson.restorePending && !touchedRef.current ? null : handoff;
+            handoffRef.current = openLesson.restorePending && (!touchedRef.current || state === openLesson.initialState) ? null : handoff;
             selectionRef.current += 1;
             setOpenLesson(null);
             setExitNotice(null);
@@ -157,6 +195,10 @@ export function App() {
       )}
     </main>
   );
+}
+
+function applyControls<T extends SessionPreferences>(state: T, controls: ControlOverrides): T {
+  return { ...state, ...controls.preferences, toolPreferences: { ...state.toolPreferences, ...controls.tools } };
 }
 
 /** Whether a checkpoint holds work a child would recognise as their own. */

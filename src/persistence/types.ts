@@ -56,11 +56,12 @@ export interface SaveProgressInput {
 
 export interface SessionStore {
   /**
-   * Writes the new strokes and the checkpoint in a single transaction, so a
-   * failure leaves the previous valid checkpoint untouched rather than half
-   * updated (FR-13, AT-14).
+   * Writes the new strokes and checkpoint together. IndexedDB uses one
+   * transaction so a failure leaves the previous valid checkpoint untouched
+   * (FR-13, AT-14). Returns false without writing when an empty session would
+   * replace a drawing in the lesson.
    */
-  saveProgress(input: SaveProgressInput): Promise<void>;
+  saveProgress(input: SaveProgressInput): Promise<boolean>;
   loadSession(sessionId: string): Promise<RestoredSession | null>;
   /** Most recently updated session, for the "lanjutkan karya" entry point. */
   loadLatestSession(): Promise<RestoredSession | null>;
