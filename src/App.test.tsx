@@ -473,7 +473,8 @@ describe('resume notice', () => {
     fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
     await returnToPicker();
 
-    expect(save).not.toHaveBeenCalled();
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(await save.mock.results[0]!.value).toBe(false);
     expect((await loadLatest(cat.id))?.checkpoint.sessionId).toBe(saved.sessionId);
   });
 
