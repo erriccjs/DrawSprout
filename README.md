@@ -110,7 +110,7 @@ build.
 
 1. `npm run dev`, then open the **Network** URL on the tablet and choose the
    cat picture.
-2. Draw step 1 with a finger. Switch to pencil mode and confirm a finger no
+2. Draw step 1 with a finger. In the *Bantuan* tab, switch to pencil mode and confirm a finger no
    longer draws while the stylus does.
 3. Walk all nine steps with *Lanjut*, colour the cat, press *Selesai ✓*, then
    *Simpan gambar (PNG)* and confirm the saved file has no dashed guides.
