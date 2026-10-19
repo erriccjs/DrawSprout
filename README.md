@@ -16,7 +16,8 @@ drawing.
 - A picture-choosing screen ("Mau gambar apa hari ini?") listing every bundled
   lesson with its preview. Choosing a picture opens it straight away and
   reopens that picture's latest saved drawing; leaving a drawing returns to the
-  screen without waiting on storage.
+  screen without waiting on storage. Changing a tool or mode while the drawing
+  opens keeps the saved strokes, and an empty session cannot replace them.
 - Canvas drawing with Pointer Events, pen / brush / eraser, undo and redo.
 - **Pencil mode** (stylus only) and **finger mode**, switchable at any time
   without losing the drawing.

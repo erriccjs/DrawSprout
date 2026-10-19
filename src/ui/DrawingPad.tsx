@@ -147,7 +147,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     if (!canvas || !surface) return;
     const ctx = canvas.getContext('2d');
     if (ctx) surface.compositeTo(ctx);
-  }, [canvas]);
+  }, [canvas, surfaceRef]);
 
   const paintScheduledRef = useRef(false);
   const schedulePaint = useCallback(() => {
@@ -178,7 +178,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     // log, and costs nothing on the pointermove path.
     surface.replay(renderStrokes);
     paint();
-  }, [canvas, viewport, renderStrokes, clipPaths, lesson.coordinateSpace, paint]);
+  }, [canvas, viewport, renderStrokes, clipPaths, lesson.coordinateSpace, paint, surfaceRef]);
 
   // --- pointer input ---------------------------------------------------------
 
