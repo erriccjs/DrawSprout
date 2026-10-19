@@ -25,9 +25,9 @@ export const PALETTE = [
 
 /** Multipliers on the step's prepared width, so "tipis" scales with the step. */
 const WIDTH_CHOICES = [
-  { label: 'Tipis', factor: 0.5 },
-  { label: 'Sedang', factor: 1 },
-  { label: 'Tebal', factor: 2 },
+  { label: 'Tipis', factor: 0.5, bar: 2 },
+  { label: 'Sedang', factor: 1, bar: 5 },
+  { label: 'Tebal', factor: 2, bar: 9 },
 ] as const;
 
 const TOOLS: readonly { kind: ToolKind; label: string; icon: string }[] = [
@@ -40,9 +40,14 @@ interface ToolbarProps {
   readonly lesson: LessonPackage;
   readonly state: SessionState;
   readonly preset: ToolPreset;
-  readonly isColorStep: boolean;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
+  readonly dispatch: (action: SessionAction) => void;
+}
+
+interface ToolbarSettingsProps {
+  readonly state: SessionState;
+  readonly isColorStep: boolean;
   readonly dispatch: (action: SessionAction) => void;
 }
 
@@ -50,7 +55,6 @@ export function Toolbar({
   lesson,
   state,
   preset,
-  isColorStep,
   canUndo,
   canRedo,
   dispatch,
@@ -75,7 +79,7 @@ export function Toolbar({
         ))}
       </fieldset>
 
-      <fieldset className="toolbar__group">
+      <fieldset className="toolbar__group toolbar__group--color">
         <legend>Warna</legend>
         <button
           type="button"
@@ -108,52 +112,68 @@ export function Toolbar({
         </p>
       </fieldset>
 
-      <fieldset className="toolbar__group">
-        <legend>Ketebalan</legend>
-        {WIDTH_CHOICES.map((choice) => {
-          const width = round(stepWidth * choice.factor);
-          const active =
-            toolPreferences.customWidth === null
-              ? choice.factor === 1
-              : toolPreferences.customWidth === width;
-          return (
-            <button
-              key={choice.label}
-              type="button"
-              className="chip"
-              aria-pressed={active}
-              onClick={() =>
-                choice.factor === 1
-                  ? dispatch({ type: 'clear-custom-width' })
-                  : dispatch({ type: 'set-custom-width', width })
-              }
-            >
-              {choice.label}
-            </button>
-          );
-        })}
-      </fieldset>
+      <div className="toolbar__row">
+        <fieldset className="toolbar__group">
+          <legend>Ketebalan</legend>
+          {WIDTH_CHOICES.map((choice) => {
+            const width = round(stepWidth * choice.factor);
+            const active =
+              toolPreferences.customWidth === null
+                ? choice.factor === 1
+                : toolPreferences.customWidth === width;
+            return (
+              <button
+                key={choice.label}
+                type="button"
+                className="chip chip--icon"
+                aria-label={choice.label}
+                aria-pressed={active}
+                onClick={() =>
+                  choice.factor === 1
+                    ? dispatch({ type: 'clear-custom-width' })
+                    : dispatch({ type: 'set-custom-width', width })
+                }
+              >
+                <span
+                  className="width-icon"
+                  aria-hidden="true"
+                  style={{ height: `${choice.bar}px` }}
+                />
+              </button>
+            );
+          })}
+        </fieldset>
 
-      <fieldset className="toolbar__group">
-        <legend>Riwayat</legend>
-        <button
-          type="button"
-          className="chip"
-          disabled={!canUndo}
-          onClick={() => dispatch({ type: 'undo' })}
-        >
-          ↶ Batalkan
-        </button>
-        <button
-          type="button"
-          className="chip"
-          disabled={!canRedo}
-          onClick={() => dispatch({ type: 'redo' })}
-        >
-          ↷ Ulangi
-        </button>
-      </fieldset>
+        <fieldset className="toolbar__group">
+          <legend>Riwayat</legend>
+          <button
+            type="button"
+            className="chip chip--icon"
+            aria-label="Batalkan"
+            disabled={!canUndo}
+            onClick={() => dispatch({ type: 'undo' })}
+          >
+            <span aria-hidden="true">↶</span>
+          </button>
+          <button
+            type="button"
+            className="chip chip--icon"
+            aria-label="Ulangi"
+            disabled={!canRedo}
+            onClick={() => dispatch({ type: 'redo' })}
+          >
+            <span aria-hidden="true">↷</span>
+          </button>
+        </fieldset>
+      </div>
+    </div>
+  );
+}
 
+export function ToolbarSettings({ state, isColorStep, dispatch }: ToolbarSettingsProps) {
+  const { toolPreferences } = state;
+  return (
+    <div className="toolbar toolbar--settings">
       <fieldset className="toolbar__group">
         <legend>Cara menggambar</legend>
         <button
@@ -173,8 +193,7 @@ export function Toolbar({
           Mode pensil
         </button>
         <p className="toolbar__readout toolbar__readout--muted">
-          Mode pensil hanya menerima stylus pen. Telapak tangan yang terbaca sebagai sentuhan
-          tidak menggambar, tetapi aplikasi tidak menjanjikan palm rejection.
+          Mode pensil: hanya stylus. Telapak tangan tidak menggambar; palm rejection tak dijamin.
         </p>
       </fieldset>
 
@@ -195,7 +214,7 @@ export function Toolbar({
             {toolPreferences.colorBoundaryAssist ? 'Batas area: aktif' : 'Batas area: nonaktif'}
           </button>
           <p className="toolbar__readout toolbar__readout--muted">
-            Batas area menahan warna di dalam bentuk contoh. Kalau garismu berbeda, matikan saja.
+            Warna tetap di dalam bentuk contoh. Matikan jika garismu berbeda.
           </p>
         </fieldset>
       )}
