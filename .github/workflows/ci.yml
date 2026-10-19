@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded run on the same branch has nothing left to prove.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Every check reports on its own, so one failure still shows the rest.
+      fail-fast: false
+      matrix:
+        check: [lint, typecheck, test, build]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          # package.json engines: >=22.12.0 (Vitest 5's floor).
+          node-version: 22.22.0
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run ${{ matrix.check }}
