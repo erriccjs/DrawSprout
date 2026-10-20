@@ -2,11 +2,11 @@
 
 A tablet-first web app that teaches a child to draw, one small step at a time.
 
-This repository has four hand-authored lessons: "Kucing Duduk" (a sitting
-cat), "Bunga Ceria" (a smiling flower), "Ikan Lucu" (a cheerful fish) and
-"Matahari Ceria" (a smiling sun). Each can be played from the first line to a
-saved PNG, with autosave and resume and an export containing only the child's
-drawing.
+This repository has five hand-authored lessons: "Kucing Duduk" (a sitting
+cat), "Bunga Ceria" (a smiling flower), "Ikan Lucu" (a cheerful fish),
+"Matahari Ceria" (a smiling sun) and "Pohon Apel" (an apple tree). Each can be
+played from the first line to a saved PNG, with autosave and resume and an
+export containing only the child's drawing.
 
 - Product requirements: [`docs/PRD_Aplikasi_Belajar_Menggambar_Anak.md`](docs/PRD_Aplikasi_Belajar_Menggambar_Anak.md)
 - Requirement and acceptance-test mapping: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
