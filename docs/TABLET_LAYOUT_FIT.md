@@ -121,3 +121,47 @@ of the next one. The picture-choosing screen uses shorter cards so the next
 picture peeks in portrait and a full row fits in landscape; that screen scrolls
 inside the shell. The finish screen keeps the preview and stacks the actions
 so each one is still a 48px target.
+
+The offline-ready line and the update prompt were checked in the same headless
+Chrome pass, not on a handset. At 390×844 and 360×800 the line sits under the
+introduction, *Nanti saja* and *Muat versi baru* stack at 48px and the full
+width, and the first picture is still on screen. At 844×390, 800×360 and
+667×375 those two actions sit side by side, each 48px tall, with no horizontal
+overflow, and a picture row is on screen. *Hapus semua* stays its own 48px row
+in the phone tool group, and the canvas sizes in the table above did not move
+when the eraser was chosen.
+
+## The eraser's "Hapus semua" and its question
+
+Measured the same way, on step 1 of "Kucing Duduk", in three states: the pen
+chosen (the rows above), the eraser chosen (which reveals "Hapus semua" on its
+own row inside the tool group), and the question "Mau mulai dengan gambar
+kosong?" open in place of that button.
+
+The Drawing tab's natural column height goes 397 → 476 with the button → 510
+with the question open, in the one-column landscape layout. Where the controls
+use two columns (portrait, and landscape under 620px) the button costs nothing
+measurable and the question adds 12-38px.
+
+| Size | Orientation | Column | Pen | + Hapus semua | + question | Page scroll | Batalkan in view |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1024x768 | landscape | 563 | 397 | 476 | 510 | 0 | yes |
+| 1024x768 -100 | landscape | 463 | 397 | 476 | 510 | 0 | only until the question is answered |
+| 1180x820 | landscape | 615 | 397 | 476 | 510 | 0 | yes |
+| 1180x820 -100 | landscape | 515 | 397 | 476 | 510 | 0 | yes |
+| 1024x600 | landscape | 395 | 395 | 395 | 395 | 0 | yes |
+| 1024x600 -100 | landscape | 295 | 295 | 295 | 333 | 0 | only until the question is answered |
+| 768x1024 | portrait | 240 | 240 | 240 | 252 | 0 | yes |
+| 820x1180 | portrait | 240 | 240 | 240 | 252 | 0 | yes |
+| 600x1024 | portrait | 246 | 243 | 246 | 280 | 0 | yes |
+
+The page never scrolls in any of these, in either axis, and nothing is clipped.
+
+Two rows need the caveat in the last column. At 1024x668 and 1024x500 — the
+simulated-browser-chrome rows — the open question pushes the column 49px and
+38px past its height, so `.pad__side` scrolls internally and Batalkan sits just
+below the fold while the question is on screen. Answering the question takes the
+block away again and Batalkan comes back into view, which is the moment it is
+needed: the child cannot reach for undo until the clear has happened. The three
+sizes the feature was required to fit — 1024x768, 1180x820 and 1024x600, in both
+orientations — need no internal scrolling in any of the three states.

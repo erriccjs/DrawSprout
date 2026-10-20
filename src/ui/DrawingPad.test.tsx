@@ -889,3 +889,140 @@ describe('autosave and resume', () => {
     expect(screen.queryByText(/disk gone/)).toBeNull();
   });
 });
+
+/**
+ * "Hapus semua" on the drawing screen (the eraser's whole-drawing clear).
+ *
+ * The button only exists while the eraser is the chosen tool, it never clears
+ * on one tap, and Batalkan puts the cleared drawing back while the canvas is
+ * still empty. "Hapus semua" disables itself once there is nothing left to clear,
+ * so it doubles as the readout for "the canvas is empty".
+ */
+describe('clearing the whole drawing', () => {
+  const clearAll = () => screen.getByRole('button', { name: /Hapus semua/ });
+  const question = () => screen.queryByRole('heading', { name: 'Mau mulai dengan gambar kosong?' });
+  const undoButton = () => screen.getByRole('button', { name: /Batalkan/ });
+
+  function chooseEraser(): void {
+    act(() => screen.getByRole('button', { name: /Penghapus/ }).click());
+  }
+
+  async function committedIds(store: MemorySessionStore): Promise<readonly string[]> {
+    const restored = await store.loadSession('test-session');
+    return restored?.checkpoint.committedStrokeIds ?? [];
+  }
+
+  it('offers the clear with the eraser only, and not as a fourth tool', () => {
+    const { view } = setup();
+    expect(screen.queryByRole('button', { name: /Hapus semua/ })).toBeNull();
+
+    chooseEraser();
+    // Inside the tool group, below the three tools, so it reads as the
+    // eraser's own action rather than as another tool to choose.
+    const group = view.container.querySelector<HTMLFieldSetElement>('.toolbar__group')!;
+    expect(group.contains(clearAll())).toBe(true);
+    expect(group.querySelectorAll('[aria-pressed]')).toHaveLength(3);
+    expect(clearAll().hasAttribute('aria-pressed')).toBe(false);
+
+    act(() => screen.getByRole('button', { name: /Pen$/ }).click());
+    expect(screen.queryByRole('button', { name: /Hapus semua/ })).toBeNull();
+  });
+
+  it('stays unavailable until there is something to clear', () => {
+    const { canvas } = setup();
+    chooseEraser();
+    expect(clearAll().hasAttribute('disabled')).toBe(true);
+
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    expect(clearAll().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('stays unavailable when the canvas only holds undone strokes', () => {
+    const { canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    act(() => undoButton().click());
+    chooseEraser();
+    expect(clearAll().hasAttribute('disabled')).toBe(true);
+  });
+
+  it('asks first, and backing out changes nothing', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    act(() => drawStroke(canvas, [{ x: 300, y: 120 }, { x: 360, y: 200 }]));
+    await waitFor(async () => expect(await committedIds(store)).toHaveLength(2));
+
+    chooseEraser();
+    expect(question()).toBeNull();
+    act(() => clearAll().click());
+
+    // One tap only asks, and backing out is what the focus lands on, so a
+    // stray tap keeps the drawing.
+    expect(question()).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Gambar lama tetap ada' }));
+    expect(await committedIds(store)).toHaveLength(2);
+
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
+    expect(question()).toBeNull();
+    // Still everything to clear, and still everything to undo: nothing moved.
+    expect(clearAll().hasAttribute('disabled')).toBe(false);
+    expect(undoButton().hasAttribute('disabled')).toBe(false);
+    expect(await committedIds(store)).toHaveLength(2);
+  });
+
+  it('removes every stroke once confirmed, and Batalkan brings them all back', async () => {
+    const { store, canvas, view } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    // A second step, so the clear is proved to reach past the active one.
+    act(() => screen.getByRole('button', { name: /Lanjut/ }).click());
+    act(() => drawStroke(stageCanvas(view.container), [{ x: 300, y: 300 }, { x: 360, y: 340 }]));
+    const saved = await waitFor(async () => {
+      const ids = await committedIds(store);
+      expect(ids).toHaveLength(2);
+      return ids;
+    });
+
+    chooseEraser();
+    act(() => clearAll().click());
+    act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+
+    expect(question()).toBeNull();
+    // Nothing left to clear: both steps' strokes are gone.
+    expect(clearAll().hasAttribute('disabled')).toBe(true);
+
+    expect(undoButton().hasAttribute('disabled')).toBe(false);
+    act(() => undoButton().click());
+
+    // One Batalkan put the whole drawing back, in its original replay order.
+    expect(clearAll().hasAttribute('disabled')).toBe(false);
+    await waitFor(async () => expect(await committedIds(store)).toEqual(saved));
+    // Including the earlier step's stroke, which is undoable there again.
+    act(() => screen.getByRole('button', { name: /Kembali/ }).click());
+    expect(undoButton().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('never lets the emptied canvas overwrite the stored drawing', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    await waitFor(async () => expect(await committedIds(store)).toHaveLength(1));
+
+    chooseEraser();
+    act(() => clearAll().click());
+    act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
+
+    // Force the save the autosave would make on its own cadence.
+    const visibility = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    try {
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'));
+        await Promise.resolve();
+      });
+    } finally {
+      if (visibility) Object.defineProperty(document, 'visibilityState', visibility);
+    }
+
+    // The store refuses an empty session over a saved drawing, so the work the
+    // child can still undo to is also still on disk.
+    expect(await committedIds(store)).toHaveLength(1);
+  });
+});

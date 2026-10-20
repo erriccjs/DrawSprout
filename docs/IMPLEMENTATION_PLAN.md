@@ -22,9 +22,9 @@ Two cautions carried over from the PRD itself:
 
 | Milestone | PRD phase | Content | Status |
 | --- | --- | --- | --- |
-| **M1 — Vertical slice** | Tahap A prototype; section 16 phase 1 | One hand-authored cat lesson, end to end: canvas, pencil/finger modes, assistance modes, tool presets, undo/redo, manual navigation, colouring with optional boundaries, IndexedDB autosave/resume, PNG export | **This milestone** |
+| **M1 — Vertical slice** | Tahap A prototype; section 16 phase 1 | One hand-authored cat lesson, end to end: canvas, pencil/finger modes, assistance modes, tool presets, undo/redo, manual navigation, colouring with optional boundaries, IndexedDB autosave/resume, PNG export | **Done** |
 | M2 — Pilot usability | section 16 phase 2 | Observe 5–8 children on real tablets, fix the main obstacles, close the AT-16..AT-22 device gap | Next |
-| M3 — MVP foundations | section 16 phase 3 | Lesson catalogue (~10 templates), local gallery, service worker and offline packaging, project backup import/export, audio instructions, automatic step completion, full error handling | Deferred |
+| M3 — MVP foundations | section 16 phase 3 | Lesson catalogue (~10 templates), local gallery, service worker and offline packaging, project backup import/export, audio instructions, automatic step completion, full error handling | **In progress** — the service worker, offline packaging, and the safe update flow are in the tree. Catalogue size, gallery, backup, audio, automatic completion, and checkpoint migration are still deferred |
 | M4 — Photo spike | section 16 phase 4 | Photo → illustration candidates, geometry extraction, step sequencing, 30-photo rubric evaluation | Deferred |
 | M5 — Beta integration | section 16 phase 5 | Backend, job queue, privacy and retention, parent area, device test matrix | Deferred |
 
@@ -62,9 +62,9 @@ real tablet.
 | FR-20 | Audio instructions | M3 | **Deferred** | Text and icons only. |
 | FR-21 | Cloud sync | M5 | **Deferred** | Out of scope by instruction. |
 | FR-22 | Pencil / finger input modes | M1 | **Done** (behaviour on real hardware is **Device**) | `src/input/pointer-mode.ts`. Pencil mode accepts `pointerType === 'pen'` only. **No palm rejection is claimed.** |
-| FR-23 | PWA manifest, service worker, offline | M3 | **Partial** | A manifest ships so the app can be added to the Home Screen. **There is no service worker**, so the app is not offline-capable and does not claim to be. |
+| FR-23 | PWA manifest, service worker, offline | M3 | **Partial** | Production builds emit `sw.js` (`src/offline/`). It precaches the shell, checks SHA-256 before writing the cache, and the page says the app can open without internet only when the worker reports every bundled lesson at the running content version. The dev server does not register a worker. A cold launch with the network off on iPad or Android is AT-19 and has not been run. |
 | FR-24 | Project backup export/import | M3 | **Deferred** | PNG export only. The stroke log plus checkpoint is already a serialisable project, so this is a file format and a UI, not a redesign. |
-| FR-25 | Update safety and data migration | M3 | **Partial** | `PERSISTENCE_SCHEMA_VERSION` and `LESSON_SCHEMA_VERSION` are checked, and a checkpoint from an unknown version is refused rather than misread. No migration path is written yet, and no service-worker update flow exists. |
+| FR-25 | Update safety and data migration | M3 | **Partial** | A waiting worker is offered only on the picture-choosing screen, after an in-flight save settles, and reloads only after someone asks (`src/offline/update-policy.ts`, `register.ts`). The worker never opens IndexedDB. Still missing: migrating an older checkpoint or lesson package. An unknown schema is still refused, and a changed `contentVersion` still starts a new session (D-33). |
 
 ## 3. Acceptance tests
 
@@ -80,7 +80,7 @@ real tablet.
 | AT-08 | Photo keeps distinctive features | **Deferred** | No photo pipeline (M4). |
 | AT-09 | All steps of a photo lesson render | **Deferred** | No photo pipeline (M4). |
 | AT-10 | Job/approval retry is idempotent | **Deferred** | No backend (M5). |
-| AT-11 | Network drops after download | **Deferred** | No service worker, so there is no offline claim to test (M3). |
+| AT-11 | Network drops after download | **Partial, not a device result** | The precache is what would serve drawing, resume, and export after the shell is cached. A headless Chrome simulation opened one lesson with the network off (section 7). A network drop on the pilot tablets has not been tested. There is no photo-lesson AI status to show. |
 | AT-12 | Cross-tenant asset access denied | **Deferred** | No backend (M5). |
 | AT-13 | Photo deletion and expiry | **Deferred** | No photos stored (M5). |
 | AT-14 | Storage full during autosave | **Partial, not verified** | `StorageFullError` is a distinct type and the UI shows a recovery message; the single-transaction write means a failure cannot corrupt the previous checkpoint (`round-trip.test.ts` proves an aborted save leaves nothing behind). **A genuinely full device was never tested.** |
@@ -88,9 +88,9 @@ real tablet.
 | AT-16 | Pencil with the palm resting on the glass | **Device — unverified** | Needs a real iPad + Apple Pencil and an Android tablet + active stylus. Nothing here can establish it. |
 | AT-17 | Fast, short, repeated strokes; pointercancel; fps and p95 latency | **Partly structural, mostly Device — unverified** | The single-active-pointer rule and cancel handling are covered in `DrawingPad.test.tsx` and `artwork-surface.test.ts`, and a `Profiler` test shows forty pointermove samples cost zero React commits — so the *logic* that could produce a connecting line or a stall is tested. **fps and p95 latency are not measured and must be on real hardware.** |
 | AT-18 | No-pressure input and capacitive stylus | **Device — unverified** | Width is preset-driven with no pressure dependency, and a capacitive stylus reports as `touch` so finger mode covers it — but this has not been tried on a device. |
-| AT-19 | Cold launch of the installed PWA offline | **Deferred** | No service worker (M3). |
+| AT-19 | Cold launch of the installed PWA offline | **Device — unverified** | Automated tests cover the manifest (a bundled lesson missing from the precached scripts fails the build), checksum validation, the navigation fallback, and the ready gate. Section 7 records a headless Chrome simulation. Cold launch of an installed PWA on iPad and Android has not been run, so this acceptance test is not passed. |
 | AT-20 | Project export, clear site data, import | **Deferred** | FR-24 not built (M3). |
-| AT-21 | App update during a live session | **Deferred** | FR-25 update flow not built (M3). |
+| AT-21 | App update during a live session | **Partial** | Automated: the gate refuses to apply on the drawing screen and while a save is in flight; registration reloads only after an explicit apply; the first install is not treated as an update; the worker calls `skipWaiting` only for that message and does not reference IndexedDB. Not done: validating a data migration before the new version is used, and repeating the flow on a device. |
 | AT-22 | Browser tab and Home Screen both pass | **Device — unverified** | Needs both launch modes on a real tablet, including the separate-storage case. |
 
 ## 4. What milestone 1 verified, and how
@@ -139,19 +139,23 @@ announcing PWA support.
 | Input-to-ink latency (target p95 ≤50 ms) | AT-17, PRD section 13 | Includes digitiser sampling and display pipeline, neither of which exists in a desktop browser. |
 | Capacitive stylus as touch | AT-18 | Hardware-dependent. |
 | Home Screen PWA vs browser tab storage | AT-22 | WebKit treats the two as separate storage; only a device shows it. |
+| Cold launch with no network | AT-19 | Needs the installed PWA, and the browser tab, on the pilot iPad and Android tablet after a successful first visit. The headless Chrome note in section 7 is not that test. |
 | Storage eviction and a genuinely full device | AT-14 | Browser quota policy under real pressure. |
 
 Suggested next action, from PRD section 20 item 1: choose the two pilot devices,
 record model, OS and browser versions, then run AT-01..AT-07, AT-14 and
 AT-16..AT-22 on both and record the results per device.
 
-## 6. Follow-up work this milestone deliberately left out
+## 6. Follow-up work still open
 
-Noted here rather than built, per the scope given:
+Noted here rather than treated as done. Items 2 and 7 started with the offline
+slice; the rest are unchanged from milestone 1.
 
 1. **Automatic step completion** (FR-10, AT-15) — the policy field exists and is
    off everywhere.
-2. **Service worker, offline packaging, cold offline launch** (FR-23, AT-19).
+2. **Cold offline launch on the pilot devices** (AT-19) — the service worker
+   and the precache exist and are covered by automated tests. The device run
+   does not.
 3. **Project backup export/import** (FR-24, AT-20) — the stroke log and
    checkpoint are already a complete, serialisable project.
 4. **Local gallery** (FR-14 gallery half) — the picture-choosing screen
@@ -161,11 +165,51 @@ Noted here rather than built, per the scope given:
 6. **Free-creation phase** (FR-12) and "repeat this step" / "start over"
    (PRD section 7 edit behaviours). Start-over exists only on the finish
    screen, behind *Gambar lagi*; there is no in-lesson control yet.
-7. **Update flow and data migration** (FR-25, AT-21) — versions are checked and
-   refused, but nothing migrates yet.
+7. **Data migration** (the rest of FR-25, AT-21) — versions are checked and
+   refused, and a service-worker update no longer reloads a live drawing.
+   Nothing migrates an old checkpoint onto a new schema yet.
 8. **Parent area and privacy controls** (FR-19) — nothing to govern until photos
    or a backend exist.
 9. **Photo pipeline and backend** (FR-15..FR-18, FR-21; AT-08..AT-13).
 10. **Lesson authoring tooling** — the data format is deliberately plain so an
     authoring step or the photo pipeline can emit it, but no authoring tool is
     part of this milestone.
+
+## 7. Milestone 3 offline slice — what was verified
+
+Automated, in this repository (`npm test`, `npm run lint`, `npm run typecheck`,
+`npm run build`):
+
+- The precache manifest lists the shell and excludes the worker script. A
+  bundled lesson whose id and title are missing from the precached scripts
+  fails the build (`src/offline/vite-plugin.test.ts`). The production build
+  therefore refuses to emit `sw.js` if a lesson was tree-shaken out.
+- Install stores files only after every response is HTTP 200 and the SHA-256
+  matches the manifest. A mismatch writes nothing. The Web Crypto digest matches
+  Node's SHA-256, including the empty-input test vector.
+- A revalidating fetch (`cache: 'reload'`) and the worker script itself are not
+  answered from the old cache, so a new version can install. Navigations fall
+  back to `/index.html`. Cache cleanup deletes only names with the precache
+  prefix.
+- The worker source calls `skipWaiting` only when the page sends `SKIP_WAITING`,
+  and the source does not mention IndexedDB. The bundled `dist/sw.js` inlines
+  the manifest, including every bundled lesson id and content version.
+- Registration is production-only, reloads only after an explicit apply, and
+  does not treat the first install as a waiting update.
+- The update gate stays closed on the drawing screen, while a save is in
+  flight, and after *Nanti saja*. The picture-choosing screen shows the prompt
+  and, once accepted, disables the lesson choices until the reload.
+- The offline-ready sentence is absent until the status store is told the shell
+  is ready.
+
+Browser simulation (headless Chrome on the development machine, 20 October 2026,
+**not a device test**): `npm run preview` was loaded once online. The worker
+activated, the picture-choosing screen showed *Bisa dibuka tanpa internet*, and
+no update prompt appeared. A new tab with the network disabled was then served
+by the worker (HTTP 200, `fromServiceWorker`). The cat lesson opened at step 1
+and the screen said *Tersimpan*. No update prompt appeared on the drawing
+screen.
+
+This simulation does not pass AT-19 or AT-21. It was not an installed Home
+Screen icon, not Safari, and not an iPad or an Android tablet. Nobody measured
+frame rate, input latency, or storage eviction.

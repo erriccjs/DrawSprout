@@ -20,6 +20,11 @@ export containing only the child's drawing.
   screen without waiting on storage. Changing a tool or mode while the drawing
   opens keeps the saved strokes, and an empty session cannot replace them.
 - Canvas drawing with Pointer Events, pen / brush / eraser, undo and redo.
+- With the eraser chosen, *Hapus semua* clears the whole drawing, but only
+  after asking "Mau mulai dengan gambar kosong?". *Batalkan* brings the
+  drawing back while the canvas is still empty. The clear lasts for the open
+  session only: it is not saved, so reopening the app restores the last saved
+  drawing.
 - **Pencil mode** (stylus only) and **finger mode**, switchable at any time
   without losing the drawing.
 - Three assistance levels: dashed guides always visible, guides that fade after
@@ -41,14 +46,28 @@ export containing only the child's drawing.
   landscape is still the layout the screens were designed around. The phone
   measurements, and the tablet sizes that were rechecked afterwards, are in
   [`docs/TABLET_LAYOUT_FIT.md`](docs/TABLET_LAYOUT_FIT.md).
+- In a production build, a service worker stores the app shell and every bundled
+  lesson. The picture-choosing screen says *Bisa dibuka tanpa internet* only
+  after that cache has been stored and each file's checksum matches. The dev
+  server does not install the worker.
+- A newer version waits. On the picture-choosing screen it asks, in Indonesian,
+  whether to load it. It does not ask, and does not reload, while a drawing is
+  open or while a save from that drawing is still finishing. The worker never
+  opens IndexedDB, so an update does not delete saved drawings.
 
 ## What does not work yet
 
-- **No offline support.** A web app manifest ships so the app can be added to the
-  Home Screen, but there is no service worker.
+- **Offline cold launch is not confirmed on a tablet.** The production build
+  does precache the shell, and a headless Chrome simulation on the development
+  machine could open the cat lesson with the network off after one online visit
+  (see the plan, section 7). That is not acceptance test AT-19: it was not an
+  installed Home Screen icon, not Safari on iPad, and not Chrome on an Android
+  tablet. `npm run dev` does not install the service worker.
 - No photo-to-lesson transformation, no backend, no accounts, no cloud sync.
 - No automatic "step finished" detection — the child presses *Lanjut*.
 - No gallery, project backup file, or audio.
+- No migration of a drawing saved under an older lesson or storage schema. A
+  changed lesson still starts a new session. That is the rest of FR-25.
 
 See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) §6 for the full
 follow-up list.
@@ -115,6 +134,9 @@ own job so one failure still shows the state of the rest.
 | Pencil / finger input filter | `src/input/pointer-mode.test.ts` |
 | The picker, leaving and reopening a picture, resume notices | `src/App.test.tsx` |
 | The drawing screen at component level | `src/ui/DrawingPad.test.tsx` |
+| Precache manifest, lesson coverage, checksum gate | `src/offline/precache.test.ts`, `src/offline/vite-plugin.test.ts` |
+| Service worker registration and the safe update gate | `src/offline/register.test.ts`, `src/offline/update-policy.test.ts`, `src/offline/service-worker.test.ts` |
+| The offline-ready line and the update prompt | `src/App.test.tsx`, `src/offline/useOffline.test.tsx` |
 
 ### Testing by hand on a tablet
 
@@ -126,13 +148,27 @@ own job so one failure still shows the state of the rest.
    *Simpan gambar (PNG)* and confirm the saved file has no dashed guides.
 4. Close the tab, reopen it, and confirm the drawing and the step come back.
 
+To try the service worker locally, build and preview (the dev server does not
+register it):
+
+```bash
+npm run build
+npm run preview
+```
+
+Open the preview URL, wait until the picture-choosing screen says the app can
+be opened without internet, then switch the browser offline and load the URL
+again. That procedure has been run once in headless Chrome on the development
+machine. It has not been run on a tablet.
+
 **What this does not prove.** Apple Pencil behaviour, palm rejection, frame rate
 and input latency cannot be judged from a desktop browser, and none of them have
-been measured. Acceptance tests AT-16, AT-17, AT-18 and AT-22, plus the rendering
-targets in PRD section 13, are open and need a real iPad with an Apple Pencil and
-a real Android tablet with an active stylus. The phone layout was checked the
-same way, in headless Chrome at phone-sized viewports, not on a handset.
-Nothing in this repository should be read as a device test result.
+been measured. Acceptance tests AT-16, AT-17, AT-18, AT-19 and AT-22, plus the
+rendering targets in PRD section 13, are open and need a real iPad with an Apple
+Pencil and a real Android tablet with an active stylus. The phone layout was
+checked the same way, in headless Chrome at phone-sized viewports, not on a
+handset. A desktop or headless browser result is not a device test. Nothing in
+this repository should be read as one.
 
 ## Project layout
 
@@ -152,6 +188,9 @@ src/
   input/          Pointer Events handling and the pencil/finger filter.
   ui/             React components, and the one adapter that translates engine
                   concepts into renderer concepts.
+  offline/        Production service worker, precache manifest, and the update
+                  gate. Knows lesson ids only so it can tell when the shell
+                  cache covers the catalogue. Does not open IndexedDB.
   test/           Fixtures and environment shims.
 ```
 

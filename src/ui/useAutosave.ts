@@ -28,7 +28,6 @@ export function useAutosave(
   pendingSave: Promise<boolean> | null = null,
 ): { status: SaveStatus; flush: () => Promise<boolean>; clearSession: (fresh: SessionState) => Promise<void> } {
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
-  const settledStatusRef = useRef<SaveStatus>({ kind: 'idle' });
 
   // Written in an effect rather than during render; the save effect below is
   // declared after this one, so it always reads the committed state.
@@ -63,19 +62,15 @@ export function useAutosave(
       .saveProgress({ checkpoint, newStrokes })
       .then((wrote) => {
         if (!wrote) {
-          setStatus(settledStatusRef.current);
+          setStatus({ kind: 'idle' });
           return true;
         }
         for (const stroke of newStrokes) savedStrokeIdsRef.current.add(stroke.id);
-        settledStatusRef.current = { kind: 'saved', at: Date.now() };
-        setStatus(settledStatusRef.current);
+        setStatus({ kind: 'saved', at: Date.now() });
         return true;
       })
       .catch((error: unknown) => {
-        settledStatusRef.current = error instanceof StorageFullError
-          ? { kind: 'storage-full' }
-          : { kind: 'failed' };
-        setStatus(settledStatusRef.current);
+        setStatus(error instanceof StorageFullError ? { kind: 'storage-full' } : { kind: 'failed' });
         return false;
       });
 
@@ -92,8 +87,7 @@ export function useAutosave(
       savedStrokeIdsRef.current.clear();
       revisionRef.current = 0;
       stateRef.current = fresh;
-      settledStatusRef.current = { kind: 'idle' };
-      setStatus(settledStatusRef.current);
+      setStatus({ kind: 'idle' });
     } catch (error) {
       clearingRef.current = false;
       await flush();

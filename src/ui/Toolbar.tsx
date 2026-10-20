@@ -6,8 +6,11 @@
  * back to a sensible preset without losing a deliberate colour choice.
  */
 
+import { useState } from 'react';
 import type { LessonPackage, ToolPreset } from '../lesson-data/schema';
+import { canClearAll } from '../lesson-engine/session';
 import type { SessionAction, SessionState, ToolKind } from '../lesson-engine/types';
+import { ClearArtworkPrompt } from './ClearArtworkPrompt';
 
 /** A small, high-contrast palette; names matter for colour-blind users. */
 export const PALETTE = [
@@ -79,6 +82,12 @@ export function Toolbar({
             <span className="chip__label">{tool.label}</span>
           </button>
         ))}
+        {/* Inside the tool group, and only while the eraser is the chosen
+            tool, so it reads as the eraser's big version rather than as a
+            fourth tool. Unmounting it resets the question. */}
+        {toolPreferences.activeTool === 'eraser' && (
+          <EraserClearAll state={state} dispatch={dispatch} />
+        )}
       </fieldset>
 
       <fieldset className="toolbar__group toolbar__group--color">
@@ -169,6 +178,48 @@ export function Toolbar({
         </fieldset>
       </div>
     </div>
+  );
+}
+
+/**
+ * "Hapus semua": the eraser applied to the whole drawing at once.
+ *
+ * It never clears on a single tap. The first tap only asks the question, and
+ * the clear it finally dispatches is one operation, and Batalkan puts that
+ * whole drawing back as long as nothing has been drawn since.
+ */
+function EraserClearAll({
+  state,
+  dispatch,
+}: {
+  readonly state: SessionState;
+  readonly dispatch: (action: SessionAction) => void;
+}) {
+  const [asking, setAsking] = useState(false);
+
+  if (asking) {
+    return (
+      <ClearArtworkPrompt
+        label="Pilihan hapus semua"
+        compact
+        onKeep={() => setAsking(false)}
+        onClear={() => {
+          setAsking(false);
+          dispatch({ type: 'clear-all' });
+        }}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="chip chip--wide"
+      disabled={!canClearAll(state)}
+      onClick={() => setAsking(true)}
+    >
+      <span aria-hidden="true">🧽</span> Hapus semua
+    </button>
   );
 }
 

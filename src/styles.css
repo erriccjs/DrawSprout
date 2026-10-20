@@ -72,6 +72,27 @@ body {
   font-size: 1.125rem;
 }
 
+.lesson-picker__offline {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.update-prompt {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.update-prompt p {
+  margin: 0;
+}
+
+.update-prompt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .lesson-picker__choices {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
@@ -641,6 +662,45 @@ body {
   font-weight: 600;
 }
 
+/* The same question inside the drawing screen's control column: narrower, so
+   the wording stays identical while the buttons shrink to the normal tap
+   target and stack when the column is tight. */
+.finish__choice--compact {
+  flex: 1 0 100%;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 4px 5px 5px;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.finish__choice--compact h2 {
+  font-size: 0.875rem;
+  line-height: 1.2;
+}
+
+/* Side by side while both labels still fit, stacked once the column narrows,
+   so the question costs the control column as little height as it can. */
+.finish__choice--compact .finish__actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 5px;
+}
+
+.finish__choice--compact .button {
+  min-height: var(--tap);
+  padding: 2px 6px;
+  font-size: 0.8125rem;
+  line-height: 1.15;
+}
+
+/* A tool-group chip that takes a row of its own rather than sitting beside the
+   tools: "Hapus semua" belongs to the eraser above it, not to the row. */
+.toolbar__group .chip--wide {
+  flex: 1 0 100%;
+  margin-top: 2px;
+}
+
 /* Portrait and short landscape: instruction and example stay on top and the
    controls sit in two columns instead of one tall column, so tools, colours and
    undo stay above the fold. */
@@ -817,6 +877,44 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 .shell[data-layout='phone-landscape'] .lesson-picker__subtitle {
   font-size: 0.75rem;
   line-height: 1.25;
+}
+
+.shell[data-layout^='phone'] .lesson-picker__offline {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+}
+
+.shell[data-layout='phone-portrait'] .update-prompt {
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.shell[data-layout='phone-portrait'] .update-prompt__actions {
+  flex-direction: column;
+}
+
+.shell[data-layout='phone-portrait'] .update-prompt__actions .button {
+  width: 100%;
+}
+
+.shell[data-layout='phone-landscape'] .update-prompt {
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 8px;
+}
+
+.shell[data-layout='phone-landscape'] .update-prompt p {
+  overflow-wrap: anywhere;
+}
+
+.shell[data-layout='phone-landscape'] .update-prompt__actions {
+  flex-wrap: nowrap;
+}
+
+.shell[data-layout='phone-landscape'] .update-prompt__actions .button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 8px;
 }
 
 .shell[data-layout^='phone'] .pad__header {
@@ -1050,10 +1148,10 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 }
 
 .shell[data-layout^='phone'] .toolbar__group--tools {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
-.shell[data-layout^='phone'] .toolbar__group--tools .chip,
+.shell[data-layout^='phone'] .toolbar__group--tools .chip:not(.chip--wide),
 .shell[data-layout^='phone'] .toolbar__group--width .chip {
   flex: 1 1 var(--tap);
   min-width: var(--tap);
@@ -1062,8 +1160,20 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   white-space: nowrap;
 }
 
-.shell[data-layout='phone-portrait'] .toolbar__group--tools .chip {
+.shell[data-layout='phone-portrait'] .toolbar__group--tools .chip:not(.chip--wide) {
   flex: 1 1 auto;
+}
+
+/* "Hapus semua" and its question stay a full row. The phone tool chips are
+   sized for an icon; that size must not crush this control. */
+.shell[data-layout^='phone'] .toolbar__group--tools .chip--wide,
+.shell[data-layout^='phone'] .toolbar__group--tools .finish__choice--compact {
+  flex: 1 0 100%;
+  width: 100%;
+  max-width: none;
+  min-height: var(--tap);
+  white-space: normal;
+  padding-inline: 8px;
 }
 
 .shell[data-layout^='phone'] .toolbar__group--history .chip {
@@ -1073,7 +1183,7 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   padding-inline: 0;
 }
 
-.shell[data-layout='phone-landscape'] .toolbar__group--tools .chip {
+.shell[data-layout='phone-landscape'] .toolbar__group--tools .chip:not(.chip--wide) {
   position: relative;
   flex: 0 0 var(--tap);
   width: var(--tap);
