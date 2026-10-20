@@ -7,6 +7,7 @@
  * work.
  */
 
+import { useState } from 'react';
 import type { LessonPackage, LessonStep } from '../lesson-data/schema';
 import type { AssistanceMode, HintDurationMs, SessionAction, SessionState } from '../lesson-engine/types';
 import { TargetPreview } from './TargetPreview';
@@ -44,28 +45,71 @@ export function StepPanel({
   state,
   step,
 }: StepPanelProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [enlarged, setEnlarged] = useState(false);
   const stepNumber = state.currentStepIndex + 1;
   const stepCount = lesson.steps.length;
 
   return (
-    <div className="step-panel">
+    <div className="step-panel" data-collapsed={collapsed}>
       <div className="step-panel__header">
         <p className="step-panel__counter">
-          Tahap {stepNumber} dari {stepCount}
-          <span className="step-panel__phase"> · {phaseLabel(step.phase)}</span>
+          <span className="sr-only">
+            Tahap {stepNumber} dari {stepCount}
+            <span className="step-panel__phase"> · {phaseLabel(step.phase)}</span>
+          </span>
+          <span className="step-dots" aria-hidden="true">
+            {lesson.steps.map((item, index) => (
+              <span
+                key={item.id}
+                className="step-dots__dot"
+                data-state={index === state.currentStepIndex ? 'current' : index < state.currentStepIndex ? 'done' : 'ahead'}
+              />
+            ))}
+          </span>
         </p>
-        <h2 className="step-panel__instruction">{step.instruction}</h2>
-        {step.hint !== undefined && <p className="step-panel__hint">{step.hint}</p>}
+        {!collapsed && <h2 className="step-panel__instruction">{step.instruction}</h2>}
+        {!collapsed && step.hint !== undefined && <p className="step-panel__hint">{step.hint}</p>}
       </div>
 
-      <TargetPreview
-        space={lesson.coordinateSpace}
-        paths={lesson.targetPreview.paths}
-        title={lesson.title}
-        step={step}
-        steps={lesson.steps}
-        colorRegions={lesson.colorRegions}
-      />
+      <button
+        type="button"
+        className="step-card__toggle"
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? 'Tampilkan langkah' : 'Sembunyikan langkah'}
+        onClick={() => setCollapsed((current) => !current)}
+      >
+        <span aria-hidden="true">{collapsed ? '▴' : '▾'}</span>
+      </button>
+
+      {!collapsed && (
+        <button type="button" className="step-card__thumb" aria-label="Perbesar contoh" onClick={() => setEnlarged(true)}>
+          <TargetPreview
+            space={lesson.coordinateSpace}
+            paths={lesson.targetPreview.paths}
+            title={lesson.title}
+            step={step}
+            steps={lesson.steps}
+            colorRegions={lesson.colorRegions}
+          />
+        </button>
+      )}
+
+      {enlarged && (
+        <div className="example-lightbox" role="dialog" aria-label="Contoh besar">
+          <button type="button" className="button example-lightbox__close" onClick={() => setEnlarged(false)}>
+            Tutup contoh
+          </button>
+          <TargetPreview
+            space={lesson.coordinateSpace}
+            paths={lesson.targetPreview.paths}
+            title={lesson.title}
+            step={step}
+            steps={lesson.steps}
+            colorRegions={lesson.colorRegions}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,8 @@
  * and the target illustration included in neither (FR-14, AT-01).
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { motionPreference, type MotionPreference } from './motion';
 import type { LessonPackage } from '../lesson-data/schema';
 import type { SessionState } from '../lesson-engine/types';
 import { artworkFileName, exportArtworkPng, renderArtworkToCanvas } from '../renderer/export';
@@ -31,6 +32,16 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
   const [exportError, setExportError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
   const [askingToClear, setAskingToClear] = useState(false);
+  const [motion, setMotion] = useState<MotionPreference>('full');
+
+  useEffect(() => {
+    const query = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (!query) return;
+    const update = () => setMotion(motionPreference(query.matches));
+    update();
+    query.addEventListener?.('change', update);
+    return () => query.removeEventListener?.('change', update);
+  }, []);
 
   useEffect(() => {
     const host = previewRef.current;
@@ -74,6 +85,9 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
 
   return (
     <div className="finish">
+      <div className="celebration" data-motion={motion} aria-hidden="true">
+        <span /><span /><span />
+      </div>
       <h1 className="finish__title">Selesai! Ini karyamu.</h1>
       <p className="finish__lead">
         Gambar ini milikmu. Garis panduan dan contoh tidak ikut tersimpan.
