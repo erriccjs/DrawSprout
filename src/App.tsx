@@ -9,6 +9,7 @@ import type { SessionCheckpoint } from './persistence/types';
 import { gateUpdate } from './offline/update-policy';
 import { useOfflineSupport } from './offline/useOffline';
 import { DrawingPad } from './ui/DrawingPad';
+import { RESUME_NOTICE } from './ui/resume-notice';
 import { LessonPicker } from './ui/LessonPicker';
 import { TabletNotice } from './ui/TabletNotice';
 import { newId } from './ui/ids';
@@ -140,7 +141,7 @@ export function App() {
           try {
             state = fromRestoredSession(restored);
             if (hasProgress(restored.checkpoint)) {
-              notice = 'Karya terakhirmu dilanjutkan dari tempat kamu berhenti.';
+              notice = RESUME_NOTICE;
             }
           } catch {
             notice = LOAD_FAILURE_NOTICE;

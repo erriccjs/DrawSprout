@@ -18,6 +18,7 @@ import { useEffect, useRef } from 'react';
 import type { InputMode } from '../lesson-engine/types';
 import { clampToSpace, clientToSpace } from '../renderer/coordinates';
 import type { Point, RenderSpace } from '../renderer/types';
+import { fingerTouchGuard } from './edge-guard';
 import { initialGestureState, reduceGesture, type PinchGesture } from './gesture-tracker';
 
 export type StrokeEndReason = 'up' | 'cancel';
@@ -137,15 +138,41 @@ export function useStrokeInput(
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     };
     const onPointerDown = (event: PointerEvent) => {
+      if (callbacksRef.current.inputMode === 'finger') {
+        const verdict = fingerTouchGuard({
+          pointerType: event.pointerType,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          viewportWidth: window.visualViewport?.width ?? window.innerWidth,
+          viewportHeight: window.visualViewport?.height ?? window.innerHeight,
+          contactWidth: event.width,
+          contactHeight: event.height,
+        });
+        if (verdict === 'palm') {
+          // A resting hand should not become a stroke or a second finger.
+          // The page can swallow it; it still cannot stop an OS edge gesture.
+          event.preventDefault();
+          return;
+        }
+        if (verdict === 'edge') {
+          // Leave the event alone so a system back/home swipe, if the browser
+          // is going to take it, is not also the start of a line.
+          return;
+        }
+      }
       apply('down', event);
-      // The canvas sets `touch-action: none`, so this only suppresses text
-      // selection and the synthetic mouse events, not page-level gestures.
+      // The canvas sets `touch-action: none`. preventDefault here also
+      // suppresses text selection and the synthetic mouse events that would
+      // follow the touch.
       event.preventDefault();
       try {
         canvas.setPointerCapture(event.pointerId);
       } catch {
         // Already gone, or capture is unsupported. The stroke still stands.
       }
+    };
+    const preventTouch = (event: TouchEvent) => {
+      if (event.cancelable) event.preventDefault();
     };
     const onPointerMove = (event: PointerEvent) => apply('move', event);
     const onPointerUp = (event: PointerEvent) => {
@@ -164,6 +191,8 @@ export function useStrokeInput(
     // With pointer capture the browser may report a lost capture instead of an
     // up; without this the pointer id would stay active and wedge all input.
     canvas.addEventListener('lostpointercapture', onPointerCancel);
+    canvas.addEventListener('touchstart', preventTouch, { passive: false });
+    canvas.addEventListener('touchmove', preventTouch, { passive: false });
 
     return () => {
       canvas.removeEventListener('pointerdown', onPointerDown);
@@ -171,6 +200,8 @@ export function useStrokeInput(
       canvas.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('pointercancel', onPointerCancel);
       canvas.removeEventListener('lostpointercapture', onPointerCancel);
+      canvas.removeEventListener('touchstart', preventTouch);
+      canvas.removeEventListener('touchmove', preventTouch);
     };
   }, [canvas, space]);
 }

@@ -44,6 +44,8 @@ import {
 } from '../renderer/view';
 import { acceptsPointerType, rejectionMessage } from '../input/pointer-mode';
 import { useStrokeInput } from '../input/useStrokeInput';
+import { exitDocumentFullscreen, isDocumentFullscreen, requestDocumentFullscreen } from './fullscreen';
+import { RESUME_NOTICE, RESUME_TOAST_MS } from './resume-notice';
 import { FinishScreen } from './FinishScreen';
 import { GuideOverlay } from './GuideOverlay';
 import { StepControls, StepNavigation, StepPanel } from './StepPanel';
@@ -105,12 +107,21 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const { status: saveStatus, flush, clearSession } = useAutosave(store, state, !restorePending, pendingSave);
   const [restartError, setRestartError] = useState<string | null>(null);
   const restartingRef = useRef(false);
+  const fullscreenRequestedRef = useRef(false);
+  const [paletteSignal, setPaletteSignal] = useState(0);
+  const [resumeToastHidden, setResumeToastHidden] = useState(false);
   // Leaving never waits on storage: the child reaches the picker immediately
   // and the save result follows it there.
   const choosePicture = () => {
     if (restartingRef.current) return;
     onChoosePicture(restorePending ? Promise.resolve(true) : flush(), stateRef.current);
   };
+
+  useEffect(() => {
+    if (notice !== RESUME_NOTICE) return;
+    const timer = window.setTimeout(() => setResumeToastHidden(true), RESUME_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   const step = activeStep(lesson, state);
   const preset = effectiveToolPreset(lesson, state);
   const isColorStep = step.phase === 'color';
@@ -178,7 +189,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
       setViewport(
         fitViewport(
           lesson.coordinateSpace,
-          rect.width,
+          Math.max(1, rect.width - chrome.side * 2),
           Math.max(1, rect.height - chrome.top - chrome.bottom),
           window.devicePixelRatio,
         ),
@@ -186,10 +197,25 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     };
     measure();
 
-    if (typeof ResizeObserver === 'undefined') return;
+    const blockTouch = (event: TouchEvent) => {
+      if (event.cancelable) event.preventDefault();
+    };
+    stage.addEventListener('touchstart', blockTouch, { passive: false });
+    stage.addEventListener('touchmove', blockTouch, { passive: false });
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        stage.removeEventListener('touchstart', blockTouch);
+        stage.removeEventListener('touchmove', blockTouch);
+      };
+    }
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      stage.removeEventListener('touchstart', blockTouch);
+      stage.removeEventListener('touchmove', blockTouch);
+    };
   }, [stage, lesson.coordinateSpace, layout, tabletNoticeOpen]);
 
   const paint = useCallback(() => {
@@ -285,6 +311,10 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     },
 
     begin: (point) => {
+      if (!fullscreenRequestedRef.current) {
+        fullscreenRequestedRef.current = true;
+        requestDocumentFullscreen();
+      }
       const surface = surfaceRef.current;
       if (!surface) return;
       // Guarded: calling setState with the value it already holds still costs a
@@ -378,6 +408,22 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     setHintWindow((previous) => ({ key: guideKey, open: true, nonce: previous.nonce + 1 }));
   }, [guideKey]);
 
+  const startOver = () => {
+    if (restartingRef.current) return;
+    restartingRef.current = true;
+    setRestartError(null);
+    setResumeToastHidden(true);
+    void clearSession(reduceSession(lesson, stateRef.current, { type: 'restart' }))
+      .then(() => {
+        setHintWindow({ key: '', open: false, nonce: 0 });
+        dispatch({ type: 'restart' });
+      })
+      .catch(() => setRestartError('Belum bisa mulai gambar baru. Coba lagi.'))
+      .finally(() => {
+        restartingRef.current = false;
+      });
+  };
+
   if (state.finished) {
     return (
       <FinishScreen
@@ -390,20 +436,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           dispatch({ type: 'reopen' });
         }}
         onChoosePicture={choosePicture}
-        onStartFresh={() => {
-          if (restartingRef.current) return;
-          restartingRef.current = true;
-          setRestartError(null);
-          void clearSession(reduceSession(lesson, state, { type: 'restart' }))
-            .then(() => {
-              setHintWindow({ key: '', open: false, nonce: 0 });
-              dispatch({ type: 'restart' });
-            })
-            .catch(() => setRestartError('Belum bisa mulai gambar baru. Coba lagi.'))
-            .finally(() => {
-              restartingRef.current = false;
-            });
-        }}
+        onStartFresh={startOver}
         restartError={restartError}
       />
     );
@@ -458,11 +491,26 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           <p className="pad__status" role="status">
             {statusLabel(saveStatus, durable)}
           </p>
-          <ColorWell state={state} preset={preset} dispatch={dispatch} />
+          <ColorWell
+            state={state}
+            preset={preset}
+            dispatch={dispatch}
+            openSignal={paletteSignal}
+            onOpenHelp={() => setControlTab('help')}
+          />
         </header>
 
+        {notice === RESUME_NOTICE && !resumeToastHidden && (
+          <div className="resume-toast" role="status">
+            <p>{notice}</p>
+            <button type="button" className="resume-toast__action" onClick={startOver}>
+              Mulai ulang
+            </button>
+          </div>
+        )}
+
         <div className="float-notices">
-          {notice !== null && <p className="banner">{notice}</p>}
+          {notice !== null && notice !== RESUME_NOTICE && <p className="banner">{notice}</p>}
           {!durable && (
             <p className="banner banner--warning">
               Penyimpanan permanen tidak tersedia di browser ini, jadi karya ini hanya bertahan
@@ -477,6 +525,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           )}
           {saveStatus.kind === 'failed' && (
             <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
+          )}
+          {restartError !== null && (
+            <p className="banner banner--warning" role="alert">{restartError}</p>
           )}
           {rejection !== null && <p className="banner">{rejection}</p>}
         </div>
@@ -511,14 +562,13 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           </div>
           <button
             type="button"
-            className="chip float-dock__help"
-            aria-label="Bantuan"
-            aria-pressed={controlTab === 'help'}
-            aria-expanded={controlTab === 'help'}
-            onClick={() => setControlTab((tab) => (tab === 'help' ? 'drawing' : 'help'))}
+            className="chip float-dock__palette"
+            aria-label="Palet warna"
+            onClick={() => setPaletteSignal((value) => value + 1)}
           >
-            <span aria-hidden="true">?</span>
+            <PaletteIcon />
           </button>
+          <FullscreenToggle />
           <button
             type="button"
             className="chip float-dock__fit"
@@ -544,6 +594,52 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         </aside>
       </div>
     </div>
+  );
+}
+
+function PaletteIcon() {
+  return (
+    <svg className="chip-icon" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 3a9 9 0 1 0 0 18h1.1a2.2 2.2 0 0 0 1.7-3.6 1.5 1.5 0 0 1 1.2-2.4H17a4 4 0 0 0 4-4A9 9 0 0 0 12 3z"
+      />
+      <circle cx="7.5" cy="10" r="1.3" fill="#e24b4b" />
+      <circle cx="10.2" cy="7.1" r="1.3" fill="#f0b429" />
+      <circle cx="14" cy="7.1" r="1.3" fill="#3d9a5f" />
+      <circle cx="16.4" cy="10.2" r="1.3" fill="#3d6bdb" />
+    </svg>
+  );
+}
+
+function FullscreenToggle() {
+  const [active, setActive] = useState(isDocumentFullscreen);
+  useEffect(() => {
+    const sync = () => setActive(isDocumentFullscreen());
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+  return (
+    <button
+      type="button"
+      className="chip float-dock__fullscreen"
+      aria-label={active ? 'Keluar layar penuh' : 'Layar penuh'}
+      aria-pressed={active}
+      onClick={() => {
+        if (isDocumentFullscreen()) exitDocumentFullscreen();
+        else requestDocumentFullscreen();
+      }}
+    >
+      <svg className="chip-icon" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"
+        />
+      </svg>
+    </button>
   );
 }
 

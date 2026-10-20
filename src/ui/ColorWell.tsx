@@ -13,13 +13,22 @@ interface ColorWellProps {
   readonly state: SessionState;
   readonly preset: ToolPreset;
   readonly dispatch: (action: SessionAction) => void;
+  /** Incremented by the dock palette chip to open this popover. */
+  readonly openSignal?: number;
+  readonly onOpenHelp?: () => void;
 }
 
-export function ColorWell({ state, preset, dispatch }: ColorWellProps) {
+export function ColorWell({ state, preset, dispatch, openSignal = 0, onOpenHelp }: ColorWellProps) {
   const [open, setOpen] = useState(false);
+  const [appliedSignal, setAppliedSignal] = useState(openSignal);
   const [recents, setRecents] = useState<readonly string[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const { colorSource, customColor } = state.toolPreferences;
+
+  if (openSignal !== appliedSignal) {
+    setAppliedSignal(openSignal);
+    if (openSignal > 0) setOpen(true);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -104,6 +113,18 @@ export function ColorWell({ state, preset, dispatch }: ColorWellProps) {
           Warna sekarang: <span className="dot" style={{ backgroundColor: preset.color }} />
           {colorSource === 'custom' ? ' warna pilihanku' : ' warna panduan'}
         </p>
+        {onOpenHelp && (
+          <button
+            type="button"
+            className="chip"
+            onClick={() => {
+              setOpen(false);
+              onOpenHelp();
+            }}
+          >
+            Bantuan
+          </button>
+        )}
       </div>
     </div>
   );

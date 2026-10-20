@@ -14,6 +14,8 @@ export interface StrokeSample {
 export interface PointerOptions {
   readonly pointerId?: number;
   readonly pointerType?: 'pen' | 'touch' | 'mouse';
+  readonly width?: number;
+  readonly height?: number;
 }
 
 /** A box the canvas pretends to occupy, so client coordinates map cleanly. */
@@ -44,6 +46,8 @@ function pointerEvent(type: string, sample: StrokeSample, options: PointerOption
     isPrimary: true,
     clientX: sample.x,
     clientY: sample.y,
+    width: options.width ?? 1,
+    height: options.height ?? 1,
   });
 }
 

@@ -641,3 +641,94 @@ the note, the shell shows "DrawSprout paling nyaman di tablet." with
 the session checkpoint and it is not read by the service worker (D-46). A
 blocked store fails quietly and the note can appear again. A tablet never
 shows it.
+
+### D-55 — Pencil and finger mode are on the toolbar
+
+Switching mode used to mean opening the help sheet. On a tablet that control
+was easy to miss, and a child who draws with a finger had no visible way to
+say so.
+
+**Choice.** The toolbar shows two chips, *Jari* and *Pensil*, with a hand icon
+and a pencil icon. The pressed chip is the current mode. One tap switches,
+and the switch is still `set-input-mode`, so the preference is saved as
+before. The help sheet still explains the two modes. It is not the only
+place the mode can be changed.
+
+### D-56 — Continuing a saved drawing is a toast
+
+The sentence "Karya terakhirmu dilanjutkan dari tempat kamu berhenti." was a
+banner that stayed on the drawing screen.
+
+**Choice.** That sentence is a small toast. It removes itself after 3 seconds.
+It is not a dialog, and a stroke can start while it is visible. The saved
+drawing is already on the page, so continuing does not need a tap. *Mulai
+ulang* on the toast starts the lesson over: the session is deleted and
+`restart` runs, the same fresh start the finish screen uses. A load failure,
+a full disk, and a lesson whose content version changed stay banners, because
+those are warnings rather than "you are already continuing".
+
+### D-57 — Finger mode avoids the screen edge; a page cannot stop Android gestures
+
+On a real Android tablet, a hand resting or drawing at the edge of the screen
+in finger mode fires system navigation: back, home, the app switcher, or the
+notification shade. The app then closes or goes to the background. Pencil mode
+did not do this.
+
+**Choice.** Finger-mode touches only:
+
+- A contact whose `width` or `height` is at least 80 CSS pixels does not
+  start a stroke and is not tracked. `0` or `1` means the browser did not
+  report a size, and that is not treated as a palm.
+- A touch that goes down within 28 CSS pixels of the viewport edge does not
+  start a stroke and is not captured. The event is left alone, so the page
+  does not also begin a line.
+- Mouse input in finger mode is not filtered, so a desktop check can still
+  draw at the window edge.
+
+The paper is fitted with that same 28px inset on the left and right
+(`drawingChrome.side`). The top and bottom bars are already taller than
+28px, so the guides sit inside the margin.
+
+The canvas, and `html` and `body` while a drawing is open, use
+`touch-action: none` and `overscroll-behavior: none`. Cancelable touch and
+pointer events on the canvas call `preventDefault`, except the small touch
+in the edge margin. The viewport meta tag still does not set `maximum-scale`
+or `user-scalable` (PRD section 10). The picture list is not under those
+rules, so it can still scroll.
+
+The first stroke calls the Fullscreen API. *Layar penuh* asks again, and
+leaves fullscreen when it is already on. The manifest `display` is
+`fullscreen`, and `display_override` is `fullscreen` then `standalone`. A
+browser that does not implement fullscreen display uses standalone. A copy
+that is already installed keeps the display mode it was installed with.
+
+**What the page cannot do.** Android gesture navigation is handled by the
+system. `preventDefault`, `touch-action`, and a dead zone do not cancel a
+back swipe, a home gesture, the app switcher, or the notification shade when
+the system takes that edge before the page does. Fullscreen hides browser
+chrome only where the browser allows the request. It does not turn off
+system navigation.
+
+This is not the palm rejection D-16 refuses to claim. A large reported
+contact is skipped. A palm the digitiser reports as an ordinary finger still
+draws. Whether any of this is enough on a particular tablet is something only
+that tablet can show.
+
+### D-58 — Bola Basket is a bundled lesson
+
+**Choice.** `basketball`, titled "Bola Basket", is a sixth hand-authored
+package in the 1000×750 space. The steps are the circle, the curved seam
+down the middle, the two curved seams at the sides, then orange colour on
+the ball. The picker preview is those outline paths. The package is
+validated with the others and listed on `BUNDLED_LESSONS`.
+
+### D-59 — The dock chip is the palette
+
+The dock chip was a question mark named *Bantuan*. That is the control
+people used when they wanted to change colour (D-49).
+
+**Choice.** The dock chip is a palette icon. Its accessible name is "Palet
+warna". It opens the same colour popover as the circle in the header.
+*Bantuan* is a button inside that popover and opens the help sheet
+(assistance, the mode explanation, and boundary assist on a colour step).
+The header circle still changes colour on its own.
