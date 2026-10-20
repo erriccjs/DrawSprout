@@ -595,6 +595,45 @@ body {
   font-weight: 600;
 }
 
+/* The same question inside the drawing screen's control column: narrower, so
+   the wording stays identical while the buttons shrink to the normal tap
+   target and stack when the column is tight. */
+.finish__choice--compact {
+  flex: 1 0 100%;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 4px 5px 5px;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.finish__choice--compact h2 {
+  font-size: 0.875rem;
+  line-height: 1.2;
+}
+
+/* Side by side while both labels still fit, stacked once the column narrows,
+   so the question costs the control column as little height as it can. */
+.finish__choice--compact .finish__actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 5px;
+}
+
+.finish__choice--compact .button {
+  min-height: var(--tap);
+  padding: 2px 6px;
+  font-size: 0.8125rem;
+  line-height: 1.15;
+}
+
+/* A tool-group chip that takes a row of its own rather than sitting beside the
+   tools: "Hapus semua" belongs to the eraser above it, not to the row. */
+.toolbar__group .chip--wide {
+  flex: 1 0 100%;
+  margin-top: 2px;
+}
+
 /* Portrait and short landscape: instruction and example stay on top and the
    controls sit in two columns instead of one tall column, so tools, colours and
    undo stay above the fold. */
