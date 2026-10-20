@@ -7,6 +7,7 @@ import * as persistence from './persistence';
 import { toCheckpoint } from './persistence/mapping';
 import { MemorySessionStore } from './persistence/memory-store';
 import { StorageFullError } from './persistence/types';
+import { markOfflineReady, markUpdateWaiting, resetOfflineStatus } from './offline/status';
 import { strokeInput } from './test/factories';
 import { drawStroke, pointerDown, pointerMove, pointerUp, stubLayoutBox } from './test/pointer';
 import { App } from './App';
@@ -39,6 +40,7 @@ let store: MemorySessionStore;
 const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
 beforeEach(() => {
+  resetOfflineStatus();
   lessons.splice(0, lessons.length, lessonData.CAT_LESSON, {
     ...lessonData.CAT_LESSON,
     id: 'test-flower',
@@ -125,6 +127,39 @@ describe('lesson picker', () => {
     ))).toBe(true);
     logged.mockRestore();
     expect(screen.queryByRole('heading', { name: 'Mau gambar apa hari ini?' })).toBeNull();
+  });
+
+  it('does not claim the app works offline until the shell has been checked', async () => {
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    expect(screen.queryByText('Bisa dibuka tanpa internet.')).toBeNull();
+
+    cleanup();
+    markOfflineReady();
+    render(<App />);
+    expect(await screen.findByText('Bisa dibuka tanpa internet.')).toBeTruthy();
+  });
+
+  it('offers a waiting update on the picker and hides it while a drawing is open', async () => {
+    markUpdateWaiting();
+    render(<App />);
+    expect(await screen.findByRole('button', { name: 'Muat versi baru' })).toBeTruthy();
+    expect(screen.getByText(/Gambar yang sudah tersimpan tetap ada/)).toBeTruthy();
+
+    await open('Kucing');
+    expect(screen.queryByRole('button', { name: 'Muat versi baru' })).toBeNull();
+    expect(screen.queryByText(/Ada versi baru/)).toBeNull();
+
+    await returnToPicker();
+    fireEvent.click(screen.getByRole('button', { name: 'Nanti saja' }));
+    expect(screen.queryByRole('button', { name: 'Muat versi baru' })).toBeNull();
+
+    await open('Kucing');
+    await returnToPicker();
+    fireEvent.click(screen.getByRole('button', { name: 'Muat versi baru' }));
+    expect(screen.getByText('Memuat versi baru…')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Kucing/ }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('heading', { name: 'Mau gambar apa hari ini?' })).toBeTruthy();
   });
 
   it('returns to the picker from a finished drawing', async () => {

@@ -39,39 +39,43 @@ Object.defineProperty(globalThis, 'ResizeObserver', {
   configurable: true,
 });
 
-// Give every canvas element a recording context, so components that draw can
-// mount without a real rasteriser.
-HTMLCanvasElement.prototype.getContext = function getContext(this: HTMLCanvasElement) {
-  const existing = recordingContexts.get(this);
-  if (existing) return existing;
-  const recording = createRecordingCanvas(this.width, this.height);
-  registerRecording(this, recording);
-  const ctx = recording.canvas.getContext('2d');
-  recordingContexts.set(this, ctx);
-  return ctx;
-} as HTMLCanvasElement['getContext'];
+// Node-environment tests (the service-worker bundle) have no DOM. The patches
+// below are only meaningful in jsdom.
+if (typeof HTMLCanvasElement !== 'undefined' && typeof Element !== 'undefined') {
+  const recordingContexts = new WeakMap<HTMLCanvasElement, CanvasRenderingContext2D | null>();
 
-const recordingContexts = new WeakMap<HTMLCanvasElement, CanvasRenderingContext2D | null>();
+  // Give every canvas element a recording context, so components that draw can
+  // mount without a real rasteriser.
+  HTMLCanvasElement.prototype.getContext = function getContext(this: HTMLCanvasElement) {
+    const existing = recordingContexts.get(this);
+    if (existing) return existing;
+    const recording = createRecordingCanvas(this.width, this.height);
+    registerRecording(this, recording);
+    const ctx = recording.canvas.getContext('2d');
+    recordingContexts.set(this, ctx);
+    return ctx;
+  } as HTMLCanvasElement['getContext'];
 
-HTMLCanvasElement.prototype.toBlob = function toBlob(callback: BlobCallback) {
-  callback(new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }));
-};
+  HTMLCanvasElement.prototype.toBlob = function toBlob(callback: BlobCallback) {
+    callback(new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }));
+  };
 
-// jsdom implements `PointerEvent` but not pointer capture. The renderer relies
-// on capture to keep receiving a stroke that leaves the canvas, so the stub
-// tracks which pointer is captured rather than being a no-op.
-const capturedPointers = new WeakMap<Element, Set<number>>();
+  // jsdom implements `PointerEvent` but not pointer capture. The renderer relies
+  // on capture to keep receiving a stroke that leaves the canvas, so the stub
+  // tracks which pointer is captured rather than being a no-op.
+  const capturedPointers = new WeakMap<Element, Set<number>>();
 
-Element.prototype.setPointerCapture = function setPointerCapture(pointerId: number) {
-  const captured = capturedPointers.get(this) ?? new Set<number>();
-  captured.add(pointerId);
-  capturedPointers.set(this, captured);
-};
+  Element.prototype.setPointerCapture = function setPointerCapture(pointerId: number) {
+    const captured = capturedPointers.get(this) ?? new Set<number>();
+    captured.add(pointerId);
+    capturedPointers.set(this, captured);
+  };
 
-Element.prototype.releasePointerCapture = function releasePointerCapture(pointerId: number) {
-  capturedPointers.get(this)?.delete(pointerId);
-};
+  Element.prototype.releasePointerCapture = function releasePointerCapture(pointerId: number) {
+    capturedPointers.get(this)?.delete(pointerId);
+  };
 
-Element.prototype.hasPointerCapture = function hasPointerCapture(pointerId: number) {
-  return capturedPointers.get(this)?.has(pointerId) ?? false;
-};
+  Element.prototype.hasPointerCapture = function hasPointerCapture(pointerId: number) {
+    return capturedPointers.get(this)?.has(pointerId) ?? false;
+  };
+}

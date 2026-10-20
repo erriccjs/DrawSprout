@@ -68,6 +68,27 @@ body {
   font-size: 1.125rem;
 }
 
+.lesson-picker__offline {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.update-prompt {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.update-prompt p {
+  margin: 0;
+}
+
+.update-prompt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .lesson-picker__choices {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
