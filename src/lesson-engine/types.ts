@@ -45,6 +45,17 @@ export interface Stroke {
   readonly clipRegionIds: readonly string[];
 }
 
+/**
+ * The artwork a `clear-all` took away, kept whole so a single `undo` brings all of
+ * it back (FR-02). Held in the session only and never checkpointed: the
+ * persistence schema is unchanged, so a reload cannot undo a clear.
+ */
+export interface ClearedArtwork {
+  readonly strokes: readonly Stroke[];
+  /** The redo stack as it stood, so undoing the clear restores that too. */
+  readonly redoStack: readonly Stroke[];
+}
+
 /** How much help the lesson shows (PRD section 3, FR-06..FR-08). */
 export type AssistanceMode = 'visible' | 'temporary' | 'independent';
 
@@ -86,6 +97,13 @@ export interface SessionState {
   readonly redoStack: readonly Stroke[];
   /** Next sequence number to hand out; never reused, so ids stay stable. */
   readonly nextSequence: number;
+  /**
+   * What each `clear-all` removed, most recent last; empty when there is
+   * nothing to put back. A clear is one undoable operation, so the whole
+   * artwork is held here rather than pushed onto `redoStack` one stroke at a
+   * time, and clears stack so a later one never buries an earlier one.
+   */
+  readonly clearedArtworks: readonly ClearedArtwork[];
   /** Set only by the explicit finish action; never inferred from the drawing (PRD section 12). */
   readonly finished: boolean;
 }
@@ -103,6 +121,8 @@ export interface SessionPreferences {
 
 export type SessionAction =
   | { readonly type: 'commit-stroke'; readonly stroke: Omit<Stroke, 'sequence'> }
+  /** Takes the whole drawing away in one go; once the canvas is empty, `undo` puts all of it back. */
+  | { readonly type: 'clear-all' }
   | { readonly type: 'undo' }
   | { readonly type: 'redo' }
   | { readonly type: 'next-step' }

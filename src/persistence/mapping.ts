@@ -72,6 +72,11 @@ export function fromRestoredSession(restored: RestoredSession): SessionState {
     strokes: pick(checkpoint.committedStrokeIds),
     redoStack: pick(checkpoint.redoStrokeIds),
     nextSequence: checkpoint.nextSequence,
+    // A clear is undoable for as long as the session is open, not across a
+    // reload: the checkpoint shape is unchanged, so there is nothing to read
+    // back. Until new work lands, the stored drawing is what the saved
+    // checkpoint still holds (see `saveProgress`), so nothing is lost either.
+    clearedArtworks: [],
     finished: checkpoint.finished,
   };
 }

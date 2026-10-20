@@ -20,6 +20,11 @@ export containing only the child's drawing.
   screen without waiting on storage. Changing a tool or mode while the drawing
   opens keeps the saved strokes, and an empty session cannot replace them.
 - Canvas drawing with Pointer Events, pen / brush / eraser, undo and redo.
+- With the eraser chosen, *Hapus semua* clears the whole drawing, but only
+  after asking "Mau mulai dengan gambar kosong?". *Batalkan* brings the
+  drawing back while the canvas is still empty. The clear lasts for the open
+  session only: it is not saved, so reopening the app restores the last saved
+  drawing.
 - **Pencil mode** (stylus only) and **finger mode**, switchable at any time
   without losing the drawing.
 - Three assistance levels: dashed guides always visible, guides that fade after

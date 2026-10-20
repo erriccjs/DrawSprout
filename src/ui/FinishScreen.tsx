@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { LessonPackage } from '../lesson-data/schema';
 import type { SessionState } from '../lesson-engine/types';
 import { artworkFileName, exportArtworkPng, renderArtworkToCanvas } from '../renderer/export';
+import { ClearArtworkPrompt } from './ClearArtworkPrompt';
 import { toRenderStrokes } from './render-adapter';
 
 interface FinishScreenProps {
@@ -95,17 +96,11 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onChoose
       </div>
 
       {askingToClear && (
-        <div className="finish__choice" role="group" aria-label="Pilihan gambar lagi">
-          <h2>Mau mulai dengan gambar kosong?</h2>
-          <div className="finish__actions">
-            <button type="button" className="button" onClick={onKeepDrawing} autoFocus>
-              Gambar lama tetap ada
-            </button>
-            <button type="button" className="button" onClick={onStartFresh}>
-              Ya, mulai gambar baru
-            </button>
-          </div>
-        </div>
+        <ClearArtworkPrompt
+          label="Pilihan gambar lagi"
+          onKeep={onKeepDrawing}
+          onClear={onStartFresh}
+        />
       )}
 
       {savedName !== null && (
