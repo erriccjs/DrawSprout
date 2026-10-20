@@ -226,6 +226,13 @@ The eraser writes a `destination-out` stroke into the active layer. Undo is then
 uniform over one list, and FR-02's "undo restores deletions" is free rather than
 a special case.
 
+"Hapus semua" is the one exception: it is not a stroke. The session keeps each
+cleared drawing whole in `clearedArtworks` (stacked, so a later clear never
+buries an earlier one), and `undo` restores the most recent one only while the
+canvas is empty, so two drawings are never laid over each other. It is held in
+the session only; the checkpoint shape is unchanged, so a reload cannot undo a
+clear.
+
 ### D-27 — History is unbounded
 
 FR-02 asks for at least 50 undoable operations. The strokes *are* the artwork, so
