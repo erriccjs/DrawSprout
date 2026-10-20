@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "drawsprout",
+  // Assets only. No `main`: the Vite build is uploaded as it stands, including
+  // dist/sw.js written after the bundle. A Worker script would bring back the
+  // Cloudflare Vite plugin path that skipped that file.
+  // The date already on the deployed Worker. Node.js compatibility is the
+  // default on or after 2026-08-04, so no compatibility_flags are set.
+  "compatibility_date": "2026-10-19",
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "assets": {
+    "directory": "./dist",
+    // A missing file is index.html. A path that matches a file, including
+    // /sw.js, is that file. See https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/
+    "not_found_handling": "single-page-application"
+  }
+}

@@ -456,3 +456,66 @@ actions stack full width in portrait and sit side by side in landscape, and
 each stays a 48px target. "Hapus semua" (the eraser's whole-drawing clear)
 keeps its own row in the phone tool group instead of being squeezed into a
 48px tool chip.
+
+### D-48 — Deploy the Vite build as static assets, with no Worker script
+
+The live Worker is `drawsprout`, on `drawsprout.erriccjs.cloud`, deployed by
+Workers Builds (`npm run build`, then `npx wrangler deploy`, root `/`, branch
+`main`). The first build had no Wrangler config. `wrangler deploy` then
+auto-configures a detected Vite app: it writes config and injects
+`@cloudflare/vite-plugin` into `vite.config.ts`
+([automatic configuration](https://developers.cloudflare.com/workers/framework-guides/automatic-configuration/)).
+That plugin collects assets during the Vite build. `drawsproutOffline()` (D-46)
+writes `dist/sw.js` in `closeBundle`, after that collection, so the upload did
+not contain the worker. On the live site `/sw.js` is the single-page fallback,
+`index.html`.
+
+**Choice.** Commit `wrangler.jsonc` and depend on Wrangler 4 (`^4`, locked by
+`package-lock.json`). A config file on disk is what skips automatic
+configuration, so Workers Builds can keep the same two commands and the locked
+CLI uploads the directory `npm run build` already produced. `vite.config.ts` is
+not an input to deploy.
+
+The file is assets only:
+
+- `name` is `drawsprout`, the existing Worker.
+- `compatibility_date` is `2026-10-19`, the date already on the deployed
+  Worker. Docs tell a brand-new Worker to use today's date (`2026-10-20`).
+  This Worker is not new, and an assets-only deploy has no runtime that needs
+  the newer date, so the date stays. Node.js compatibility is already the
+  default for dates on or after `2026-08-04`, so `compatibility_flags` is
+  omitted.
+- `observability.enabled` is `true`, and `observability.traces.enabled` is
+  `true`. In Wrangler 4.151 the top-level flag turns logs on and leaves traces
+  off. The deployed Worker currently has traces off; this turns them on.
+- No `main`, and no assets binding. A binding is only valid alongside a script.
+- `assets.directory` is `./dist`. `assets.not_found_handling` is
+  `single-page-application`.
+
+Routing follows the static-assets decision diagram: a request that matches a
+file is served as that file, and only a miss is rewritten to `/index.html`.
+`/sw.js` is a file in `dist/`, so the fallback does not replace it. Wrangler
+sets `Content-Type` from the extension at upload, so the response is
+JavaScript. `routes` is omitted. Wrangler publishes custom domains only when
+the config lists them, so `drawsprout.erriccjs.cloud` is left in place.
+`workers_dev` is also omitted. With no routes, Wrangler defaults it to
+enabled, which is already the deployed setting, including Preview URLs.
+
+`public/_headers` sets `Cache-Control: no-cache` on `/sw.js` and
+`/manifest.webmanifest`. Both URLs are stable: the script is not content-hashed,
+and the manifest is the Home Screen metadata (D-37). Hashed files under
+`/assets/` keep the platform default (`public, max-age=0, must-revalidate`).
+Registration already uses `updateViaCache: 'none'` (D-46). The header is what a
+browser or shared cache sees on the fetch itself. Lines starting with `#` are
+comments in the Workers `_headers` parser.
+
+`_headers` and `_redirects` are not served assets. `shouldPrecache` skips both.
+If install fetched `/_headers`, the single-page fallback would return
+`index.html`, the checksum would fail, and the shell would never report itself
+ready.
+
+`.wrangler/` is gitignored. It is local dev state.
+
+**Not done.** Checked with `wrangler deploy --dry-run` and a local `wrangler dev`
+of the built `dist/`. Not deployed. The live `/sw.js` response stays HTML until
+Workers Builds deploys this config.

@@ -6,3 +6,5 @@ coverage/
 .DS_Store
 .vite/
 .vitest/
+# Wrangler local state. Not part of the deploy.
+.wrangler/
