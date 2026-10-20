@@ -10,7 +10,9 @@ import { gateUpdate } from './offline/update-policy';
 import { useOfflineSupport } from './offline/useOffline';
 import { DrawingPad } from './ui/DrawingPad';
 import { LessonPicker } from './ui/LessonPicker';
+import { TabletNotice } from './ui/TabletNotice';
 import { newId } from './ui/ids';
+import { dismissTabletNotice, isTabletNoticeDismissed } from './ui/tablet-notice';
 import { useLayoutTier } from './ui/useLayoutTier';
 import { useSessionBootstrap } from './ui/useSessionBootstrap';
 
@@ -51,6 +53,13 @@ export function App() {
   const [exitNotice, setExitNotice] = useState<string | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [saveInFlight, setSaveInFlight] = useState(false);
+  const [tabletNoticeDismissed, setTabletNoticeDismissed] = useState(isTabletNoticeDismissed);
+  const showTabletNotice = layout !== 'tablet' && !tabletNoticeDismissed;
+
+  const dismissTabletHint = () => {
+    dismissTabletNotice();
+    setTabletNoticeDismissed(true);
+  };
 
   const updateGate = gateUpdate({
     surface: openLesson ? 'drawing' : 'picker',
@@ -161,7 +170,8 @@ export function App() {
   };
 
   return (
-    <main className="shell" data-layout={layout}>
+    <main className="shell" data-layout={layout} data-tablet-notice={showTabletNotice ? 'open' : 'closed'}>
+      {showTabletNotice && <TabletNotice onDismiss={dismissTabletHint} />}
       {openLesson ? (
         <DrawingPad
           key={`${openLesson.initialState.sessionId}:${openLesson.revision}`}
