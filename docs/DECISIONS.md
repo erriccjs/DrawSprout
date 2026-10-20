@@ -23,11 +23,13 @@ The app indexes into step and stroke arrays constantly. `strict` plus
 9-step lesson" into a compile error instead of a blank screen in front of a
 child.
 
-### D-03 — Dependencies kept to React and React DOM
+### D-03 — Runtime dependencies kept to React and React DOM
 
 No state library, no canvas library, no IndexedDB wrapper. PRD section 19 says a
 drawing library should be chosen *after* an input spike on real devices, so
-committing to one now would prejudge that. `npm audit` reports 0 vulnerabilities.
+committing to one now would prejudge that. The service worker is bundled with
+esbuild, which Vite already required; it is a devDependency, not a runtime one
+(D-46). `npm audit` reports 0 vulnerabilities.
 
 ## Architecture
 
@@ -294,12 +296,12 @@ browser and the system decide.
 
 ## PWA
 
-### D-37 — Manifest now, service worker later
+### D-37 — Manifest ships with the shell
 
-A manifest ships so the lesson can be added to the Home Screen, which is the part
-of "web/PWA" the first milestone needs. **There is no service worker, so the app
-is not offline-capable** and nothing in the UI claims it is. FR-23 and AT-19 are
-M3.
+A manifest ships so the lesson can be added to the Home Screen. The icon is the
+same SVG the document already used. Whether a given browser accepts an SVG icon
+for installation has not been checked on a device. The service worker that makes
+the shell available offline is D-46.
 
 ### D-38 — Persistent storage is requested, never assumed
 
@@ -349,3 +351,63 @@ is how "no guide reaches the export" is tested directly.
 A Chrome DevTools pass confirmed the app boots, draws, autosaves and resumes.
 That is browser emulation. It is never reported as a device test, and every
 device-dependent acceptance test is listed as unverified in the plan.
+
+### D-46 — Hand-written service worker, bundled with esbuild
+
+FR-23 needs the installed app, and an ordinary browser tab, to cold-launch and
+run the bundled lessons with no network after the first visit. FR-25, the update
+half, needs a new version to wait until the child is back on the
+picture-choosing screen.
+
+**Choice.** A small service worker in `src/offline/service-worker.ts`, bundled to
+`dist/sw.js` by esbuild at the end of `vite build`. The manifest is the list of
+files Vite just wrote, minus the worker itself, each with a SHA-256. Install
+downloads every file, checks the hash, and only then writes the cache. The page
+shows *Bisa dibuka tanpa internet* only when the active worker reports every
+bundled lesson at the content version the running page was built with.
+
+Workbox and `vite-plugin-pwa` were the other option. They were not used:
+
+- A runtime dependency would have broken D-03. Workbox's precache runtime would
+  ship to the tablet.
+- Today's offline set is the app shell. Lessons are compiled into the JavaScript
+  bundle; there is no API and no photo package to cache at runtime.
+- The update rule is the product rule: do not take over while a drawing is open.
+  Workbox recipes often call `skipWaiting` during install. That is the behaviour
+  the gate exists to prevent. A short worker makes the forbidden path obvious
+  and unit-testable.
+
+**Trade-off, accepted.** We own cache cleanup, the navigation fallback, and the
+checksum loop. We do not get Workbox's navigation preload or its runtime caching
+strategies. If a later milestone downloads lesson packages at runtime, those
+belong in a separate cache with their own validation, not in this precache.
+
+**Update flow.** Install never activates over an open page. The new worker waits.
+The page offers it only on the picture-choosing screen, after any save started
+on the way there has settled, and only after someone taps *Muat versi baru*.
+*Nanti saja* hides the prompt until the next visit to that screen. The reload
+happens when the worker we asked for takes control — a first install also claims
+the page, and that claim must not reload, so a reload is tied to the explicit
+request. A waiting worker is ignored unless a controller is already in place,
+because the first install can report `waiting` for a moment before anything
+controls the page.
+
+**Drawings survive an update because the worker never opens IndexedDB.** Cache
+deletion is limited to names with the precache prefix. The worker source is
+tested to contain no `indexedDB`, `localStorage`, or `deleteDatabase`. This is a
+structural guarantee in the repository, not a measurement of browser eviction.
+D-38 is unchanged: persistent storage is still requested and never assumed.
+
+**Dev server.** The worker is registered only in a production build. A cached
+shell in `npm run dev` would hide the edit that was just saved. `npm run preview`
+is the local way to exercise it.
+
+**Assumption.** The app is served from the origin root, matching `start_url` and
+the worker scope. A subpath deploy is not supported.
+
+**Checked on this machine, not a device result.** On 20 October 2026, headless
+Chrome loaded `npm run preview` once online, then opened a new tab with the
+network disabled. The navigation was served by the worker (HTTP 200), the
+picture-choosing screen showed the offline-ready line and no update prompt, and
+the cat lesson opened at step 1 with *Tersimpan*. That is a desktop simulation.
+It is not AT-19.

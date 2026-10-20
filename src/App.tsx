@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ArtworkSurface } from './renderer/artwork-surface';
 import { getLesson } from './lesson-data';
 import type { LessonPackage } from './lesson-data/schema';
@@ -6,6 +6,8 @@ import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
 import type { SessionPreferences, SessionState, ToolPreferences } from './lesson-engine/types';
 import { fromRestoredSession } from './persistence/mapping';
 import type { SessionCheckpoint } from './persistence/types';
+import { gateUpdate } from './offline/update-policy';
+import { useOfflineSupport } from './offline/useOffline';
 import { DrawingPad } from './ui/DrawingPad';
 import { LessonPicker } from './ui/LessonPicker';
 import { newId } from './ui/ids';
@@ -31,6 +33,13 @@ const LOAD_FAILURE_NOTICE = 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mula
 
 export function App() {
   const bootstrap = useSessionBootstrap();
+  const {
+    ready: offlineReady,
+    updateWaiting,
+    applyRequested,
+    requestApply,
+    applyUpdate,
+  } = useOfflineSupport();
   const [openLesson, setOpenLesson] = useState<OpenLesson | null>(null);
   const selectionRef = useRef(0);
   const touchedRef = useRef(false);
@@ -38,6 +47,20 @@ export function App() {
   const surfaceRef = useRef<ArtworkSurface | null>(null);
   const handoffRef = useRef<{ state: SessionState; saved: Promise<boolean> } | null>(null);
   const [exitNotice, setExitNotice] = useState<string | null>(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [saveInFlight, setSaveInFlight] = useState(false);
+
+  const updateGate = gateUpdate({
+    surface: openLesson ? 'drawing' : 'picker',
+    updateWaiting,
+    saveInFlight,
+    applyRequested,
+    dismissed: updateDismissed,
+  });
+
+  useEffect(() => {
+    if (updateGate.mayApply) applyUpdate();
+  }, [updateGate.mayApply, applyUpdate]);
 
   if (bootstrap.status === 'loading') {
     return (
@@ -57,6 +80,7 @@ export function App() {
   }
 
   const selectLesson = (lessonId: string) => {
+    setUpdateDismissed(false);
     const selection = ++selectionRef.current;
     const handoff = handoffRef.current?.state.lessonId === lessonId ? handoffRef.current : null;
     touchedRef.current = handoff !== null;
@@ -177,13 +201,20 @@ export function App() {
             selectionRef.current += 1;
             setOpenLesson(null);
             setExitNotice(null);
+            setSaveInFlight(true);
             void saved.then((wasSaved) => {
+              setSaveInFlight(false);
               if (wasSaved && handoffRef.current === handoff) handoffRef.current = null;
               if (!wasSaved) {
                 setExitNotice(
                   'Gambar tadi mungkin belum tersimpan. Tidak apa-apa, kamu bisa menggambar lagi.',
                 );
               }
+            }, () => {
+              setSaveInFlight(false);
+              setExitNotice(
+                'Gambar tadi mungkin belum tersimpan. Tidak apa-apa, kamu bisa menggambar lagi.',
+              );
             });
           }}
         />
@@ -191,6 +222,10 @@ export function App() {
         <LessonPicker
           onSelect={selectLesson}
           notice={exitNotice}
+          offlineReady={offlineReady}
+          updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}
+          onApplyUpdate={requestApply}
+          onDismissUpdate={() => { setUpdateDismissed(true); }}
         />
       )}
     </main>
