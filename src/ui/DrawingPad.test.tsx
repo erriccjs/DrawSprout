@@ -519,7 +519,7 @@ describe('pinch and pan', () => {
     const canvas = stageCanvas(view.container);
     const frame = view.container.querySelector('.stage__frame');
     expect(frame?.querySelector('.guide-overlay')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Sesuai layar' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Sesuai layar' })).toBeNull();
 
     const afterMount = commits;
     act(() => {
@@ -538,10 +538,11 @@ describe('pinch and pan', () => {
       pointerUp(canvas, { x: 200, y: 300 }, { pointerId: 1, pointerType: 'touch' });
     });
     const fit = screen.getByRole('button', { name: 'Sesuai layar' });
-    expect(fit.hasAttribute('disabled')).toBe(false);
+    expect(fit.querySelector('svg')).toBeTruthy();
+    expect(fit.textContent).not.toContain('⛶');
     act(() => fit.click());
     expect((frame as HTMLElement).style.transform).toContain('scale(1)');
-    expect(screen.getByRole('button', { name: 'Sesuai layar' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Sesuai layar' })).toBeNull();
     // The guide is still a child of the transformed frame, so it cannot drift
     // from the paper. Export never reads this transform.
     expect(frame?.querySelector('.guide-overlay')).toBeTruthy();

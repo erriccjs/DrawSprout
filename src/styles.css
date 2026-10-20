@@ -404,10 +404,6 @@ html:has(.pad) body {
   overflow: hidden;
 }
 
-.chip--mode[aria-pressed='true']::after {
-  content: none;
-}
-
 .chip-icon {
   display: block;
   flex: 0 0 auto;
@@ -985,6 +981,13 @@ html:has(.pad) body {
 
 .chip[aria-pressed='true']::after {
   content: ' ✓';
+}
+
+/* Icon buttons in the dock are too small for a check glyph. The fill and the
+   border are the pressed state, for the mode box, the tools, and fullscreen. */
+.float-dock .toolbar:not(.toolbar--settings) .chip[aria-pressed='true']::after,
+.float-dock__fullscreen[aria-pressed='true']::after {
+  content: none;
 }
 
 .swatches {
@@ -1793,7 +1796,6 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   font-size: 1.25rem;
 }
 
-.shell[data-layout='phone-landscape'] .toolbar__group--tools .chip[aria-pressed='true']::after,
 .shell[data-layout='phone-landscape'] .pad__tabs .chip[aria-pressed='true']::after {
   position: absolute;
   top: 1px;
@@ -2065,8 +2067,15 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   height: 48px;
 }
 
+/* Under the folded step card, in the band above the sheet. The sheet itself
+   sits lower, just above the brush slider, so this does not cover the tools. */
 .shell[data-layout='phone-portrait'] .resume-toast {
-  bottom: 196px;
+  top: 128px;
+  bottom: auto;
+}
+
+.shell[data-layout='phone-portrait'][data-tablet-notice='open'] .resume-toast {
+  top: 196px;
 }
 
 .shell[data-layout='phone-landscape'] .resume-toast {

@@ -663,6 +663,10 @@ this change, the dock stays 70px wide on a tablet and 310px on a 390px-wide
 phone, and the toolbar panel stays 70px and 262px. The help sheet still
 explains the modes. It is not the only place the mode can be changed.
 
+The pressed mode button and the pressed tool button are the accent fill and
+the border. A check glyph crowded those icons, so the dock does not draw one
+(D-60). Text buttons outside that dock can still use the check (D-39).
+
 ### D-56 — Continuing a saved drawing is a toast
 
 The sentence "Karya terakhirmu dilanjutkan dari tempat kamu berhenti." was a
@@ -675,6 +679,10 @@ ulang* on the toast starts the lesson over: the session is deleted and
 `restart` runs, the same fresh start the finish screen uses. A load failure,
 a full disk, and a lesson whose content version changed stay banners, because
 those are warnings rather than "you are already continuing".
+
+On a portrait phone the toast sits under the folded step reference, in the
+band above the sheet. It does not cover the mode box or the other tools
+(D-60).
 
 ### D-57 — Finger mode avoids the screen edge; a page cannot stop Android gestures
 
@@ -741,3 +749,22 @@ warna". It opens the same colour popover as the circle in the header.
 *Bantuan* is a button inside that popover and opens the help sheet
 (assistance, the mode explanation, and boundary assist on a colour step).
 The header circle still changes colour on its own.
+
+### D-60 — Dock icons stay readable, and the phone sheet sits above the tools
+
+The pressed check glyph landed on the hand icon and under the pencil. *Layar
+penuh* and *Sesuai layar* were both corner-bracket marks, and the fit control
+stayed on screen, greyed, while the paper was already fitted. On a 390×844
+phone the resume toast covered the mode box, and the 4:3 sheet was pinned
+under the step reference, leaving an empty band above the toolbar.
+
+**Choice.** Pressed dock icons (mode, tools, fullscreen) use the fill and the
+border only. *Sesuai layar* is a magnifying glass with a "1" in the lens, and
+it is not shown while zoom is 1. *Layar penuh* stays the four corner brackets.
+
+On a portrait phone the sheet is still the largest 4:3 that fits the width,
+with the 28px side inset (D-57). It rests just above the brush slider
+(`drawingChrome` bottom is that slider's 128px offset plus its 132px height,
+plus 16px) instead of under the step card. The toast uses the band that opens
+above the sheet. A taller phone is where this shows; the sheet does not grow
+past 4:3, because cropping the lesson would hide strokes at the sides.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawingChrome } from './drawing-chrome';
+import { drawingChrome, PHONE_PORTRAIT_SLIDER_CLEARANCE } from './drawing-chrome';
 
 describe('drawing chrome', () => {
   function band(width: number, height: number, layout: 'tablet' | 'phone-portrait' | 'phone-landscape', notice = false) {
@@ -18,6 +18,12 @@ describe('drawing chrome', () => {
       expect(sample.chrome.top).toBeGreaterThan(48);
       expect(sample.chrome.bottom).toBeGreaterThan(48);
     }
+  });
+
+  it('clears the portrait-phone brush slider so the sheet can sit above the tools', () => {
+    const chrome = drawingChrome('phone-portrait', false);
+    expect(chrome.bottom).toBeGreaterThanOrEqual(PHONE_PORTRAIT_SLIDER_CLEARANCE);
+    expect(chrome.bottom).toBe(PHONE_PORTRAIT_SLIDER_CLEARANCE + 16);
   });
 
   it('drops the paper further when the phone note is open', () => {

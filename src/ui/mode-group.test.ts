@@ -17,6 +17,12 @@ describe('mode group width', () => {
     expect(css).toMatch(/min-height:\s*44px/);
   });
 
+  it('shows a pressed dock icon with fill and border, not a check glyph', () => {
+    const rule = css.match(/\.float-dock \.toolbar:not\(\.toolbar--settings\) \.chip\[aria-pressed='true'\]::after,[\s\S]*?\}/)?.[0] ?? '';
+    expect(rule).toMatch(/content:\s*none/);
+    expect(css).not.toMatch(/phone-landscape'\] \.toolbar__group--tools \.chip\[aria-pressed='true'\]::after/);
+  });
+
   it('lays the portrait-phone mode box in a row no wider than two tool buttons', () => {
     const rule = css.match(/phone-portrait'\] \.float-dock \.toolbar__group--mode \{[^}]+\}/)?.[0] ?? '';
     expect(rule).toMatch(/flex-direction:\s*row/);

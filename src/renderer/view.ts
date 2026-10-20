@@ -41,6 +41,11 @@ export function placementForTop(stageHeight: number, fittedHeight: number, top: 
   return { offsetX: 0, offsetY: desired - centeredTop };
 }
 
+/** Rest the sheet on the bottom of the free band, `bottom` px above the stage edge. */
+export function placementForBottom(stageHeight: number, fittedHeight: number, bottom: number): PaperPlacement {
+  return placementForTop(stageHeight, fittedHeight, stageHeight - bottom - fittedHeight);
+}
+
 export interface FrameRect {
   readonly left: number;
   readonly top: number;

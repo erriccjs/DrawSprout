@@ -35,8 +35,9 @@ export containing only the child's drawing.
   it does not leave a dot or a line. In pencil mode the fingers can gesture
   while a stylus stroke continues.
 - Pinch to zoom and two-finger drag to pan, with no rotation. *Sesuai layar*
-  fits the paper again. Strokes stay in the 1000×750 lesson space. Export does
-  not include the zoom.
+  (a magnifying glass) appears once the paper is zoomed and fits it again.
+  *Layar penuh* stays the corner-bracket control. Strokes stay in the 1000×750
+  lesson space. Export does not include the zoom.
 - The step reference (instruction, progress dots, and a small example that
   opens larger) sits at the top of the drawing screen, so a hand resting on
   the lower part does not cover it. *Lanjut* and *Kembali* stay on the bottom
@@ -52,7 +53,9 @@ export containing only the child's drawing.
   from *Jari* and *Pensil* on the toolbar, without losing the drawing and
   without opening help.
 - Continuing a saved drawing shows a small toast for about 3 seconds. Drawing
-  is not blocked. *Mulai ulang* on the toast starts that picture over.
+  is not blocked. *Mulai ulang* on the toast starts that picture over. On a
+  phone the toast sits under the step reference, and the sheet rests above
+  the tools.
 - In finger mode, a touch in the outer 28px of the screen does not start a
   stroke, and a very large reported contact is ignored. The paper stays inset
   from the side edges. *Layar penuh* asks the browser to go fullscreen, and

@@ -36,6 +36,7 @@ import {
   CENTERED_PLACEMENT,
   FIT_VIEW,
   pinchView,
+  placementForBottom,
   placementForTop,
   sameView,
   viewTransformCss,
@@ -156,7 +157,13 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const placementRef = useRef<PaperPlacement>(CENTERED_PLACEMENT);
   const placement = useMemo(() => {
     if (!viewport || stageBox.height <= 0) return CENTERED_PLACEMENT;
-    return placementForTop(stageBox.height, viewport.cssHeight, drawingChrome(layout, tabletNoticeOpen).top);
+    const chrome = drawingChrome(layout, tabletNoticeOpen);
+    // A portrait phone is taller than a 4:3 sheet. Rest the sheet on the
+    // bottom of the free band so the open space above the tools is the paper.
+    if (layout === 'phone-portrait') {
+      return placementForBottom(stageBox.height, viewport.cssHeight, chrome.bottom);
+    }
+    return placementForTop(stageBox.height, viewport.cssHeight, chrome.top);
   }, [layout, viewport, stageBox.height, tabletNoticeOpen]);
 
   const applyView = useCallback((next: CanvasView, commit: boolean) => {
@@ -569,15 +576,17 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
             <PaletteIcon />
           </button>
           <FullscreenToggle />
-          <button
-            type="button"
-            className="chip float-dock__fit"
-            aria-label="Sesuai layar"
-            disabled={view.zoom === 1 && view.panX === 0 && view.panY === 0}
-            onClick={() => applyView(FIT_VIEW, true)}
-          >
-            <span aria-hidden="true">⛶</span>
-          </button>
+          {(view.zoom !== 1 || view.panX !== 0 || view.panY !== 0) && (
+            <button
+              type="button"
+              className="chip float-dock__fit"
+              aria-label="Sesuai layar"
+              title="Sesuai layar"
+              onClick={() => applyView(FIT_VIEW, true)}
+            >
+              <FitIcon />
+            </button>
+          )}
           <div className="pad__control-panel float-help" data-active={controlTab === 'help'}>
             <ToolbarSettings
               state={state}
@@ -608,6 +617,16 @@ function PaletteIcon() {
       <circle cx="10.2" cy="7.1" r="1.3" fill="#f0b429" />
       <circle cx="14" cy="7.1" r="1.3" fill="#3d9a5f" />
       <circle cx="16.4" cy="10.2" r="1.3" fill="#3d6bdb" />
+    </svg>
+  );
+}
+
+function FitIcon() {
+  return (
+    <svg className="chip-icon" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+      <circle cx="10" cy="10" r="5.5" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M14.2 14.2 L20 20" />
+      <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M10 7.4 v5.2 M8.3 12.6 h3.4" />
     </svg>
   );
 }
