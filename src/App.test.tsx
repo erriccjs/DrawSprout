@@ -152,12 +152,13 @@ describe('lesson picker', () => {
     expect(screen.queryByText(/Ada versi baru/)).toBeNull();
 
     await returnToPicker();
-    fireEvent.click(screen.getByRole('button', { name: 'Nanti saja' }));
+    // The prompt stays hidden until the exit save settles, so wait for it.
+    fireEvent.click(await screen.findByRole('button', { name: 'Nanti saja' }));
     expect(screen.queryByRole('button', { name: 'Muat versi baru' })).toBeNull();
 
     await open('Kucing');
     await returnToPicker();
-    fireEvent.click(screen.getByRole('button', { name: 'Muat versi baru' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Muat versi baru' }));
     expect(screen.getByText('Memuat versi baru…')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Kucing/ }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('heading', { name: 'Mau gambar apa hari ini?' })).toBeTruthy();
