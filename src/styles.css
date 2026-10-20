@@ -368,38 +368,40 @@ html:has(.pad) body {
   width: max-content;
 }
 
+/* Mode is its own box, the same width as one tool button. The icons stack
+   so the box does not widen the vertical dock. Phone portrait lays them in
+   a row, still no wider than two tool buttons. */
 .float-dock .toolbar__group--mode {
-  flex-direction: row;
+  flex-direction: column;
   flex-wrap: nowrap;
-  justify-content: flex-end;
+  align-items: stretch;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  background: #fff;
 }
 
 .float-dock .toolbar__group--mode .chip--mode {
-  flex: 0 0 auto;
-  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  box-sizing: border-box;
+  width: 100%;
   min-width: 0;
   max-width: none;
   height: 48px;
-  padding: 0 10px;
-  overflow: visible;
-  font-size: 0.95rem;
-}
-
-.float-dock .toolbar__group--mode .chip__label {
-  position: static;
-  width: auto;
-  height: auto;
-  margin: 0 0 0 4px;
+  min-height: 44px;
   padding: 0;
-  overflow: visible;
-  clip: auto;
-  white-space: nowrap;
-}
-
-.chip--mode {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+  overflow: hidden;
 }
 
 .chip--mode[aria-pressed='true']::after {
@@ -2024,12 +2026,43 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   padding: 2px;
 }
 
-.shell[data-layout='phone-portrait'] .float-dock .toolbar:not(.toolbar--settings),
+.shell[data-layout='phone-portrait'] .float-dock .toolbar:not(.toolbar--settings) {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  /* Five 48px tool buttons and the four gaps between them. The mode box
+     wraps onto its own line inside this width, so the panel stays the
+     size it had before the mode box existed. */
+  width: calc(48px * 5 + 4px * 4);
+  max-width: 100%;
+}
+
 .shell[data-layout='phone-portrait'] .float-dock .toolbar__group--tools,
 .shell[data-layout='phone-portrait'] .float-dock .toolbar__group--history {
   flex-direction: row;
   align-items: center;
-  width: auto;
+  width: max-content;
+}
+
+.shell[data-layout='phone-portrait'] .float-dock .toolbar__group--mode {
+  flex-direction: row;
+  align-items: center;
+  flex: 0 0 100%;
+  justify-content: flex-end;
+  width: 100px;
+  min-width: 0;
+  max-width: 100px;
+  margin-left: auto;
+  padding: 2px;
+  gap: 2px;
+}
+
+.shell[data-layout='phone-portrait'] .float-dock .toolbar__group--mode .chip--mode {
+  width: 46px;
+  min-width: 44px;
+  max-width: 46px;
+  height: 48px;
 }
 
 .shell[data-layout='phone-portrait'] .resume-toast {

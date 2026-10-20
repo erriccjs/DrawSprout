@@ -67,22 +67,22 @@ export function Toolbar({
         <button
           type="button"
           className="chip chip--mode"
-          aria-label="Mode jari"
-          aria-pressed={state.inputMode === 'finger'}
-          onClick={() => dispatch({ type: 'set-input-mode', mode: 'finger' })}
-        >
-          <FingerIcon />
-          <span className="chip__label">Jari</span>
-        </button>
-        <button
-          type="button"
-          className="chip chip--mode"
           aria-label="Mode pensil"
+          title="Pensil"
           aria-pressed={state.inputMode === 'pencil'}
           onClick={() => dispatch({ type: 'set-input-mode', mode: 'pencil' })}
         >
           <PencilIcon />
-          <span className="chip__label">Pensil</span>
+        </button>
+        <button
+          type="button"
+          className="chip chip--mode"
+          aria-label="Mode jari"
+          title="Jari"
+          aria-pressed={state.inputMode === 'finger'}
+          onClick={() => dispatch({ type: 'set-input-mode', mode: 'finger' })}
+        >
+          <FingerIcon />
         </button>
       </fieldset>
 

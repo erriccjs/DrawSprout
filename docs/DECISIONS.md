@@ -648,11 +648,20 @@ Switching mode used to mean opening the help sheet. On a tablet that control
 was easy to miss, and a child who draws with a finger had no visible way to
 say so.
 
-**Choice.** The toolbar shows two chips, *Jari* and *Pensil*, with a hand icon
-and a pencil icon. The pressed chip is the current mode. One tap switches,
-and the switch is still `set-input-mode`, so the preference is saved as
-before. The help sheet still explains the two modes. It is not the only
-place the mode can be changed.
+**Choice.** The toolbar has its own rounded box for the mode. Inside it are
+two icon buttons, a pencil (*Pensil*) and a hand (*Jari*). The pressed one
+is the current mode. One tap switches, and the switch is still
+`set-input-mode`, so the preference is saved as before. The names are the
+accessible name and the tooltip. They are not drawn as labels, because a
+label made the dock wider than the tool buttons.
+
+When the dock is a column (tablet, and phone landscape), the icons stack and
+the box is 56px wide, the same as one tool button. On a portrait phone the
+toolbar is a row, so the icons sit side by side in a box the width of two
+tool buttons, on its own line under that row. Measured against main before
+this change, the dock stays 70px wide on a tablet and 310px on a 390px-wide
+phone, and the toolbar panel stays 70px and 262px. The help sheet still
+explains the modes. It is not the only place the mode can be changed.
 
 ### D-56 — Continuing a saved drawing is a toast
 

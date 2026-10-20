@@ -139,12 +139,23 @@ describe('starting a lesson', () => {
   it('switches pencil and finger from the toolbar while help is closed', () => {
     const { view } = setup();
     expect(view.container.querySelector('.float-help')?.getAttribute('data-active')).toBe('false');
-    expect(screen.getByRole('button', { name: 'Mode jari' }).getAttribute('aria-pressed')).toBe('true');
+    const finger = screen.getByRole('button', { name: 'Mode jari' });
+    const pencil = screen.getByRole('button', { name: 'Mode pensil' });
+    expect(finger.getAttribute('aria-pressed')).toBe('true');
+    expect(finger.getAttribute('title')).toBe('Jari');
+    expect(pencil.getAttribute('title')).toBe('Pensil');
+    expect(finger.textContent?.trim()).toBe('');
+    expect(pencil.textContent?.trim()).toBe('');
+    expect(finger.querySelector('svg')).toBeTruthy();
+    expect(pencil.querySelector('svg')).toBeTruthy();
+    const modeGroup = finger.closest('.toolbar__group--mode');
+    expect(modeGroup).toBeTruthy();
+    expect(modeGroup?.querySelectorAll('button')).toHaveLength(2);
 
-    act(() => screen.getByRole('button', { name: 'Mode pensil' }).click());
+    act(() => pencil.click());
 
-    expect(screen.getByRole('button', { name: 'Mode pensil' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Mode jari' }).getAttribute('aria-pressed')).toBe('false');
+    expect(pencil.getAttribute('aria-pressed')).toBe('true');
+    expect(finger.getAttribute('aria-pressed')).toBe('false');
     expect(view.container.querySelector('.float-help')?.getAttribute('data-active')).toBe('false');
     expect(screen.getAllByRole('button', { name: 'Mode pensil' })).toHaveLength(1);
   });
