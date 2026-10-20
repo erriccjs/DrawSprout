@@ -317,12 +317,42 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
 
   return (
     <div className="pad">
-      <div className="pad__top">
-        <header className="pad__header">
-          <button type="button" className="button" onClick={choosePicture}>
-            ← Pilih gambar
+      {/* The stage is the whole screen. Controls overlay it; they do not
+          reserve a column, so the paper can use every pixel (D-49). */}
+      <div className="pad__stage" ref={setStage}>
+        <div
+          className="stage__frame"
+          style={
+            viewport
+              ? { width: `${viewport.cssWidth}px`, height: `${viewport.cssHeight}px` }
+              : undefined
+          }
+        >
+          <canvas
+            ref={setCanvas}
+            className="stage__canvas"
+            role="img"
+            aria-label={`Kanvas gambar. ${step.instruction}`}
+          />
+          {viewport && (
+            <GuideOverlay
+              space={lesson.coordinateSpace}
+              paths={step.guidePaths}
+              visible={guidesVisible}
+              widthCss={viewport.cssWidth}
+              heightCss={viewport.cssHeight}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="pad__chrome">
+        <header className="float-header">
+          <button type="button" className="button float-header__back" onClick={choosePicture}>
+            <span aria-hidden="true">← </span>
+            <span className="button__text">Pilih gambar</span>
           </button>
-          <div>
+          <div className="float-header__titles">
             <h1 className="pad__title">{lesson.title}</h1>
             <p className="pad__subtitle">{lesson.subtitle}</p>
           </div>
@@ -331,108 +361,70 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           </p>
         </header>
 
-        {notice !== null && <p className="banner">{notice}</p>}
-        {!durable && (
-          <p className="banner banner--warning">
-            Penyimpanan permanen tidak tersedia di browser ini, jadi karya ini hanya bertahan
-            selama tab terbuka.
-          </p>
-        )}
-        {saveStatus.kind === 'storage-full' && (
-          <p className="banner banner--warning">
-            Penyimpanan penuh. Karya yang sudah tersimpan tetap aman, tetapi goresan terbaru belum
-            tersimpan. Kosongkan ruang, lalu coba lagi.
-          </p>
-        )}
-        {saveStatus.kind === 'failed' && (
-          <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
-        )}
-        {rejection !== null && <p className="banner">{rejection}</p>}
-      </div>
-
-      <div className="pad__body">
-        <div className="pad__stage" ref={setStage}>
-          <div
-            className="stage__frame"
-            style={
-              viewport
-                ? { width: `${viewport.cssWidth}px`, height: `${viewport.cssHeight}px` }
-                : undefined
-            }
-          >
-            <canvas
-              ref={setCanvas}
-              className="stage__canvas"
-              role="img"
-              aria-label={`Kanvas gambar. ${step.instruction}`}
-            />
-            {viewport && (
-              <GuideOverlay
-                space={lesson.coordinateSpace}
-                paths={step.guidePaths}
-                visible={guidesVisible}
-                widthCss={viewport.cssWidth}
-                heightCss={viewport.cssHeight}
-              />
-            )}
-          </div>
+        <div className="float-notices">
+          {notice !== null && <p className="banner">{notice}</p>}
+          {!durable && (
+            <p className="banner banner--warning">
+              Penyimpanan permanen tidak tersedia di browser ini, jadi karya ini hanya bertahan
+              selama tab terbuka.
+            </p>
+          )}
+          {saveStatus.kind === 'storage-full' && (
+            <p className="banner banner--warning">
+              Penyimpanan penuh. Karya yang sudah tersimpan tetap aman, tetapi goresan terbaru belum
+              tersimpan. Kosongkan ruang, lalu coba lagi.
+            </p>
+          )}
+          {saveStatus.kind === 'failed' && (
+            <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
+          )}
+          {rejection !== null && <p className="banner">{rejection}</p>}
         </div>
 
-        {/* On a tablet the rail box disappears (`display: contents`) so the step
-            stays full width above the canvas. On a phone in landscape it becomes
-            the side column, which keeps the canvas as tall as the screen. */}
-        <div className="pad__rail">
+        <div className="step-card">
           <StepPanel lesson={lesson} state={state} step={step} />
-          <aside className="pad__side">
-            <StepNavigation
+          <StepNavigation
+            lesson={lesson}
+            state={state}
+            onFinish={() => dispatch({ type: 'finish' })}
+            dispatch={dispatch}
+          />
+        </div>
+
+        <aside className="float-dock">
+          <div className="pad__control-panel" data-active="true">
+            <Toolbar
               lesson={lesson}
               state={state}
-              onFinish={() => dispatch({ type: 'finish' })}
+              preset={preset}
+              canUndo={canUndo(lesson, state)}
+              canRedo={canRedo(state)}
               dispatch={dispatch}
             />
-            <div className="pad__tabs" role="group" aria-label="Kelompok kontrol">
-              <button
-                type="button"
-                className="chip"
-                aria-pressed={controlTab === 'drawing'}
-                onClick={() => setControlTab('drawing')}
-              >
-                Alat gambar
-              </button>
-              <button
-                type="button"
-                className="chip"
-                aria-pressed={controlTab === 'help'}
-                onClick={() => setControlTab('help')}
-              >
-                Bantuan
-              </button>
-            </div>
-            <div className="pad__control-panel" data-active={controlTab === 'drawing'}>
-              <Toolbar
-                lesson={lesson}
-                state={state}
-                preset={preset}
-                canUndo={canUndo(lesson, state)}
-                canRedo={canRedo(state)}
-                dispatch={dispatch}
-              />
-            </div>
-            <div className="pad__control-panel" data-active={controlTab === 'help'}>
-              <ToolbarSettings
-                state={state}
-                isColorStep={isColorStep}
-                dispatch={dispatch}
-              />
-              <StepControls
-                state={state}
-                guidesVisible={guidesVisible}
-                onShowHint={showHint}
-                dispatch={dispatch}
-              />
-            </div>
-          </aside>
-        </div>
+          </div>
+          <button
+            type="button"
+            className="chip float-dock__help"
+            aria-pressed={controlTab === 'help'}
+            aria-expanded={controlTab === 'help'}
+            onClick={() => setControlTab((tab) => (tab === 'help' ? 'drawing' : 'help'))}
+          >
+            Bantuan
+          </button>
+          <div className="pad__control-panel float-help" data-active={controlTab === 'help'}>
+            <ToolbarSettings
+              state={state}
+              isColorStep={isColorStep}
+              dispatch={dispatch}
+            />
+            <StepControls
+              state={state}
+              guidesVisible={guidesVisible}
+              onShowHint={showHint}
+              dispatch={dispatch}
+            />
+          </div>
+        </aside>
       </div>
     </div>
   );
