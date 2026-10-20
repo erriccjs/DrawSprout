@@ -209,7 +209,7 @@ body {
   pointer-events: none;
 }
 
-.pad__chrome :is(button, a, input, select, label, .step-card, .float-dock, .float-header, .float-notices, .float-help) {
+.pad__chrome :is(button, a, input, select, label, .step-card, .step-nav, .float-dock, .float-header, .float-notices, .float-help) {
   pointer-events: auto;
 }
 
@@ -254,8 +254,8 @@ body {
 
 .float-notices {
   position: absolute;
-  top: calc(max(8px, env(safe-area-inset-top, 0px)) + var(--tap) + 8px);
   left: 50%;
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   width: min(560px, calc(100% - 32px));
   display: flex;
@@ -267,16 +267,16 @@ body {
 .float-dock {
   position: absolute;
   right: max(10px, env(safe-area-inset-right, 0px));
-  top: 50%;
-  transform: translateY(-50%);
+  top: 168px;
+  bottom: 96px;
   z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  justify-content: center;
   gap: 8px;
   width: max-content;
   max-width: min(300px, 46vw);
-  max-height: calc(100% - 180px);
 }
 
 .float-dock .pad__control-panel {
@@ -343,12 +343,15 @@ body {
 .brush-slider {
   position: absolute;
   left: max(8px, env(safe-area-inset-left, 0px));
-  top: 46%;
-  transform: translateY(-50%);
+  top: 168px;
+  bottom: 96px;
   z-index: 3;
   width: 64px;
-  height: min(46vh, 340px);
-  min-height: 188px;
+  height: auto;
+  min-height: 0;
+  max-height: 340px;
+  margin-top: auto;
+  margin-bottom: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -457,10 +460,10 @@ body {
 .step-card {
   position: absolute;
   left: 50%;
-  bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  top: 72px;
   transform: translateX(-50%);
   z-index: 4;
-  width: min(760px, calc(100% - 24px));
+  width: min(920px, calc(100% - 24px));
   display: flex;
   align-items: center;
   gap: 12px;
@@ -468,6 +471,34 @@ body {
   background: rgba(255, 255, 255, 0.96);
   border-radius: 18px;
   box-shadow: 0 8px 28px rgba(31, 41, 51, 0.16);
+}
+
+/* Lanjut stays on the bottom edge: the hand already rests there, so the
+   next-step tap does not reach across the paper or cover the instruction. */
+.step-nav {
+  position: absolute;
+  left: 50%;
+  bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 4;
+  width: min(420px, calc(100% - 24px));
+}
+
+.step-nav .step-panel__nav {
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+}
+
+.step-nav .button--primary {
+  min-height: 72px;
+  min-width: 160px;
+  font-size: 1.4rem;
+  border-radius: 16px;
+}
+
+.step-nav .button {
+  min-height: 72px;
 }
 
 .pad__control-panel[data-active='false'] {
@@ -613,12 +644,20 @@ body {
   margin: 2px 0 0;
   font-size: 1.25rem;
   line-height: 1.25;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .step-panel__hint {
   margin: 2px 0 0;
   color: var(--muted);
   font-size: 0.875rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
 }
 
 .step-panel__nav {
@@ -1375,10 +1414,19 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   height: 48px;
 }
 
-.shell[data-layout^='phone'] .step-card .button--primary {
+.shell[data-layout^='phone'] .step-nav .button--primary {
   min-height: 56px;
-  min-width: 104px;
-  font-size: 1.15rem;
+  min-width: 120px;
+  font-size: 1.2rem;
+}
+
+.shell[data-layout^='phone'] .step-nav .button {
+  min-height: 56px;
+}
+
+.shell[data-layout^='phone'] .step-nav .step-panel__nav {
+  position: static;
+  background: transparent;
 }
 
 .shell[data-layout^='phone'] .step-panel__counter {
@@ -1820,69 +1868,46 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   width: max-content;
 }
 
-/* Phone portrait: the paper is 4:3 and is shifted up under the header.
-   Slider, tools and the step card stack in the band directly under that paper
-   (75vw is the fitted height) so they do not cover the drawing. */
-.shell[data-layout='phone-portrait'] {
-  --phone-paper-top: 64px;
-}
-
-.shell[data-layout='phone-portrait'][data-tablet-notice='open'] {
-  --phone-paper-top: 128px;
-}
-
-.shell[data-layout='phone-portrait'] .step-card {
-  top: calc(var(--phone-paper-top) + 75vw + 200px);
-  bottom: auto;
+/* Phone: the step reference sits under the header (and under the tablet note
+   when that is open). Lanjut stays at the bottom edge. These tops match
+   drawingChrome() in src/ui/drawing-chrome.ts. */
+.shell[data-layout^='phone'] .step-card {
+  top: 60px;
   width: calc(100% - 16px);
   gap: 8px;
   padding: 6px 8px;
 }
 
-.shell[data-layout='phone-portrait'] .step-panel__nav {
-  flex-direction: row;
-  align-items: center;
+.shell[data-layout^='phone'][data-tablet-notice='open'] .step-card {
+  top: 124px;
+}
+
+.shell[data-layout^='phone']:has(> .pad) .tablet-notice {
+  top: 58px;
+  padding: 6px 8px 6px 12px;
+  gap: 8px;
+}
+
+.shell[data-layout^='phone'] .tablet-notice p {
+  font-size: 0.95rem;
+}
+
+.shell[data-layout='phone-portrait'] .step-card {
+  width: calc(100% - 16px);
+}
+
+.shell[data-layout='phone-portrait'] .step-nav {
+  width: calc(100% - 16px);
+}
+
+.shell[data-layout='phone-portrait'] .step-nav .step-panel__nav {
   position: static;
-  gap: 6px;
-}
-
-.shell[data-layout='phone-portrait'] .step-panel__nav .button:first-child {
-  position: relative;
-  flex: 0 0 48px;
-  width: 48px;
-  min-width: 48px;
-  padding-inline: 0;
-}
-
-.shell[data-layout='phone-portrait'] .step-panel__nav .button:first-child .button__text {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.shell[data-layout='phone-portrait'] .step-card .button--primary {
-  min-height: 48px;
-  min-width: 108px;
-  font-size: 1.15rem;
-}
-
-.shell[data-layout='phone-portrait'] .step-panel__instruction {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
 }
 
 .shell[data-layout='phone-portrait'] .float-dock {
-  top: calc(var(--phone-paper-top) + 75vw + 148px);
-  bottom: auto;
-  left: 8px;
+  top: auto;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  left: 72px;
   right: 8px;
   transform: none;
   width: auto;
@@ -1927,21 +1952,37 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 }
 
 .shell[data-layout='phone-portrait'] .brush-slider {
-  top: calc(var(--phone-paper-top) + 75vw + 8px);
-  bottom: auto;
+  top: auto;
+  bottom: calc(128px + env(safe-area-inset-bottom, 0px));
   left: max(8px, env(safe-area-inset-left, 0px));
-  transform: none;
   width: 52px;
   height: 132px;
   min-height: 132px;
+  max-height: none;
+  margin: 0;
 }
 
-.shell[data-layout='phone-portrait']:has(> .pad) .tablet-notice {
-  top: 56px;
-  padding: 8px 8px 8px 12px;
-  gap: 8px;
+.shell[data-layout='phone-portrait'] .brush-slider__input {
+  min-height: 0;
+  height: 100%;
 }
 
-.shell[data-layout='phone-portrait'] .tablet-notice p {
-  font-size: 0.95rem;
+.shell[data-layout='phone-landscape'] .float-dock {
+  top: 116px;
+  bottom: 68px;
+  transform: none;
+  max-height: none;
+}
+
+.shell[data-layout='phone-landscape'] .brush-slider {
+  top: 116px;
+  bottom: 68px;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.shell[data-layout='phone-landscape'][data-tablet-notice='open'] .float-dock,
+.shell[data-layout='phone-landscape'][data-tablet-notice='open'] .brush-slider {
+  top: 160px;
 }

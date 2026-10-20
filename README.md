@@ -35,10 +35,12 @@ export containing only the child's drawing.
 - Pinch to zoom and two-finger drag to pan, with no rotation. *Sesuai layar*
   fits the paper again. Strokes stay in the 1000×750 lesson space. Export does
   not include the zoom.
-- A step card that can fold down to progress dots. The example is a small
-  picture that opens larger, and *Lanjut* is a large button. Finishing a lesson
-  plays a small decoration, which stays still when the system asks for less
-  motion.
+- The step reference (instruction, progress dots, and a small example that
+  opens larger) sits at the top of the drawing screen, so a hand resting on
+  the lower part does not cover it. *Lanjut* and *Kembali* stay on the bottom
+  edge, with *Lanjut* the large button. On a phone the reference starts
+  folded. Finishing a lesson plays a small decoration, which stays still when
+  the system asks for less motion.
 - With the eraser chosen, *Hapus semua* clears the whole drawing, but only
   after asking "Mau mulai dengan gambar kosong?". *Batalkan* brings the
   drawing back while the canvas is still empty. The clear lasts for the open

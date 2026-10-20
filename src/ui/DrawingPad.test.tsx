@@ -17,6 +17,8 @@ import { recordedCalls } from '../test/fake-canvas';
 import { createSession } from '../lesson-engine/session';
 import { fromRestoredSession } from '../persistence/mapping';
 import { MemorySessionStore } from '../persistence/memory-store';
+import { drawingChrome } from './drawing-chrome';
+import { layoutTier } from './layout-tier';
 import { DrawingPad } from './DrawingPad';
 import {
   drawStroke,
@@ -799,8 +801,14 @@ describe('finishing', () => {
     act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
 
     const reopened = stageCanvas(view.container);
+    const chrome = drawingChrome(layoutTier(window.innerWidth, window.innerHeight), false);
     const expected = backingSize(
-      fitViewport(CAT_LESSON.coordinateSpace, TEST_CANVAS_RECT.width, TEST_CANVAS_RECT.height, 1),
+      fitViewport(
+        CAT_LESSON.coordinateSpace,
+        TEST_CANVAS_RECT.width,
+        TEST_CANVAS_RECT.height - chrome.top - chrome.bottom,
+        1,
+      ),
     );
     // Sized to the stage it is in, not left at the intrinsic 300x150.
     expect(reopened.width).toBe(expected.width);

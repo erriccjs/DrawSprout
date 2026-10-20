@@ -539,11 +539,11 @@ The column measurements in [`TABLET_LAYOUT_FIT.md`](./TABLET_LAYOUT_FIT.md)
 describe the layout this replaces. They are not the sizes of the full-bleed
 paper.
 
-On a phone the paper is still the largest 4:3 that fits the width, so a tall
-screen has empty bands above and below it. The paper is shifted up to sit
-under the header. The brush slider and the tool row sit in the band below the
-paper, and *Bantuan* is a `?` icon so the word cannot spill past the screen
-edge. A tablet keeps the vertical tool stack on the right.
+The paper is fitted into the band under the step reference and above *Lanjut*,
+so those bars do not cover the guides (D-53). On a phone the paper is still
+the largest 4:3 that fits the width. The brush slider and the tool row sit
+beside that band, or in the margin under a short phone paper, and *Bantuan*
+is a `?` icon so the word cannot spill past the screen edge.
 
 ### D-50 — Brush size is a slider; colour is one circle
 
@@ -604,22 +604,30 @@ the paper does not jump under the stylus.
 
 ### D-53 — The step card folds, and finishing plays a small decoration
 
-The instruction, the example, and *Lanjut* used to be a panel beside or above
-the paper. They now share one card along the bottom.
+The instruction, the example, and *Lanjut* used to share one card. A hand
+resting on the lower part of a tablet covers that card while the child is
+drawing, which is when they need the instruction.
 
-**Choice.** The card starts open: a short instruction, one dot per step, a
-thumbnail of the example, and a large *Lanjut* (or *Selesai* on the last
-step). The thumbnail opens the same preview larger. Collapsing hides the
-instruction and the thumbnail. The dots and *Lanjut* stay, and the step count
-stays available to assistive tech.
+**Choice.** The instruction, the step dots, and the example thumbnail sit at
+the top, under the header, on every layout. *Lanjut* and *Kembali* stay on
+the bottom edge, and *Lanjut* stays the large button. Advancing is one
+deliberate tap at the end of a step, and the hand is already down there, so
+the tap does not reach across the paper or hide the instruction. The paper
+is fitted into the band between those two bars (`drawingChrome` in
+`src/ui/drawing-chrome.ts`), so the guides are not under the card. The
+thumbnail still opens the same preview larger. Collapsing hides the
+instruction and the thumbnail. The dots stay, and the step count stays
+available to assistive tech.
 
 The finish screen adds three decorative dots above the existing title. They
 animate only when `prefers-reduced-motion` is not reduce. The decoration is
 `aria-hidden` and does not judge the drawing (D-41).
 
-On a phone the card starts folded: dots, the expand control, and *Lanjut*.
-The instruction and the thumbnail come back when the child opens it. A tablet
-still starts with the card open.
+On a phone the reference starts folded: dots and the expand control. The
+instruction and the thumbnail come back when the child opens it. *Lanjut*
+stays on the bottom edge either way. A tablet still starts with the reference
+open. The phone note, when it is showing, sits between the header and that
+reference so the two do not pile on top of each other.
 
 ### D-54 — A phone says a tablet is more comfortable, once
 

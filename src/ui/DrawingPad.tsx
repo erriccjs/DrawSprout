@@ -50,6 +50,7 @@ import { StepControls, StepNavigation, StepPanel } from './StepPanel';
 import { BrushSlider } from './BrushSlider';
 import { ColorWell } from './ColorWell';
 import { Toolbar, ToolbarSettings } from './Toolbar';
+import { drawingChrome } from './drawing-chrome';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 import { useLayoutTier } from './useLayoutTier';
 import { newId } from './ids';
@@ -71,12 +72,6 @@ interface DrawingPadProps {
   /** The phone "best on a tablet" note is covering the top of this screen. */
   readonly tabletNoticeOpen?: boolean;
 }
-
-/** Room kept above the paper on a phone, matching the floating header and note. */
-const PHONE_PAPER_TOP_PX = 64;
-const PHONE_PAPER_TOP_WITH_NOTICE_PX = 128;
-/** Tools, slider and the step card live in this band under the paper. */
-const PHONE_BOTTOM_RESERVE_PX = 210;
 
 /** What the pointer began drawing, frozen at pointer-down (FR-03). */
 interface PendingStroke {
@@ -149,10 +144,8 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const [view, setView] = useState<CanvasView>(FIT_VIEW);
   const placementRef = useRef<PaperPlacement>(CENTERED_PLACEMENT);
   const placement = useMemo(() => {
-    if (layout !== 'phone-portrait' || !viewport || stageBox.height <= 0) return CENTERED_PLACEMENT;
-    const maxTop = Math.max(0, stageBox.height - viewport.cssHeight - PHONE_BOTTOM_RESERVE_PX);
-    const preferred = tabletNoticeOpen ? PHONE_PAPER_TOP_WITH_NOTICE_PX : PHONE_PAPER_TOP_PX;
-    return placementForTop(stageBox.height, viewport.cssHeight, Math.min(preferred, maxTop));
+    if (!viewport || stageBox.height <= 0) return CENTERED_PLACEMENT;
+    return placementForTop(stageBox.height, viewport.cssHeight, drawingChrome(layout, tabletNoticeOpen).top);
   }, [layout, viewport, stageBox.height, tabletNoticeOpen]);
 
   const applyView = useCallback((next: CanvasView, commit: boolean) => {
@@ -181,8 +174,14 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
       setStageBox((current) => (
         current.width === nextBox.width && current.height === nextBox.height ? current : nextBox
       ));
+      const chrome = drawingChrome(layout, tabletNoticeOpen);
       setViewport(
-        fitViewport(lesson.coordinateSpace, rect.width, rect.height, window.devicePixelRatio),
+        fitViewport(
+          lesson.coordinateSpace,
+          rect.width,
+          Math.max(1, rect.height - chrome.top - chrome.bottom),
+          window.devicePixelRatio,
+        ),
       );
     };
     measure();
@@ -191,7 +190,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
     return () => observer.disconnect();
-  }, [stage, lesson.coordinateSpace]);
+  }, [stage, lesson.coordinateSpace, layout, tabletNoticeOpen]);
 
   const paint = useCallback(() => {
     const surface = surfaceRef.current;
@@ -491,6 +490,8 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
 
         <div className="step-card">
           <StepPanel lesson={lesson} state={state} step={step} startCollapsed={layout !== 'tablet'} />
+        </div>
+        <div className="step-nav">
           <StepNavigation
             lesson={lesson}
             state={state}
