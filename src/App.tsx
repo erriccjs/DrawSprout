@@ -9,6 +9,7 @@ import type { SessionCheckpoint } from './persistence/types';
 import { DrawingPad } from './ui/DrawingPad';
 import { LessonPicker } from './ui/LessonPicker';
 import { newId } from './ui/ids';
+import { useLayoutTier } from './ui/useLayoutTier';
 import { useSessionBootstrap } from './ui/useSessionBootstrap';
 
 interface OpenLesson {
@@ -30,6 +31,7 @@ const BOOTSTRAP_FAILURE_NOTICE = 'Maaf, pelajaran belum bisa dibuka sekarang. Co
 const LOAD_FAILURE_NOTICE = 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mulai menggambar lagi.';
 
 export function App() {
+  const layout = useLayoutTier();
   const bootstrap = useSessionBootstrap();
   const [openLesson, setOpenLesson] = useState<OpenLesson | null>(null);
   const selectionRef = useRef(0);
@@ -41,7 +43,7 @@ export function App() {
 
   if (bootstrap.status === 'loading') {
     return (
-      <main className="shell shell--centered">
+      <main className="shell shell--centered" data-layout={layout}>
         <p role="status">Menyiapkan pelajaran…</p>
       </main>
     );
@@ -49,7 +51,7 @@ export function App() {
 
   if (bootstrap.status === 'error') {
     return (
-      <main className="shell shell--centered">
+      <main className="shell shell--centered" data-layout={layout}>
         <h1>Pelajaran tidak dapat dibuka</h1>
         <p className="banner banner--warning">{BOOTSTRAP_FAILURE_NOTICE}</p>
       </main>
@@ -135,7 +137,7 @@ export function App() {
   };
 
   return (
-    <main className="shell">
+    <main className="shell" data-layout={layout}>
       {openLesson ? (
         <DrawingPad
           key={`${openLesson.initialState.sessionId}:${openLesson.revision}`}

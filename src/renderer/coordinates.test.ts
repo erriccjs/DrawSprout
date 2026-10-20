@@ -30,6 +30,24 @@ describe('fitViewport', () => {
     expect(viewport.cssHeight).toBe(375);
   });
 
+  it('scales a phone-sized stage uniformly onto the same 1000×750 space (AT-06)', () => {
+    const phonePortrait = fitViewport(space, 344, 280);
+    const phoneLandscape = fitViewport(space, 347, 300);
+    const tablet = fitViewport(space, 668, 563);
+
+    for (const viewport of [phonePortrait, phoneLandscape, tablet]) {
+      expect(viewport.cssWidth / viewport.cssHeight).toBeCloseTo(space.width / space.height, 5);
+      const point = clientToSpace(
+        space,
+        { left: 12, top: 40, width: viewport.cssWidth, height: viewport.cssHeight },
+        12 + viewport.cssWidth * 0.25,
+        40 + viewport.cssHeight * 0.5,
+      );
+      expect(point.x).toBeCloseTo(250, 5);
+      expect(point.y).toBeCloseTo(375, 5);
+    }
+  });
+
   it('caps the backing store at the documented pixel ratio', () => {
     const viewport = fitViewport(space, 1000, 750, 3);
     expect(viewport.dpr).toBe(MAX_DEVICE_PIXEL_RATIO);

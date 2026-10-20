@@ -81,7 +81,8 @@ export function StepNavigation({ lesson, state, onFinish, dispatch }: StepNaviga
         disabled={state.currentStepIndex === 0}
         onClick={() => dispatch({ type: 'prev-step' })}
       >
-        ← Kembali
+        <span aria-hidden="true">← </span>
+        <span className="button__text">Kembali</span>
       </button>
       {isLastStep ? (
         <button type="button" className="button button--primary" onClick={onFinish}>

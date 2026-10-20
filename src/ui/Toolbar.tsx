@@ -64,17 +64,19 @@ export function Toolbar({
 
   return (
     <div className="toolbar">
-      <fieldset className="toolbar__group">
+      <fieldset className="toolbar__group toolbar__group--tools">
         <legend>Alat</legend>
         {TOOLS.map((tool) => (
           <button
             key={tool.kind}
             type="button"
             className="chip"
+            aria-label={tool.label}
             aria-pressed={toolPreferences.activeTool === tool.kind}
             onClick={() => dispatch({ type: 'set-tool', tool: tool.kind })}
           >
-            <span aria-hidden="true">{tool.icon}</span> {tool.label}
+            <span aria-hidden="true">{tool.icon}</span>
+            <span className="chip__label">{tool.label}</span>
           </button>
         ))}
       </fieldset>
@@ -113,7 +115,7 @@ export function Toolbar({
       </fieldset>
 
       <div className="toolbar__row">
-        <fieldset className="toolbar__group">
+        <fieldset className="toolbar__group toolbar__group--width">
           <legend>Ketebalan</legend>
           {WIDTH_CHOICES.map((choice) => {
             const width = round(stepWidth * choice.factor);
@@ -144,7 +146,7 @@ export function Toolbar({
           })}
         </fieldset>
 
-        <fieldset className="toolbar__group">
+        <fieldset className="toolbar__group toolbar__group--history">
           <legend>Riwayat</legend>
           <button
             type="button"

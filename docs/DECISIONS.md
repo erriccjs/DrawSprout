@@ -349,3 +349,34 @@ is how "no guide reaches the export" is tested directly.
 A Chrome DevTools pass confirmed the app boots, draws, autosaves and resumes.
 That is browser emulation. It is never reported as a device test, and every
 device-dependent acceptance test is listed as unverified in the plan.
+
+### D-46 — Phones get their own layout tier; tablets keep the measured one
+
+The tablet rules (a 320px side column, a 548px column below 620px of height,
+and a colour column sized for five 48px swatches) make a phone unusable. On a
+375×667 portrait the canvas collapsed to 1×1, and on a 667×375 landscape the
+548px column left an 83×62 canvas. Those viewports were measured in headless
+Chrome, not on a device.
+
+`layoutTier()` in `src/ui/layout-tier.ts` classifies the viewport and the shell
+sets `data-layout`. Portrait phones are at most 599px wide, just under the
+600×960 tablet row. Phone landscape is at most 480px tall and 940px wide, so
+1024×430 and 960×600 stay on the tablet rules. The phone CSS is gated on that
+attribute and was rechecked against the tablet table in
+[`TABLET_LAYOUT_FIT.md`](./TABLET_LAYOUT_FIT.md); the recorded canvas sizes did
+not move.
+
+On a phone the dock is capped and scrolls inside itself, the page does not
+scroll, and `overscroll-behavior: none` is set on the document so a stroke is
+not a pull-to-refresh. The canvas still has the only `touch-action: none`.
+Swatches that do not fit scroll sideways and stay 48px. The shell padding uses
+`env(safe-area-inset-*)`. Headless Chrome reported 0 for those insets, so a
+notch was not verified.
+
+Phone landscape is short, so the example and the dock share a rail no wider
+than 320px and the canvas takes the height. The step hint and the colour
+readout are visually hidden there; both stay in the accessibility tree, and
+the instruction plus the pressed swatch and "Ikuti panduan" checkmark remain
+visible. The back control shows the arrow. Tool buttons are icons. None of
+that applies to the tablet layout. The 1000×750 space is unchanged: a
+phone-sized stage is still a uniform scale (`fitViewport`).

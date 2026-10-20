@@ -37,6 +37,10 @@ export containing only the child's drawing.
 - After finishing, *Gambar lagi* asks whether to keep the current drawing or
   clear it and start again from the first step.
 - PNG export of the artwork alone — no guides, no example illustration.
+- A phone layout for about 360–430px portrait and for phone landscape. Tablet
+  landscape is still the layout the screens were designed around. The phone
+  measurements, and the tablet sizes that were rechecked afterwards, are in
+  [`docs/TABLET_LAYOUT_FIT.md`](docs/TABLET_LAYOUT_FIT.md).
 
 ## What does not work yet
 
@@ -126,8 +130,9 @@ own job so one failure still shows the state of the rest.
 and input latency cannot be judged from a desktop browser, and none of them have
 been measured. Acceptance tests AT-16, AT-17, AT-18 and AT-22, plus the rendering
 targets in PRD section 13, are open and need a real iPad with an Apple Pencil and
-a real Android tablet with an active stylus. Nothing in this repository should be
-read as a device test result.
+a real Android tablet with an active stylus. The phone layout was checked the
+same way, in headless Chrome at phone-sized viewports, not on a handset.
+Nothing in this repository should be read as a device test result.
 
 ## Project layout
 

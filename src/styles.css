@@ -2,6 +2,10 @@
  * Tablet-first layout (PRD section 10): landscape is the primary orientation,
  * portrait stacks, touch targets are at least 48 logical pixels, and no state
  * is signalled by colour alone.
+ *
+ * Phones (data-layout from src/ui/layout-tier.ts) get a separate pass at the
+ * bottom of this file. Those rules must not change the tablet measurements in
+ * docs/TABLET_LAYOUT_FIT.md.
  */
 
 :root {
@@ -148,17 +152,37 @@ body {
   margin: 0;
 }
 
+.pad__top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
 .pad__body {
   display: grid;
+  /* Row gap matches the old space between the step panel and the canvas.
+     Column gap matches the old space between the canvas and the controls. */
   grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+  row-gap: 8px;
+  column-gap: 12px;
   min-height: 0;
   flex: 1;
+}
+
+/* The box is removed on a tablet so the step panel can sit full-width on the
+   first row while the canvas and controls share the second. Phone landscape
+   turns it back into a real column. */
+.pad__rail {
+  display: contents;
 }
 
 .pad__stage {
   display: grid;
   place-items: center;
+  grid-column: 1;
+  grid-row: 2;
   min-height: 0;
   min-width: 0;
   background: var(--page);
@@ -194,6 +218,8 @@ body {
 .pad__side {
   display: flex;
   flex-direction: column;
+  grid-column: 2;
+  grid-row: 2;
   gap: 6px;
   min-height: 0;
   min-width: 0;
@@ -227,14 +253,21 @@ body {
 
 .step-panel {
   display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1;
   grid-template-columns: minmax(0, 1fr) 132px;
   align-items: center;
   gap: 16px;
   min-height: 0;
+  min-width: 0;
   padding: 8px 12px;
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+}
+
+.step-panel__header {
+  min-width: 0;
 }
 
 .toolbar,
@@ -385,6 +418,10 @@ body {
   padding-top: 0;
 }
 
+.chip__label {
+  margin-inline-start: 0.3em;
+}
+
 .chip--icon {
   position: relative;
   display: flex;
@@ -430,6 +467,15 @@ body {
 }
 
 /* --- controls ------------------------------------------------------------- */
+
+.button,
+.chip,
+.swatch,
+.lesson-picker__choice {
+  /* A double-tap on a control should not zoom the page. Pinch-zoom on the
+     page itself stays available (PRD section 11). */
+  touch-action: manipulation;
+}
 
 .button,
 .chip {
@@ -601,11 +647,26 @@ body {
 @media (orientation: portrait) {
   .pad__body {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    row-gap: 0;
+  }
+
+  .step-panel {
+    grid-column: 1;
+    grid-row: 1;
+    margin-bottom: 8px;
+  }
+
+  .pad__stage {
+    grid-column: 1;
+    grid-row: 2;
   }
 
   .pad__side {
+    grid-column: 1;
+    grid-row: 3;
     max-height: 50vh;
+    margin-top: 12px;
   }
 }
 
@@ -654,4 +715,539 @@ body {
   .toolbar__row {
     grid-area: row;
   }
+}
+
+/* --- phone ----------------------------------------------------------------- */
+/*
+ * Phones are a secondary layout. The tier comes from `data-layout` (see
+ * src/ui/layout-tier.ts), not from these media queries, so a short tablet
+ * such as 1024×430 keeps the rules above.
+ *
+ * Portrait: a short header, a compact example beside the instruction, and a
+ * bottom dock whose touch targets stay at 48px. The dock scrolls inside
+ * itself; the page does not.
+ * Landscape: the example and controls move into a narrow rail so the canvas
+ * can use the full height. The tablet's 548px rail is far too wide here.
+ */
+
+html:has(.shell[data-layout^='phone'] > .pad),
+html:has(.shell[data-layout^='phone'] > .pad) body,
+html:has(.shell[data-layout^='phone'] > .finish),
+html:has(.shell[data-layout^='phone'] > .finish) body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.shell[data-layout^='phone'] {
+  height: 100dvh;
+  max-height: 100dvh;
+  padding-top: max(8px, env(safe-area-inset-top, 0px));
+  padding-right: max(8px, env(safe-area-inset-right, 0px));
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(8px, env(safe-area-inset-left, 0px));
+}
+
+.shell[data-layout^='phone']:not(:has(> .pad)):not(:has(> .finish)) {
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.shell[data-layout^='phone'] .pad,
+.shell[data-layout^='phone'] .finish {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.shell[data-layout^='phone'] .lesson-picker {
+  padding: 4px 2px 16px;
+}
+
+.shell[data-layout='phone-portrait'] .lesson-picker h1 {
+  font-size: 1.75rem;
+}
+
+.shell[data-layout='phone-portrait'] .lesson-picker__choices {
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.shell[data-layout='phone-portrait'] .lesson-picker__choice {
+  min-height: 0;
+  padding: 14px 14px 12px;
+}
+
+.shell[data-layout='phone-portrait'] .lesson-picker__picture {
+  max-height: 132px;
+}
+
+.shell[data-layout='phone-portrait'] .lesson-picker__name {
+  font-size: 1.35rem;
+}
+
+.shell[data-layout='phone-landscape'] .lesson-picker h1 {
+  font-size: 1.35rem;
+}
+
+.shell[data-layout='phone-landscape'] .lesson-picker > p {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+}
+
+.shell[data-layout='phone-landscape'] .lesson-picker__choices {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 148px), 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.shell[data-layout='phone-landscape'] .lesson-picker__choice {
+  min-height: 0;
+  padding: 8px;
+  gap: 2px;
+}
+
+.shell[data-layout='phone-landscape'] .lesson-picker__picture {
+  max-height: 68px;
+}
+
+.shell[data-layout='phone-landscape'] .lesson-picker__name {
+  font-size: 1.05rem;
+}
+
+.shell[data-layout='phone-landscape'] .lesson-picker__subtitle {
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.shell[data-layout^='phone'] .pad__header {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.shell[data-layout^='phone'] .pad__header .button {
+  flex: 0 0 auto;
+  padding-inline: 10px;
+}
+
+.shell[data-layout^='phone'] .pad__header > div {
+  flex: 1 1 auto;
+}
+
+.shell[data-layout^='phone'] .pad__title {
+  font-size: 1.0625rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell[data-layout^='phone'] .pad__subtitle {
+  display: none;
+}
+
+.shell[data-layout^='phone'] .pad__status {
+  flex: 0 1 auto;
+  max-width: 38%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.75rem;
+}
+
+.shell[data-layout^='phone'] .step-panel {
+  grid-template-columns: minmax(0, 1fr) 76px;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.shell[data-layout^='phone'] .step-panel__counter {
+  font-size: 0.75rem;
+}
+
+.shell[data-layout^='phone'] .step-panel__instruction {
+  font-size: 1.0625rem;
+  overflow-wrap: break-word;
+}
+
+.shell[data-layout^='phone'] .step-panel__hint {
+  font-size: 0.8125rem;
+  overflow-wrap: break-word;
+}
+
+.shell[data-layout='phone-portrait'] .pad__body {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.shell[data-layout='phone-portrait'] .step-panel {
+  margin-bottom: 6px;
+}
+
+.shell[data-layout='phone-portrait'] .pad__side {
+  max-height: min(42vh, 300px);
+  margin-top: 8px;
+}
+
+.shell[data-layout='phone-landscape'] .pad__body {
+  grid-template-columns: minmax(0, 1fr) minmax(228px, min(46vw, 320px));
+  grid-template-rows: minmax(0, 1fr);
+  row-gap: 0;
+  column-gap: 8px;
+}
+
+.shell[data-layout='phone-landscape'] .pad__stage {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.shell[data-layout='phone-landscape'] .pad__rail {
+  display: flex;
+  flex-direction: column;
+  grid-column: 2;
+  grid-row: 1;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.shell[data-layout='phone-landscape'] .step-panel {
+  grid-column: auto;
+  grid-row: auto;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  margin-bottom: 0;
+  padding: 4px 6px;
+  flex: none;
+}
+
+.shell[data-layout='phone-landscape'] .step-panel {
+  position: relative;
+}
+
+.shell[data-layout='phone-landscape'] .step-panel__instruction {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* The hint stays in the accessibility tree. Phone landscape has no vertical
+   room for a second paragraph beside the canvas. */
+.shell[data-layout='phone-landscape'] .step-panel__hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.shell[data-layout='phone-landscape'] .pad__side {
+  grid-column: auto;
+  grid-row: auto;
+  max-height: none;
+  margin-top: 0;
+  flex: 1 1 auto;
+}
+
+.shell[data-layout^='phone'] .pad__side {
+  display: flex;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: stretch;
+  overscroll-behavior: contain;
+}
+
+.shell[data-layout^='phone'] .step-panel__nav,
+.shell[data-layout^='phone'] .pad__tabs {
+  position: sticky;
+  z-index: 2;
+  background: var(--page);
+}
+
+.shell[data-layout^='phone'] .step-panel__nav {
+  top: 0;
+}
+
+.shell[data-layout^='phone'] .pad__tabs {
+  top: calc(var(--tap) + 6px);
+}
+
+.shell[data-layout^='phone'] .step-panel__nav .button,
+.shell[data-layout^='phone'] .pad__tabs .chip {
+  min-width: 0;
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+
+.shell[data-layout^='phone'] .pad__control-panel {
+  flex-direction: column;
+  align-items: stretch;
+  grid-column: auto;
+}
+
+.shell[data-layout^='phone'] .pad__control-panel > * {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+}
+
+.shell[data-layout^='phone'] .step-panel__group {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell[data-layout^='phone'] .toolbar fieldset,
+.shell[data-layout^='phone'] .step-controls fieldset {
+  min-inline-size: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.shell[data-layout^='phone'] .toolbar:not(.toolbar--settings) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'tools tools'
+    'width history'
+    'color color';
+  align-items: center;
+  gap: 4px;
+}
+
+.shell[data-layout='phone-landscape'] .toolbar:not(.toolbar--settings) {
+  grid-template-areas:
+    'tools history'
+    'color color'
+    'width width';
+  gap: 2px;
+}
+
+.shell[data-layout^='phone'] .toolbar:not(.toolbar--settings) > :nth-child(1),
+.shell[data-layout^='phone'] .toolbar__group--tools {
+  grid-area: tools;
+}
+
+.shell[data-layout^='phone'] .toolbar__group--color {
+  grid-area: color;
+  min-width: 0;
+}
+
+.shell[data-layout^='phone'] .toolbar__row {
+  display: contents;
+  grid-area: auto;
+  grid-template-columns: none;
+}
+
+.shell[data-layout^='phone'] .toolbar__group--width {
+  grid-area: width;
+  flex-wrap: nowrap;
+}
+
+.shell[data-layout^='phone'] .toolbar__group--history {
+  grid-area: history;
+  flex-wrap: nowrap;
+}
+
+.shell[data-layout^='phone'] .toolbar__group--tools {
+  flex-wrap: nowrap;
+}
+
+.shell[data-layout^='phone'] .toolbar__group--tools .chip,
+.shell[data-layout^='phone'] .toolbar__group--width .chip {
+  flex: 1 1 var(--tap);
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding-inline: 4px;
+  white-space: nowrap;
+}
+
+.shell[data-layout='phone-portrait'] .toolbar__group--tools .chip {
+  flex: 1 1 auto;
+}
+
+.shell[data-layout^='phone'] .toolbar__group--history .chip {
+  flex: 0 0 var(--tap);
+  width: var(--tap);
+  min-width: var(--tap);
+  padding-inline: 0;
+}
+
+.shell[data-layout='phone-landscape'] .toolbar__group--tools .chip {
+  position: relative;
+  flex: 0 0 var(--tap);
+  width: var(--tap);
+  min-width: var(--tap);
+  max-width: var(--tap);
+  padding-inline: 0;
+  font-size: 1.25rem;
+}
+
+.shell[data-layout='phone-landscape'] .toolbar__group--tools .chip[aria-pressed='true']::after,
+.shell[data-layout='phone-landscape'] .pad__tabs .chip[aria-pressed='true']::after {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  content: '✓';
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+.shell[data-layout='phone-landscape'] .toolbar__group--tools .chip__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.shell[data-layout^='phone'] .toolbar__group .swatches {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 6px;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  padding: 4px 2px;
+}
+
+.shell[data-layout='phone-landscape'] .toolbar__group .swatches {
+  padding-block: 2px;
+}
+
+.shell[data-layout^='phone'] .swatch {
+  flex: 0 0 var(--tap);
+}
+
+.shell[data-layout^='phone'] .toolbar__group--color {
+  position: relative;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.shell[data-layout^='phone'] .toolbar__group--color > .chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  height: var(--tap);
+  max-height: var(--tap);
+  padding-inline: 10px;
+}
+
+.shell[data-layout^='phone'] .toolbar__group--color > .swatches {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+/* The pressed swatch (border and outline) and the "Ikuti panduan" checkmark
+   already show the choice. The sentence stays available to assistive tech. */
+.shell[data-layout^='phone'] .toolbar__group--color > .toolbar__readout {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.shell[data-layout='phone-landscape'] .pad__side {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  align-content: start;
+  align-items: stretch;
+  column-gap: 4px;
+  row-gap: 4px;
+}
+
+.shell[data-layout='phone-landscape'] .step-panel__nav {
+  display: flex;
+  grid-column: 1;
+  grid-row: 1;
+  position: sticky;
+  top: 0;
+}
+
+.shell[data-layout='phone-landscape'] .pad__tabs {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr);
+  grid-column: 2;
+  grid-row: 1;
+  position: sticky;
+  top: 0;
+}
+
+.shell[data-layout='phone-landscape'] .pad__control-panel {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  padding: 2px 4px;
+}
+
+.shell[data-layout='phone-landscape'] .step-panel__nav .button,
+.shell[data-layout='phone-landscape'] .pad__tabs .chip {
+  position: relative;
+  min-width: 0;
+  padding-inline: 3px;
+  font-size: 0.75rem;
+  background: var(--page);
+}
+
+.shell[data-layout='phone-landscape'] .step-panel__nav .button:first-child {
+  position: relative;
+  flex: 0 0 var(--tap);
+  padding-inline: 0;
+}
+
+.shell[data-layout='phone-landscape'] .step-panel__nav .button:first-child .button__text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.shell[data-layout='phone-landscape'] .pad__tabs {
+  top: 0;
+}
+
+.shell[data-layout='phone-portrait'] .finish__actions {
+  width: 100%;
+}
+
+.shell[data-layout='phone-portrait'] .finish__actions .button {
+  flex: 1 1 100%;
+}
+
+.shell[data-layout='phone-landscape'] .finish__title {
+  font-size: 1.35rem;
+}
+
+.shell[data-layout='phone-landscape'] .finish__lead {
+  font-size: 0.875rem;
+}
+
+.shell[data-layout='phone-landscape'] .finish__preview {
+  min-height: 0;
+}
+
+.shell[data-layout^='phone'] .finish {
+  overscroll-behavior: contain;
+}
+
+.shell[data-layout^='phone'] .banner {
+  font-size: 0.875rem;
 }
