@@ -76,7 +76,7 @@ export function fromRestoredSession(restored: RestoredSession): SessionState {
     // reload: the checkpoint shape is unchanged, so there is nothing to read
     // back. Until new work lands, the stored drawing is what the saved
     // checkpoint still holds (see `saveProgress`), so nothing is lost either.
-    clearedArtwork: null,
+    clearedArtworks: [],
     finished: checkpoint.finished,
   };
 }

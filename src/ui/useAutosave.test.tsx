@@ -47,22 +47,23 @@ describe('useAutosave', () => {
   it.each([
     ['IndexedDB', () => new IndexedDbSessionStore(new IDBFactory())],
     ['memory', () => new MemorySessionStore()],
-  ])('keeps the prior saved status after a skip in %s', async (_name, makeStore: () => SessionStore) => {
+  ])('stops reading as saved once a clear is skipped in %s', async (_name, makeStore: () => SessionStore) => {
     const store = makeStore();
-    const empty = createSession(CAT_LESSON, 'empty');
-    const { result } = renderHook(() => useAutosave(store, empty, false));
-    await act(async () => { expect(await result.current.flush()).toBe(true); });
-    const priorStatus = result.current.status;
-    expect(priorStatus.kind).toBe('saved');
-
     const drawn = reduceSession(CAT_LESSON, createSession(CAT_LESSON, 'drawn'), {
       type: 'commit-stroke', stroke: strokeInput(CAT_LESSON.steps[0]!.id),
     });
-    await store.saveProgress({ checkpoint: toCheckpoint(drawn, 1, Date.now() + 1), newStrokes: drawn.strokes });
+    const { result, rerender } = renderHook(({ state }) => useAutosave(store, state, false), {
+      initialProps: { state: drawn },
+    });
+    await act(async () => { expect(await result.current.flush()).toBe(true); });
+    expect(result.current.status.kind).toBe('saved');
+
+    rerender({ state: reduceSession(CAT_LESSON, drawn, { type: 'clear-all' }) });
     await act(async () => { expect(await result.current.flush()).toBe(true); });
 
-    expect(result.current.status).toEqual(priorStatus);
-    expect((await store.loadLatestSessionForLesson(CAT_LESSON.id))?.checkpoint.sessionId).toBe(drawn.sessionId);
+    expect(result.current.status).toEqual({ kind: 'idle' });
+    const stored = await store.loadSession('drawn');
+    expect(stored?.checkpoint.committedStrokeIds).toEqual([drawn.strokes[0]!.id]);
   });
 
   it.each([

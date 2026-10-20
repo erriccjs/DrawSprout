@@ -51,7 +51,7 @@ export function createSession(
     strokes: [],
     redoStack: [],
     nextSequence: 1,
-    clearedArtwork: null,
+    clearedArtworks: [],
     finished: false,
   };
 }
@@ -79,11 +79,13 @@ export function reduceSession(
         ...state,
         strokes: [],
         // Redo would otherwise bring one stroke back on its own, which is not
-        // what "undo the clear" means. It is kept in `clearedArtwork` instead.
+        // what "undo the clear" means. It is kept with the cleared artwork.
         redoStack: [],
         // `nextSequence` is deliberately left alone: the cleared strokes keep
         // their sequence numbers, so putting them back restores paint order.
-        clearedArtwork: { strokes: state.strokes, redoStack: state.redoStack },
+        // Pushed, never replaced: a second clear leaves the first one still
+        // reachable, newest clear undone first.
+        clearedArtworks: [...state.clearedArtworks, { strokes: state.strokes, redoStack: state.redoStack }],
       };
     }
 
@@ -185,7 +187,7 @@ export function reduceSession(
         strokes: [],
         redoStack: [],
         nextSequence: 1,
-        clearedArtwork: null,
+        clearedArtworks: [],
         finished: false,
         toolPreferences: {
           ...state.toolPreferences,
@@ -217,13 +219,13 @@ function withStepIndex(lesson: LessonPackage, state: SessionState, index: number
 }
 
 /**
- * Puts a cleared artwork back: a no-op when nothing was cleared.
+ * Puts the most recent cleared artwork back: a no-op when nothing was cleared.
  *
  * Strokes are reinserted by sequence so they land under or over whatever was
  * drawn after the clear, exactly as they were painted.
  */
 function restoreClearedArtwork(state: SessionState): SessionState {
-  const cleared = state.clearedArtwork;
+  const cleared = state.clearedArtworks[state.clearedArtworks.length - 1];
   if (!cleared) return state;
   let strokes = state.strokes;
   for (const stroke of cleared.strokes) strokes = insertBySequence(strokes, stroke);
@@ -232,7 +234,7 @@ function restoreClearedArtwork(state: SessionState): SessionState {
     strokes,
     // Older undos first, so "most recently undone last" still holds.
     redoStack: [...cleared.redoStack, ...state.redoStack],
-    clearedArtwork: null,
+    clearedArtworks: state.clearedArtworks.slice(0, -1),
   };
 }
 
@@ -270,7 +272,7 @@ export function sessionPhase(lesson: LessonPackage, state: SessionState): Sessio
   if (state.finished) return 'completed';
   // A clear is real content, so a session that has been cleared has started
   // even while the canvas is empty.
-  if (state.strokes.length === 0 && state.currentStepIndex === 0 && state.clearedArtwork === null) {
+  if (state.strokes.length === 0 && state.currentStepIndex === 0 && state.clearedArtworks.length === 0) {
     return 'not_started';
   }
   return activeStep(lesson, state).phase === 'color' ? 'coloring' : 'drawing';
@@ -338,7 +340,7 @@ export function guideOverlayMode(
 export function canUndo(lesson: LessonPackage, state: SessionState): boolean {
   return (
     lastIndexOfStep(state.strokes, activeStep(lesson, state).id) !== -1 ||
-    state.clearedArtwork !== null
+    state.clearedArtworks.length > 0
   );
 }
 

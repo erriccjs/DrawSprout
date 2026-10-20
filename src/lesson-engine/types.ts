@@ -98,11 +98,12 @@ export interface SessionState {
   /** Next sequence number to hand out; never reused, so ids stay stable. */
   readonly nextSequence: number;
   /**
-   * What the last `clear-all` removed, or `null` when there is nothing to put
-   * back. A clear is one undoable operation, so the whole artwork is held here
-   * rather than pushed onto `redoStack` one stroke at a time.
+   * What each `clear-all` removed, most recent last; empty when there is
+   * nothing to put back. A clear is one undoable operation, so the whole
+   * artwork is held here rather than pushed onto `redoStack` one stroke at a
+   * time, and clears stack so a later one never buries an earlier one.
    */
-  readonly clearedArtwork: ClearedArtwork | null;
+  readonly clearedArtworks: readonly ClearedArtwork[];
   /** Set only by the explicit finish action; never inferred from the drawing (PRD section 12). */
   readonly finished: boolean;
 }

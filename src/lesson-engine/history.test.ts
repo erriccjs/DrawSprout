@@ -179,11 +179,33 @@ describe('clearing the whole drawing', () => {
     expect(twice.strokes.map((stroke) => stroke.id)).toEqual(drawn.strokes.map((s) => s.id));
   });
 
+  it('stacks clears, so a second clear never buries the first drawing', () => {
+    const drawnA = draw(newSessionState(), stepIdAt(0));
+    const clearedA = reduceSession(lesson, drawnA, { type: 'clear-all' });
+    const drawnB = draw(clearedA, stepIdAt(0));
+    const clearedB = reduceSession(lesson, drawnB, { type: 'clear-all' });
+    expect(clearedB.strokes).toEqual([]);
+
+    // The newest clear is undone first, and drawing B comes back on its own.
+    const bBack = reduceSession(lesson, clearedB, { type: 'undo' });
+    expect(bBack.strokes).toEqual(drawnB.strokes);
+    expect(bBack.strokes.map((s) => s.id)).not.toContain(drawnA.strokes[0]!.id);
+
+    // B's stroke is then taken back like any other stroke, and the clear
+    // beneath it is the next thing a Batalkan reaches: A is still reachable.
+    const bGone = reduceSession(lesson, bBack, { type: 'undo' });
+    expect(bGone.strokes).toEqual([]);
+    expect(canUndo(lesson, bGone)).toBe(true);
+    const aBack = reduceSession(lesson, bGone, { type: 'undo' });
+    expect(aBack.strokes).toEqual(drawnA.strokes);
+    expect(aBack.clearedArtworks).toEqual([]);
+  });
+
   it('does not survive a restart', () => {
     const drawn = draw(newSessionState(), stepIdAt(0));
     const cleared = reduceSession(lesson, drawn, { type: 'clear-all' });
     const restarted = reduceSession(lesson, cleared, { type: 'restart' });
-    expect(restarted.clearedArtwork).toBeNull();
+    expect(restarted.clearedArtworks).toEqual([]);
     expect(canUndo(lesson, restarted)).toBe(false);
   });
 });
