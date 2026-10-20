@@ -9,7 +9,7 @@
  * finished stroke is committed to the session (PRD section 11).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import type { LessonPackage } from '../lesson-data/schema';
 import {
@@ -32,13 +32,27 @@ import type { SessionStore } from '../persistence/types';
 import { ArtworkSurface } from '../renderer/artwork-surface';
 import { backingSize, fitViewport } from '../renderer/coordinates';
 import type { LiveStrokeSpec, Viewport } from '../renderer/types';
+import {
+  CENTERED_PLACEMENT,
+  FIT_VIEW,
+  pinchView,
+  placementForTop,
+  sameView,
+  viewTransformCss,
+  type CanvasView,
+  type PaperPlacement,
+} from '../renderer/view';
 import { acceptsPointerType, rejectionMessage } from '../input/pointer-mode';
 import { useStrokeInput } from '../input/useStrokeInput';
 import { FinishScreen } from './FinishScreen';
 import { GuideOverlay } from './GuideOverlay';
 import { StepControls, StepNavigation, StepPanel } from './StepPanel';
+import { BrushSlider } from './BrushSlider';
+import { ColorWell } from './ColorWell';
 import { Toolbar, ToolbarSettings } from './Toolbar';
+import { drawingChrome } from './drawing-chrome';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
+import { useLayoutTier } from './useLayoutTier';
 import { newId } from './ids';
 import { useAutosave, type SaveStatus } from './useAutosave';
 
@@ -55,6 +69,8 @@ interface DrawingPadProps {
   readonly onActivity: () => void;
   readonly onControlChange: (action: SessionAction, state: SessionState) => void;
   readonly onChoosePicture: (saved: Promise<boolean>, state: SessionState) => void;
+  /** The phone "best on a tablet" note is covering the top of this screen. */
+  readonly tabletNoticeOpen?: boolean;
 }
 
 /** What the pointer began drawing, frozen at pointer-down (FR-03). */
@@ -64,7 +80,8 @@ interface PendingStroke {
   readonly tool: Stroke['tool'];
 }
 
-export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onControlChange, onChoosePicture }: DrawingPadProps) {
+export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onControlChange, onChoosePicture, tabletNoticeOpen = false }: DrawingPadProps) {
+  const layout = useLayoutTier();
   const [state, setState] = useState(initialState);
   const stateRef = useRef(state);
   const preferencesDirtyRef = useRef(false);
@@ -119,6 +136,28 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const [stage, setStage] = useState<HTMLDivElement | null>(null);
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const [viewport, setViewport] = useState<Viewport | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const viewRef = useRef<CanvasView>(FIT_VIEW);
+  const pinchOriginRef = useRef<CanvasView | null>(null);
+  const stageSizeRef = useRef({ width: 0, height: 0 });
+  const [stageBox, setStageBox] = useState({ width: 0, height: 0 });
+  const [view, setView] = useState<CanvasView>(FIT_VIEW);
+  const placementRef = useRef<PaperPlacement>(CENTERED_PLACEMENT);
+  const placement = useMemo(() => {
+    if (!viewport || stageBox.height <= 0) return CENTERED_PLACEMENT;
+    return placementForTop(stageBox.height, viewport.cssHeight, drawingChrome(layout, tabletNoticeOpen).top);
+  }, [layout, viewport, stageBox.height, tabletNoticeOpen]);
+
+  const applyView = useCallback((next: CanvasView, commit: boolean) => {
+    viewRef.current = next;
+    const frame = frameRef.current;
+    if (frame) frame.style.transform = viewTransformCss(next, placementRef.current);
+    if (commit) setView((current) => (sameView(current, next) ? current : next));
+  }, []);
+
+  useLayoutEffect(() => {
+    placementRef.current = placement;
+  }, [placement]);
 
   useEffect(() => () => { surfaceRef.current = null; }, [surfaceRef]);
 
@@ -130,8 +169,19 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
 
     const measure = () => {
       const rect = stage.getBoundingClientRect();
+      const nextBox = { width: rect.width, height: rect.height };
+      stageSizeRef.current = nextBox;
+      setStageBox((current) => (
+        current.width === nextBox.width && current.height === nextBox.height ? current : nextBox
+      ));
+      const chrome = drawingChrome(layout, tabletNoticeOpen);
       setViewport(
-        fitViewport(lesson.coordinateSpace, rect.width, rect.height, window.devicePixelRatio),
+        fitViewport(
+          lesson.coordinateSpace,
+          rect.width,
+          Math.max(1, rect.height - chrome.top - chrome.bottom),
+          window.devicePixelRatio,
+        ),
       );
     };
     measure();
@@ -140,7 +190,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
     return () => observer.disconnect();
-  }, [stage, lesson.coordinateSpace]);
+  }, [stage, lesson.coordinateSpace, layout, tabletNoticeOpen]);
 
   const paint = useCallback(() => {
     const surface = surfaceRef.current;
@@ -186,9 +236,53 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const [rejection, setRejection] = useState<string | null>(null);
   const [controlTab, setControlTab] = useState<'drawing' | 'help'>('drawing');
 
+  const discardLiveStroke = () => {
+    // A multi-finger gesture must not leave the dot the first finger started.
+    // Replay the committed strokes only — no session update, so this stays off
+    // the React path the same way a pointermove does.
+    const surface = surfaceRef.current;
+    pendingRef.current = null;
+    if (!surface) return;
+    surface.endStroke();
+    surface.replay(toRenderStrokes(stateRef.current.strokes));
+    paint();
+  };
+
   useStrokeInput(canvas, lesson.coordinateSpace, {
     accepts: (pointerType) => acceptsPointerType(state.inputMode, pointerType),
+    inputMode: state.inputMode,
     rejected: (pointerType) => setRejection(rejectionMessage(state.inputMode, pointerType)),
+    clearRejection: () => setRejection(null),
+    discard: discardLiveStroke,
+    undo: () => dispatch({ type: 'undo' }),
+    redo: () => dispatch({ type: 'redo' }),
+    pinch: (gesture) => {
+      const fitted = viewport;
+      if (!fitted || fitted.cssWidth <= 0 || fitted.cssHeight <= 0) return;
+      if (pinchOriginRef.current === null) pinchOriginRef.current = viewRef.current;
+      const { width, height } = stageSizeRef.current;
+      applyView(
+        pinchView({
+          stageWidth: width,
+          stageHeight: height,
+          fittedWidth: fitted.cssWidth,
+          fittedHeight: fitted.cssHeight,
+          startView: pinchOriginRef.current,
+          startMidX: gesture.startMidX,
+          startMidY: gesture.startMidY,
+          startDistance: gesture.startDistance,
+          midX: gesture.midX,
+          midY: gesture.midY,
+          distance: gesture.distance,
+          placement: placementRef.current,
+        }),
+        false,
+      );
+    },
+    settle: () => {
+      pinchOriginRef.current = null;
+      applyView(viewRef.current, true);
+    },
 
     begin: (point) => {
       const surface = surfaceRef.current;
@@ -317,122 +411,137 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
 
   return (
     <div className="pad">
-      <div className="pad__top">
-        <header className="pad__header">
-          <button type="button" className="button" onClick={choosePicture}>
-            ← Pilih gambar
+      {/* The stage is the whole screen. Controls overlay it; they do not
+          reserve a column, so the paper can use every pixel (D-49). */}
+      <div className="pad__stage" ref={setStage}>
+        <div
+          className="stage__frame"
+          ref={frameRef}
+          style={
+            viewport
+              ? {
+                  width: `${viewport.cssWidth}px`,
+                  height: `${viewport.cssHeight}px`,
+                  transform: viewTransformCss(view, placement),
+                }
+              : undefined
+          }
+        >
+          <canvas
+            ref={setCanvas}
+            className="stage__canvas"
+            role="img"
+            aria-label={`Kanvas gambar. ${step.instruction}`}
+          />
+          {viewport && (
+            <GuideOverlay
+              space={lesson.coordinateSpace}
+              paths={step.guidePaths}
+              visible={guidesVisible}
+              widthCss={viewport.cssWidth}
+              heightCss={viewport.cssHeight}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="pad__chrome">
+        <header className="float-header">
+          <button type="button" className="button float-header__back" onClick={choosePicture}>
+            <span aria-hidden="true">← </span>
+            <span className="button__text">Pilih gambar</span>
           </button>
-          <div>
+          <div className="float-header__titles">
             <h1 className="pad__title">{lesson.title}</h1>
             <p className="pad__subtitle">{lesson.subtitle}</p>
           </div>
           <p className="pad__status" role="status">
             {statusLabel(saveStatus, durable)}
           </p>
+          <ColorWell state={state} preset={preset} dispatch={dispatch} />
         </header>
 
-        {notice !== null && <p className="banner">{notice}</p>}
-        {!durable && (
-          <p className="banner banner--warning">
-            Penyimpanan permanen tidak tersedia di browser ini, jadi karya ini hanya bertahan
-            selama tab terbuka.
-          </p>
-        )}
-        {saveStatus.kind === 'storage-full' && (
-          <p className="banner banner--warning">
-            Penyimpanan penuh. Karya yang sudah tersimpan tetap aman, tetapi goresan terbaru belum
-            tersimpan. Kosongkan ruang, lalu coba lagi.
-          </p>
-        )}
-        {saveStatus.kind === 'failed' && (
-          <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
-        )}
-        {rejection !== null && <p className="banner">{rejection}</p>}
-      </div>
-
-      <div className="pad__body">
-        <div className="pad__stage" ref={setStage}>
-          <div
-            className="stage__frame"
-            style={
-              viewport
-                ? { width: `${viewport.cssWidth}px`, height: `${viewport.cssHeight}px` }
-                : undefined
-            }
-          >
-            <canvas
-              ref={setCanvas}
-              className="stage__canvas"
-              role="img"
-              aria-label={`Kanvas gambar. ${step.instruction}`}
-            />
-            {viewport && (
-              <GuideOverlay
-                space={lesson.coordinateSpace}
-                paths={step.guidePaths}
-                visible={guidesVisible}
-                widthCss={viewport.cssWidth}
-                heightCss={viewport.cssHeight}
-              />
-            )}
-          </div>
+        <div className="float-notices">
+          {notice !== null && <p className="banner">{notice}</p>}
+          {!durable && (
+            <p className="banner banner--warning">
+              Penyimpanan permanen tidak tersedia di browser ini, jadi karya ini hanya bertahan
+              selama tab terbuka.
+            </p>
+          )}
+          {saveStatus.kind === 'storage-full' && (
+            <p className="banner banner--warning">
+              Penyimpanan penuh. Karya yang sudah tersimpan tetap aman, tetapi goresan terbaru belum
+              tersimpan. Kosongkan ruang, lalu coba lagi.
+            </p>
+          )}
+          {saveStatus.kind === 'failed' && (
+            <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
+          )}
+          {rejection !== null && <p className="banner">{rejection}</p>}
         </div>
 
-        {/* On a tablet the rail box disappears (`display: contents`) so the step
-            stays full width above the canvas. On a phone in landscape it becomes
-            the side column, which keeps the canvas as tall as the screen. */}
-        <div className="pad__rail">
-          <StepPanel lesson={lesson} state={state} step={step} />
-          <aside className="pad__side">
-            <StepNavigation
-              lesson={lesson}
+        <BrushSlider
+          stepWidth={lesson.steps[state.currentStepIndex]?.toolPreset.widthViewbox ?? preset.widthViewbox}
+          tool={preset.tool}
+          preset={preset}
+          dispatch={dispatch}
+        />
+
+        <div className="step-card">
+          <StepPanel lesson={lesson} state={state} step={step} startCollapsed={layout !== 'tablet'} />
+        </div>
+        <div className="step-nav">
+          <StepNavigation
+            lesson={lesson}
+            state={state}
+            onFinish={() => dispatch({ type: 'finish' })}
+            dispatch={dispatch}
+          />
+        </div>
+
+        <aside className="float-dock">
+          <div className="pad__control-panel" data-active="true">
+            <Toolbar
               state={state}
-              onFinish={() => dispatch({ type: 'finish' })}
+              canUndo={canUndo(lesson, state)}
+              canRedo={canRedo(state)}
               dispatch={dispatch}
             />
-            <div className="pad__tabs" role="group" aria-label="Kelompok kontrol">
-              <button
-                type="button"
-                className="chip"
-                aria-pressed={controlTab === 'drawing'}
-                onClick={() => setControlTab('drawing')}
-              >
-                Alat gambar
-              </button>
-              <button
-                type="button"
-                className="chip"
-                aria-pressed={controlTab === 'help'}
-                onClick={() => setControlTab('help')}
-              >
-                Bantuan
-              </button>
-            </div>
-            <div className="pad__control-panel" data-active={controlTab === 'drawing'}>
-              <Toolbar
-                lesson={lesson}
-                state={state}
-                preset={preset}
-                canUndo={canUndo(lesson, state)}
-                canRedo={canRedo(state)}
-                dispatch={dispatch}
-              />
-            </div>
-            <div className="pad__control-panel" data-active={controlTab === 'help'}>
-              <ToolbarSettings
-                state={state}
-                isColorStep={isColorStep}
-                dispatch={dispatch}
-              />
-              <StepControls
-                state={state}
-                guidesVisible={guidesVisible}
-                onShowHint={showHint}
-                dispatch={dispatch}
-              />
-            </div>
-          </aside>
-        </div>
+          </div>
+          <button
+            type="button"
+            className="chip float-dock__help"
+            aria-label="Bantuan"
+            aria-pressed={controlTab === 'help'}
+            aria-expanded={controlTab === 'help'}
+            onClick={() => setControlTab((tab) => (tab === 'help' ? 'drawing' : 'help'))}
+          >
+            <span aria-hidden="true">?</span>
+          </button>
+          <button
+            type="button"
+            className="chip float-dock__fit"
+            aria-label="Sesuai layar"
+            disabled={view.zoom === 1 && view.panX === 0 && view.panY === 0}
+            onClick={() => applyView(FIT_VIEW, true)}
+          >
+            <span aria-hidden="true">⛶</span>
+          </button>
+          <div className="pad__control-panel float-help" data-active={controlTab === 'help'}>
+            <ToolbarSettings
+              state={state}
+              isColorStep={isColorStep}
+              dispatch={dispatch}
+            />
+            <StepControls
+              state={state}
+              guidesVisible={guidesVisible}
+              onShowHint={showHint}
+              dispatch={dispatch}
+            />
+          </div>
+        </aside>
       </div>
     </div>
   );

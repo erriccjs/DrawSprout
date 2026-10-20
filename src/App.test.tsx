@@ -11,6 +11,7 @@ import { markOfflineReady, markUpdateWaiting, resetOfflineStatus } from './offli
 import { strokeInput } from './test/factories';
 import { drawStroke, pointerDown, pointerMove, pointerUp, stubLayoutBox } from './test/pointer';
 import { App } from './App';
+import { TABLET_NOTICE_KEY } from './ui/tablet-notice';
 
 const lessons = vi.hoisted(() => [] as LessonPackage[]);
 
@@ -323,7 +324,7 @@ describe('resume notice', () => {
     fireEvent.click(screen.getByRole('button', { name: /Mode jari/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Pen' }));
     fireEvent.click(screen.getByRole('button', { name: 'Ikuti panduan' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Sedang' }));
+    fireEvent.change(screen.getByRole('slider', { name: 'Ketebalan' }), { target: { value: '12' } });
     expect(save).not.toHaveBeenCalled();
 
     await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));
@@ -700,5 +701,46 @@ describe('resume notice', () => {
     await open('Kucing');
 
     expect(await screen.findByText(RESUMED)).toBeTruthy();
+  });
+});
+
+describe('the phone tablet notice', () => {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  function setViewport(nextWidth: number, nextHeight: number) {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: nextWidth });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: nextHeight });
+  }
+
+  afterEach(() => {
+    setViewport(width, height);
+    localStorage.removeItem(TABLET_NOTICE_KEY);
+  });
+
+  it('shows on a phone, remembers Mengerti, and does not write a drawing', async () => {
+    setViewport(390, 844);
+    const save = vi.spyOn(store, 'saveProgress');
+    render(<App />);
+    expect(await screen.findByText(/DrawSprout paling nyaman di tablet/)).toBeTruthy();
+    expect(screen.getByText(/Di HP tetap bisa menggambar/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mengerti' }));
+    expect(screen.queryByText(/DrawSprout paling nyaman di tablet/)).toBeNull();
+    expect(localStorage.getItem(TABLET_NOTICE_KEY)).toBe('1');
+    expect(save).not.toHaveBeenCalled();
+
+    cleanup();
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    expect(screen.queryByText(/DrawSprout paling nyaman di tablet/)).toBeNull();
+  });
+
+  it('stays hidden on a tablet', async () => {
+    setViewport(1024, 768);
+    localStorage.removeItem(TABLET_NOTICE_KEY);
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    expect(screen.queryByText(/DrawSprout paling nyaman di tablet/)).toBeNull();
   });
 });

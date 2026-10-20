@@ -4,6 +4,11 @@ Tablet landscape is still the primary layout. The phone section below is a
 separate pass for roughly 360–430px portrait and for phone landscape. The
 tablet numbers were measured again after that pass and did not move.
 
+These measurements are the column layout from before the full-bleed drawing
+screen (D-49). The paper now fills the stage and the controls float, so the
+canvas and column sizes in the tables are a record of that earlier fit, not
+the current screen.
+
 ## Tablet fit measurements
 
 Measured in headless Chrome (viewport emulation, touch, DPR 1) against the dev

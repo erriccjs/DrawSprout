@@ -42,11 +42,15 @@ body {
 }
 
 .shell {
+  position: relative;
   height: 100%;
   padding: 12px;
 }
 
 .shell:has(> .pad) {
+  /* The drawing screen is the whole viewport. Padding would letterbox the
+     paper inside the shell instead of letting it bleed to the edges. */
+  padding: 0;
   overflow: hidden;
 }
 
@@ -139,31 +143,16 @@ body {
 /* --- drawing pad ---------------------------------------------------------- */
 
 .pad {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  position: relative;
   height: 100%;
   min-height: 0;
-}
-
-.pad__header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.pad__header > div {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
+  overflow: hidden;
 }
 
 .pad__title {
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   margin: 0;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .pad__subtitle,
@@ -173,53 +162,28 @@ body {
   margin: 0;
 }
 
-.pad__top {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.pad__body {
-  display: grid;
-  /* Row gap matches the old space between the step panel and the canvas.
-     Column gap matches the old space between the canvas and the controls. */
-  grid-template-columns: minmax(0, 1fr) 320px;
-  grid-template-rows: auto minmax(0, 1fr);
-  row-gap: 8px;
-  column-gap: 12px;
-  min-height: 0;
-  flex: 1;
-}
-
-/* The box is removed on a tablet so the step panel can sit full-width on the
-   first row while the canvas and controls share the second. Phone landscape
-   turns it back into a real column. */
-.pad__rail {
-  display: contents;
-}
-
 .pad__stage {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  grid-column: 1;
-  grid-row: 2;
   min-height: 0;
   min-width: 0;
-  background: var(--page);
+  background: #e4dfd6;
+  overflow: hidden;
 }
 
 .stage__frame {
   position: relative;
   background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px rgba(31, 41, 51, 0.08);
   overflow: hidden;
   /* The child's hand rests here, so text selection and long-press callouts are
      suppressed on the surface only — never on the page. */
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+  transform-origin: center center;
 }
 
 .stage__canvas {
@@ -236,23 +200,305 @@ body {
   pointer-events: none;
 }
 
-.pad__side {
-  display: flex;
-  flex-direction: column;
-  grid-column: 2;
-  grid-row: 2;
-  gap: 6px;
-  min-height: 0;
-  min-width: 0;
-  position: relative;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+/* Chrome sits over the paper. The layer itself ignores touches so a stroke
+   can start in the gaps; each control opts back in. */
+.pad__chrome {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
 }
 
-.pad__tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.pad__chrome :is(button, a, input, select, label, .step-card, .step-nav, .float-dock, .float-header, .float-notices, .float-help) {
+  pointer-events: auto;
+}
+
+.float-header {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top, 0px));
+  left: max(8px, env(safe-area-inset-left, 0px));
+  right: max(8px, env(safe-area-inset-right, 0px));
+  display: flex;
+  align-items: center;
   gap: 8px;
+  z-index: 4;
+}
+
+.float-header__back {
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 2px 8px rgba(31, 41, 51, 0.12);
+}
+
+.float-header__titles {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.pad__status {
+  flex: 0 1 auto;
+  max-width: 34%;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.float-notices {
+  position: absolute;
+  left: 50%;
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 5;
+}
+
+.float-dock {
+  position: absolute;
+  right: max(10px, env(safe-area-inset-right, 0px));
+  top: 168px;
+  bottom: 96px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(300px, 46vw);
+}
+
+.float-dock .pad__control-panel {
+  max-height: min(52vh, 420px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.14);
+}
+
+.float-help {
+  position: absolute;
+  right: calc(100% + 8px);
+  bottom: 0;
+  width: min(320px, 70vw);
+  max-height: min(60vh, 480px);
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.16);
+}
+
+.float-dock__help {
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 2px 8px rgba(31, 41, 51, 0.12);
+}
+
+.float-dock .toolbar {
+  align-items: flex-end;
+}
+
+.float-dock .toolbar__group--tools,
+.float-dock .toolbar__group--history {
+  flex-direction: column;
+  align-items: flex-end;
+  width: max-content;
+}
+
+.float-dock .toolbar__group--tools .chip:not(.chip--wide),
+.float-dock .toolbar__group--history .chip,
+.float-dock__help,
+.float-dock__fit {
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
+  height: 56px;
+  padding: 0;
+  overflow: hidden;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.float-dock .chip__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.brush-slider {
+  position: absolute;
+  left: max(8px, env(safe-area-inset-left, 0px));
+  top: 168px;
+  bottom: 96px;
+  z-index: 3;
+  width: 64px;
+  height: auto;
+  min-height: 0;
+  max-height: 340px;
+  margin-top: auto;
+  margin-bottom: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 6px 18px rgba(31, 41, 51, 0.12);
+}
+
+.brush-slider__input {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 56px;
+  height: 100%;
+  min-height: 172px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.brush-slider__input::-webkit-slider-runnable-track {
+  width: 14px;
+  border-radius: 999px;
+  background: #d9d3c7;
+}
+
+.brush-slider__input::-webkit-slider-thumb {
+  appearance: none;
+  width: 48px;
+  height: 48px;
+  margin-left: -17px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--ink);
+  box-shadow: 0 2px 6px rgba(31, 41, 51, 0.28);
+}
+
+.brush-slider__input::-moz-range-track {
+  width: 14px;
+  border-radius: 999px;
+  background: #d9d3c7;
+}
+
+.brush-slider__input::-moz-range-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--ink);
+}
+
+.color-well {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 6;
+}
+
+.color-well__orb {
+  width: 64px;
+  height: 64px;
+  min-width: 64px;
+  min-height: 64px;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 10px rgba(31, 41, 51, 0.22), inset 0 0 0 1px rgba(31, 41, 51, 0.35);
+  cursor: pointer;
+}
+
+.color-well__orb[aria-pressed='true'] {
+  box-shadow: 0 0 0 3px var(--accent), 0 2px 10px rgba(31, 41, 51, 0.22);
+}
+
+.color-well__popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(292px, 72vw);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(31, 41, 51, 0.2);
+}
+
+.color-well__popover[data-open='false'] {
+  display: none;
+}
+
+.color-well__popover .swatches {
+  display: grid;
+  grid-template-columns: repeat(5, var(--tap));
+  justify-content: start;
+  gap: 6px;
+}
+
+.color-well__recents {
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.step-card {
+  position: absolute;
+  left: 50%;
+  top: 72px;
+  transform: translateX(-50%);
+  z-index: 4;
+  width: min(920px, calc(100% - 24px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 8px 12px;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 18px;
+  box-shadow: 0 8px 28px rgba(31, 41, 51, 0.16);
+}
+
+/* Lanjut stays on the bottom edge: the hand already rests there, so the
+   next-step tap does not reach across the paper or cover the instruction. */
+.step-nav {
+  position: absolute;
+  left: 50%;
+  bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 4;
+  width: min(420px, calc(100% - 24px));
+}
+
+.step-nav .step-panel__nav {
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+}
+
+.step-nav .button--primary {
+  min-height: 72px;
+  min-width: 160px;
+  font-size: 1.4rem;
+  border-radius: 16px;
+}
+
+.step-nav .button {
+  min-height: 72px;
 }
 
 .pad__control-panel[data-active='false'] {
@@ -273,21 +519,109 @@ body {
 /* --- step panel ----------------------------------------------------------- */
 
 .step-panel {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-row: 1;
-  grid-template-columns: minmax(0, 1fr) 132px;
+  display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   min-height: 0;
   min-width: 0;
-  padding: 8px 12px;
-  background: var(--paper);
+  flex: 1 1 auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.step-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 18px;
+}
+
+.step-dots__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+  background: transparent;
+}
+
+.step-dots__dot[data-state='done'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.step-dots__dot[data-state='current'] {
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border-color: var(--ink);
+}
+
+.step-card__toggle,
+.step-card__thumb {
+  flex: 0 0 auto;
+  padding: 0;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.step-card__toggle {
+  width: var(--tap);
+  height: var(--tap);
+  border-radius: 12px;
+  font-size: 1.25rem;
+}
+
+.step-card__thumb {
+  width: 84px;
+  height: 64px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.step-card__thumb .target-preview {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.example-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  justify-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: rgba(31, 41, 51, 0.45);
+}
+
+.example-lightbox .target-preview {
+  width: min(720px, 92vw);
+  height: auto;
+  max-height: 70vh;
+  background: var(--paper);
+  border-radius: 16px;
+}
+
+.example-lightbox__close {
+  min-width: 160px;
 }
 
 .step-panel__header {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -310,17 +644,34 @@ body {
   margin: 2px 0 0;
   font-size: 1.25rem;
   line-height: 1.25;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .step-panel__hint {
   margin: 2px 0 0;
   color: var(--muted);
   font-size: 0.875rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
 }
 
 .step-panel__nav {
   display: flex;
+  flex-direction: column;
   gap: 8px;
+  flex: 0 0 auto;
+}
+
+.step-card .button--primary {
+  min-height: 72px;
+  min-width: 148px;
+  font-size: 1.35rem;
+  border-radius: 16px;
 }
 
 .step-panel__nav .button {
@@ -612,6 +963,58 @@ body {
   text-align: center;
 }
 
+.celebration {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 10px;
+  height: 28px;
+}
+
+.celebration span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform-origin: center bottom;
+  animation: sprout-pop 900ms ease-out both;
+}
+
+.celebration span:nth-child(2) {
+  background: #e0a23a;
+  animation-delay: 90ms;
+}
+
+.celebration span:nth-child(3) {
+  background: #6aaa62;
+  animation-delay: 180ms;
+}
+
+.celebration[data-motion='reduce'] span {
+  animation: none;
+}
+
+@keyframes sprout-pop {
+  0% {
+    transform: translateY(6px) scale(0.4);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(-4px) scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .celebration span {
+    animation: none;
+  }
+}
+
 .finish__title {
   margin: 0;
 }
@@ -777,6 +1180,13 @@ body {
   }
 }
 
+/* The dock is a slim icon stack on every size. The older two-column toolbar
+   grid was for the swatch row, which no longer lives here. */
+.float-dock .toolbar:not(.toolbar--settings) {
+  display: flex;
+  flex-direction: column;
+}
+
 /* --- phone ----------------------------------------------------------------- */
 /*
  * Phones are a secondary layout. The tier comes from `data-layout` (see
@@ -808,6 +1218,12 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   padding-left: max(8px, env(safe-area-inset-left, 0px));
 }
 
+/* The drawing surface bleeds to the screen edge. Safe area is applied on the
+   floating controls, not as a margin around the paper. */
+.shell[data-layout^='phone']:has(> .pad) {
+  padding: 0;
+}
+
 .shell[data-layout^='phone']:not(:has(> .pad)):not(:has(> .finish)) {
   overflow-y: auto;
   overscroll-behavior-y: contain;
@@ -819,8 +1235,45 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   overscroll-behavior: none;
 }
 
+.tablet-notice {
+  position: absolute;
+  z-index: 40;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(440px, calc(100% - 20px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 16px;
+  background: #fffdf8;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.16);
+}
+
+.tablet-notice p {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.tablet-notice .button {
+  min-height: var(--tap);
+  min-width: 104px;
+  flex: 0 0 auto;
+}
+
+.shell:has(> .pad) .tablet-notice {
+  top: max(72px, calc(env(safe-area-inset-top, 0px) + 64px));
+}
+
 .shell[data-layout^='phone'] .lesson-picker {
   padding: 4px 2px 16px;
+}
+
+.shell[data-layout^='phone'][data-tablet-notice='open'] .lesson-picker {
+  padding-top: 108px;
 }
 
 .shell[data-layout='phone-portrait'] .lesson-picker h1 {
@@ -953,9 +1406,27 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 }
 
 .shell[data-layout^='phone'] .step-panel {
-  grid-template-columns: minmax(0, 1fr) 76px;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 6px;
+}
+
+.shell[data-layout^='phone'] .step-card__thumb {
+  width: 64px;
+  height: 48px;
+}
+
+.shell[data-layout^='phone'] .step-nav .button--primary {
+  min-height: 56px;
+  min-width: 120px;
+  font-size: 1.2rem;
+}
+
+.shell[data-layout^='phone'] .step-nav .button {
+  min-height: 56px;
+}
+
+.shell[data-layout^='phone'] .step-nav .step-panel__nav {
+  position: static;
+  background: transparent;
 }
 
 .shell[data-layout^='phone'] .step-panel__counter {
@@ -972,8 +1443,37 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   overflow-wrap: break-word;
 }
 
-.shell[data-layout='phone-portrait'] .pad__body {
-  grid-template-rows: auto minmax(0, 1fr) auto;
+.shell[data-layout='phone-portrait'] .step-card,
+.shell[data-layout='phone-landscape'] .step-card {
+  width: min(calc(100% - 16px), 720px);
+}
+
+.shell[data-layout='phone-landscape'] .float-dock {
+  top: max(64px, 18%);
+  transform: none;
+  max-height: calc(100% - 150px);
+}
+
+.shell[data-layout='phone-portrait'] .float-header__titles {
+  display: none;
+}
+
+.shell[data-layout^='phone'] .brush-slider {
+  height: min(30vh, 200px);
+  min-height: 148px;
+  top: 38%;
+}
+
+.shell[data-layout^='phone'] .color-well__orb {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
+}
+
+.shell[data-layout^='phone'] .float-dock .toolbar:not(.toolbar--settings) {
+  display: flex;
+  flex-direction: column;
 }
 
 .shell[data-layout='phone-portrait'] .step-panel {
@@ -1360,4 +1860,129 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 
 .shell[data-layout^='phone'] .banner {
   font-size: 0.875rem;
+}
+
+.shell[data-layout^='phone'] .float-dock .toolbar:not(.toolbar--settings) {
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+}
+
+/* Phone: the step reference sits under the header (and under the tablet note
+   when that is open). Lanjut stays at the bottom edge. These tops match
+   drawingChrome() in src/ui/drawing-chrome.ts. */
+.shell[data-layout^='phone'] .step-card {
+  top: 60px;
+  width: calc(100% - 16px);
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.shell[data-layout^='phone'][data-tablet-notice='open'] .step-card {
+  top: 124px;
+}
+
+.shell[data-layout^='phone']:has(> .pad) .tablet-notice {
+  top: 58px;
+  padding: 6px 8px 6px 12px;
+  gap: 8px;
+}
+
+.shell[data-layout^='phone'] .tablet-notice p {
+  font-size: 0.95rem;
+}
+
+.shell[data-layout='phone-portrait'] .step-card {
+  width: calc(100% - 16px);
+}
+
+.shell[data-layout='phone-portrait'] .step-nav {
+  width: calc(100% - 16px);
+}
+
+.shell[data-layout='phone-portrait'] .step-nav .step-panel__nav {
+  position: static;
+}
+
+.shell[data-layout='phone-portrait'] .float-dock {
+  top: auto;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  left: 72px;
+  right: 8px;
+  transform: none;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.shell[data-layout='phone-portrait'] .float-dock .pad__control-panel {
+  max-height: none;
+  overflow: visible;
+  padding: 2px;
+}
+
+.shell[data-layout='phone-portrait'] .float-dock .toolbar:not(.toolbar--settings),
+.shell[data-layout='phone-portrait'] .float-dock .toolbar__group--tools,
+.shell[data-layout='phone-portrait'] .float-dock .toolbar__group--history {
+  flex-direction: row;
+  align-items: center;
+  width: auto;
+}
+
+.shell[data-layout='phone-portrait'] .float-dock .toolbar__group--tools .chip:not(.chip--wide),
+.shell[data-layout='phone-portrait'] .float-dock .toolbar__group--history .chip,
+.shell[data-layout='phone-portrait'] .float-dock__help,
+.shell[data-layout='phone-portrait'] .float-dock__fit {
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+  height: 48px;
+}
+
+.shell[data-layout='phone-portrait'] .float-help {
+  right: 0;
+  left: auto;
+  bottom: calc(100% + 8px);
+  width: min(320px, calc(100vw - 24px));
+}
+
+.shell[data-layout='phone-portrait'] .brush-slider {
+  top: auto;
+  bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  left: max(8px, env(safe-area-inset-left, 0px));
+  width: 52px;
+  height: 132px;
+  min-height: 132px;
+  max-height: none;
+  margin: 0;
+}
+
+.shell[data-layout='phone-portrait'] .brush-slider__input {
+  min-height: 0;
+  height: 100%;
+}
+
+.shell[data-layout='phone-landscape'] .float-dock {
+  top: 116px;
+  bottom: 68px;
+  transform: none;
+  max-height: none;
+}
+
+.shell[data-layout='phone-landscape'] .brush-slider {
+  top: 116px;
+  bottom: 68px;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.shell[data-layout='phone-landscape'][data-tablet-notice='open'] .float-dock,
+.shell[data-layout='phone-landscape'][data-tablet-notice='open'] .brush-slider {
+  top: 160px;
 }

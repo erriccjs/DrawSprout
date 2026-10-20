@@ -20,6 +20,27 @@ export containing only the child's drawing.
   screen without waiting on storage. Changing a tool or mode while the drawing
   opens keeps the saved strokes, and an empty session cannot replace them.
 - Canvas drawing with Pointer Events, pen / brush / eraser, undo and redo.
+- A full-bleed drawing screen. The paper fills the stage, and the tools, the
+  brush-size slider, and the step card float at the edges instead of taking a
+  column beside it. *Bantuan* is an icon, so the label stays inside its button.
+  On a phone the step card starts folded, and the slider and tools sit in the
+  space under the paper.
+- Brush size is a vertical slider. The active colour is a circle that opens a
+  small palette and the last few colours. Each step still starts with its own
+  tool, width, and colour, and *Ikuti panduan* returns to the guide colour.
+- Two-finger tap undoes and three-finger tap redoes, as well as the buttons.
+  In finger mode that gesture throws away the stroke that was just starting, so
+  it does not leave a dot or a line. In pencil mode the fingers can gesture
+  while a stylus stroke continues.
+- Pinch to zoom and two-finger drag to pan, with no rotation. *Sesuai layar*
+  fits the paper again. Strokes stay in the 1000×750 lesson space. Export does
+  not include the zoom.
+- The step reference (instruction, progress dots, and a small example that
+  opens larger) sits at the top of the drawing screen, so a hand resting on
+  the lower part does not cover it. *Lanjut* and *Kembali* stay on the bottom
+  edge, with *Lanjut* the large button. On a phone the reference starts
+  folded. Finishing a lesson plays a small decoration, which stays still when
+  the system asks for less motion.
 - With the eraser chosen, *Hapus semua* clears the whole drawing, but only
   after asking "Mau mulai dengan gambar kosong?". *Batalkan* brings the
   drawing back while the canvas is still empty. The clear lasts for the open
@@ -43,9 +64,11 @@ export containing only the child's drawing.
   clear it and start again from the first step.
 - PNG export of the artwork alone — no guides, no example illustration.
 - A phone layout for about 360–430px portrait and for phone landscape. Tablet
-  landscape is still the layout the screens were designed around. The phone
-  measurements, and the tablet sizes that were rechecked afterwards, are in
-  [`docs/TABLET_LAYOUT_FIT.md`](docs/TABLET_LAYOUT_FIT.md).
+  landscape is still the layout the screens were designed around. The first
+  phone visit says DrawSprout is most comfortable on a tablet. *Mengerti*
+  remembers that on the device, not in the saved drawing. The column
+  measurements in [`docs/TABLET_LAYOUT_FIT.md`](docs/TABLET_LAYOUT_FIT.md) are
+  from the layout before the full-bleed drawing screen.
 - In a production build, a service worker stores the app shell and every bundled
   lesson. The picture-choosing screen says *Bisa dibuka tanpa internet* only
   after that cache has been stored and each file's checksum matches. The dev
@@ -118,6 +141,9 @@ npx wrangler deploy
 `wrangler.jsonc` is the deploy. It uploads `./dist` as static assets and, for a
 path that is not a file, serves `index.html`. There is no Worker script.
 `npx wrangler deploy` uses the Wrangler 4 version locked in `package-lock.json`.
+A branch build on Workers Builds runs `npx wrangler preview` instead. That
+command needs the empty top-level `previews` object in `wrangler.jsonc`.
+Production `wrangler deploy` does not use it.
 A project with no Wrangler config is
 [auto-configured](https://developers.cloudflare.com/workers/framework-guides/automatic-configuration/)
 on deploy, which rewrites `vite.config.ts` and installs the Cloudflare Vite
@@ -170,8 +196,11 @@ own job so one failure still shows the state of the rest.
 | Export containing artwork only | `src/renderer/export.test.ts` |
 | Coordinate mapping across sizes and orientations | `src/renderer/coordinates.test.ts` |
 | Pencil / finger input filter | `src/input/pointer-mode.test.ts` |
-| The picker, leaving and reopening a picture, resume notices | `src/App.test.tsx` |
-| The drawing screen at component level | `src/ui/DrawingPad.test.tsx` |
+| Two-finger and three-finger tap recognition | `src/input/gesture-tracker.test.ts` |
+| Zoom and pan mapped back to lesson coordinates | `src/renderer/view.test.ts` |
+| The picker, leaving and reopening a picture, resume notices, phone tablet notice | `src/App.test.tsx` |
+| The drawing screen at component level, including pinch without a render per move | `src/ui/DrawingPad.test.tsx` |
+| Brush size, recent colours, the step card, and the finish decoration | `src/ui/brush-size.test.ts`, `src/ui/color-history.test.ts`, `src/ui/StepPanel.test.tsx`, `src/ui/FinishScreen.test.tsx` |
 | Precache manifest, lesson coverage, checksum gate | `src/offline/precache.test.ts`, `src/offline/vite-plugin.test.ts` |
 | Service worker registration and the safe update gate | `src/offline/register.test.ts`, `src/offline/update-policy.test.ts`, `src/offline/service-worker.test.ts` |
 | The offline-ready line and the update prompt | `src/App.test.tsx`, `src/offline/useOffline.test.tsx` |
@@ -201,7 +230,9 @@ machine. It has not been run on a tablet.
 
 **What this does not prove.** Apple Pencil behaviour, palm rejection, frame rate
 and input latency cannot be judged from a desktop browser, and none of them have
-been measured. Acceptance tests AT-16, AT-17, AT-18, AT-19 and AT-22, plus the
+been measured. The same limit applies to how a two-finger tap, a three-finger
+tap, and a pinch feel in the hand, and to whether a resting palm is ignored.
+Acceptance tests AT-16, AT-17, AT-18, AT-19 and AT-22, plus the
 rendering targets in PRD section 13, are open and need a real iPad with an Apple
 Pencil and a real Android tablet with an active stylus. The phone layout was
 checked the same way, in headless Chrome at phone-sized viewports, not on a

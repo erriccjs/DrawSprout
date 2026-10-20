@@ -491,6 +491,9 @@ The file is assets only:
 - No `main`, and no assets binding. A binding is only valid alongside a script.
 - `assets.directory` is `./dist`. `assets.not_found_handling` is
   `single-page-application`.
+- `previews` is `{}`. Workers Builds runs `npx wrangler preview` for a branch,
+  and that command exits unless the block is present. An empty object is
+  enough. Production `wrangler deploy` does not read it.
 
 Routing follows the static-assets decision diagram: a request that matches a
 file is served as that file, and only a miss is rewritten to `/index.html`.
@@ -519,3 +522,122 @@ ready.
 **Not done.** Checked with `wrangler deploy --dry-run` and a local `wrangler dev`
 of the built `dist/`. Not deployed. The live `/sw.js` response stays HTML until
 Workers Builds deploys this config.
+
+### D-49 — The drawing screen is full-bleed
+
+The measured column layout (D-47) reserved a side dock for tools, colours,
+width chips, and the step panel. On a tablet that dock was the thing that made
+the paper smaller than the window.
+
+**Choice.** The fitted 4:3 paper fills the stage. Controls float on top of it,
+at the edges, and the overlay ignores pointers except on the controls
+themselves, so a stroke can start in the gaps. The shell drops its padding
+while the drawing is open, including the phone safe-area padding; those insets
+move onto the floating controls. `touch-action: none` stays on the canvas only.
+
+The column measurements in [`TABLET_LAYOUT_FIT.md`](./TABLET_LAYOUT_FIT.md)
+describe the layout this replaces. They are not the sizes of the full-bleed
+paper.
+
+The paper is fitted into the band under the step reference and above *Lanjut*,
+so those bars do not cover the guides (D-53). On a phone the paper is still
+the largest 4:3 that fits the width. The brush slider and the tool row sit
+beside that band, or in the margin under a short phone paper, and *Bantuan*
+is a `?` icon so the word cannot spill past the screen edge.
+
+### D-50 — Brush size is a slider; colour is one circle
+
+The row of width chips and the row of swatches took a band of the old dock.
+A child still needs a large target and the per-step preset (FR-03, FR-04).
+
+**Choice.** A vertical range sits on the left edge. Its steps are a fraction of
+the step's preset width, from 0.4× to 2.5×, so the preset and the eraser's
+double width land on a step. Returning the thumb to that default clears the
+custom width, which is the same engine action as before. A new step still
+clears a custom width.
+
+The active colour is a circle. It opens a compact palette plus up to five
+recently used colours. Recent colours are component state. They are not saved
+in the session. *Ikuti panduan* still switches back to the guide colour. The
+popover stays in the document when it is closed, hidden by CSS, so a control
+inside it can be reached without a second click in tests. The phone orb is
+52px; the tablet orb is 64px.
+
+### D-51 — Two-finger tap undoes, three-finger tap redoes
+
+The undo and redo buttons stay. A tap gesture is an extra way to reach them.
+
+**Choice.** A pure tracker (`src/input/gesture-tracker.ts`) classifies the
+pointers. A tap is at most 320ms and 24px of travel, and the fingers must come
+down within 180ms of each other. Movement past 36px is a pinch, not a tap.
+Two fingers undo. Three redo.
+
+In finger mode a second finger discards the stroke that is in progress, then
+replays the committed ink. The discard does not go through React state. A
+pinch therefore leaves no dot, and a two-finger tap leaves no connecting line.
+The cost is that a long stroke is lost if another finger lands. Palm rejection
+is still not claimed (D-16).
+
+In pencil mode a finger never draws and never ends the stylus stroke. It can
+undo or redo while the pen is down. An extra pen during a pen stroke is
+ignored. A cancelled single pointer still commits the ink already drawn (D-18).
+The discard rule applies only to a finger-mode multi-touch gesture.
+
+### D-52 — Pinch zoom and two-finger pan are a view, not new geometry
+
+Stored points stay in the 1000×750 lesson space (D-07). Export replays that
+space at a fixed pixel width and does not read the view (D-34, D-35).
+
+**Choice.** Zoom and pan are `translate` then `scale` on `.stage__frame`,
+origin at the center, with no rotation. Zoom is clamped from 1 to 4. At zoom 1
+the pan is zero, so *Sesuai layar* is one state. The backing store stays at
+the fitted size (D-14 still caps DPR at 2), so strokes can look soft past
+about 2×. Guides are SVG inside the same frame, so they scale with the paper
+and stay aligned. Colour-region clipping uses lesson coordinates, so it is
+unchanged by the view.
+
+Pointer mapping in the browser is `getBoundingClientRect`, which includes the
+transform. `stagePointToSpace` uses the same rectangle the transform produces.
+A pinch does not set React state on each move. The view is committed when the
+fingers lift. A pinch is not emitted while a pen stroke is in progress, so
+the paper does not jump under the stylus.
+
+### D-53 — The step card folds, and finishing plays a small decoration
+
+The instruction, the example, and *Lanjut* used to share one card. A hand
+resting on the lower part of a tablet covers that card while the child is
+drawing, which is when they need the instruction.
+
+**Choice.** The instruction, the step dots, and the example thumbnail sit at
+the top, under the header, on every layout. *Lanjut* and *Kembali* stay on
+the bottom edge, and *Lanjut* stays the large button. Advancing is one
+deliberate tap at the end of a step, and the hand is already down there, so
+the tap does not reach across the paper or hide the instruction. The paper
+is fitted into the band between those two bars (`drawingChrome` in
+`src/ui/drawing-chrome.ts`), so the guides are not under the card. The
+thumbnail still opens the same preview larger. Collapsing hides the
+instruction and the thumbnail. The dots stay, and the step count stays
+available to assistive tech.
+
+The finish screen adds three decorative dots above the existing title. They
+animate only when `prefers-reduced-motion` is not reduce. The decoration is
+`aria-hidden` and does not judge the drawing (D-41).
+
+On a phone the reference starts folded: dots and the expand control. The
+instruction and the thumbnail come back when the child opens it. *Lanjut*
+stays on the bottom edge either way. A tablet still starts with the reference
+open. The phone note, when it is showing, sits between the header and that
+reference so the two do not pile on top of each other.
+
+### D-54 — A phone says a tablet is more comfortable, once
+
+Phones remain usable (D-47). They are not the layout this redesign is built
+around.
+
+**Choice.** When `layoutTier()` is a phone and the visitor has not dismissed
+the note, the shell shows "DrawSprout paling nyaman di tablet." with
+"Di HP tetap bisa menggambar." and *Mengerti*. Dismissal is
+`localStorage` key `drawsprout.prefer-tablet.dismissed`. It is not a field of
+the session checkpoint and it is not read by the service worker (D-46). A
+blocked store fails quietly and the note can appear again. A tablet never
+shows it.

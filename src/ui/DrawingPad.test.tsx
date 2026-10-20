@@ -10,13 +10,15 @@
 
 import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CAT_LESSON } from '../lesson-data/cat-lesson';
 import { backingSize, fitViewport } from '../renderer/coordinates';
 import { recordedCalls } from '../test/fake-canvas';
 import { createSession } from '../lesson-engine/session';
 import { fromRestoredSession } from '../persistence/mapping';
 import { MemorySessionStore } from '../persistence/memory-store';
+import { drawingChrome } from './drawing-chrome';
+import { layoutTier } from './layout-tier';
 import { DrawingPad } from './DrawingPad';
 import {
   drawStroke,
@@ -126,6 +128,9 @@ describe('starting a lesson', () => {
     setup();
     expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Gambar lingkaran besar untuk kepala.' })).toBeTruthy();
+    const help = screen.getByRole('button', { name: 'Bantuan' });
+    expect(help.textContent).toContain('?');
+    expect(help.textContent).not.toContain('Bantuan');
   });
 
   it('shows the dashed guide for the active step only', () => {
@@ -166,21 +171,32 @@ describe('drawing', () => {
     await waitFor(() => expect(undo.hasAttribute('disabled')).toBe(false));
   });
 
-  it('ignores a second pointer that lands mid-stroke', async () => {
+  it('drops the in-progress stroke when a second finger lands, so the tap leaves no ink', async () => {
     const { store, canvas } = setup();
 
     act(() => {
       pointerDown(canvas, { x: 100, y: 100 }, { pointerId: 1 });
-      // A palm or a second finger. It must not open a second stroke.
+      // A second finger. The dot from the first finger is discarded rather than
+      // committed, and it must not open a second stroke either.
       pointerDown(canvas, { x: 400, y: 400 }, { pointerId: 2 });
       pointerUp(canvas, { x: 150, y: 150 }, { pointerId: 2 });
       pointerUp(canvas, { x: 150, y: 150 }, { pointerId: 1 });
     });
 
+    act(() =>
+      drawStroke(canvas, [
+        { x: 700, y: 600 },
+        { x: 740, y: 640 },
+      ]),
+    );
+
     await waitFor(async () => {
       const restored = await store.loadSession('test-session');
       expect(restored?.checkpoint.committedStrokeIds).toHaveLength(1);
     });
+    const restored = await store.loadSession('test-session');
+    const [stroke] = fromRestoredSession(restored!).strokes;
+    expect(stroke!.points[0]).toEqual({ x: 700, y: 600 });
   });
 
   it('ends a cancelled pointer cleanly, with no line joining it to the next stroke (AT-17)', async () => {
@@ -302,6 +318,129 @@ describe('drawing', () => {
       ),
     );
     expect(screen.queryByText(/Mode pensil: gambar dengan stylus/)).toBeNull();
+  });
+});
+
+describe('finger gestures', () => {
+  function tapFingers(target: Element, count: number): void {
+    act(() => {
+      for (let index = 0; index < count; index += 1) {
+        pointerDown(target, { x: 160 + index * 48, y: 240 }, { pointerId: 40 + index, pointerType: 'touch' });
+      }
+      for (let index = 0; index < count; index += 1) {
+        pointerUp(target, { x: 164 + index * 48, y: 244 }, { pointerId: 40 + index, pointerType: 'touch' });
+      }
+    });
+  }
+
+  it('undoes with two fingers and redoes with three, and the buttons still work', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 120, y: 120 }, { x: 200, y: 180 }]));
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    tapFingers(canvas, 2);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
+    });
+    expect(screen.getByRole('button', { name: /Ulangi/ }).hasAttribute('disabled')).toBe(false);
+
+    tapFingers(canvas, 3);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    });
+
+    act(() => screen.getByRole('button', { name: /Batalkan/ }).click());
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Ulangi/ }).hasAttribute('disabled')).toBe(false);
+    });
+  });
+
+  it('lets a finger tap undo in pencil mode without ending the pen stroke', async () => {
+    const { store, canvas } = setup();
+    act(() => screen.getByRole('button', { name: /Mode pensil/ }).click());
+    act(() =>
+      drawStroke(
+        canvas,
+        [
+          { x: 80, y: 80 },
+          { x: 140, y: 120 },
+        ],
+        { pointerType: 'pen', pointerId: 3 },
+      ),
+    );
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    act(() => {
+      pointerDown(canvas, { x: 300, y: 300 }, { pointerType: 'pen', pointerId: 4 });
+      pointerMove(canvas, { x: 340, y: 330 }, { pointerType: 'pen', pointerId: 4 });
+    });
+    tapFingers(canvas, 2);
+    act(() => pointerUp(canvas, { x: 360, y: 350 }, { pointerType: 'pen', pointerId: 4 }));
+
+    await waitFor(async () => {
+      const restored = await store.loadSession('test-session');
+      expect(restored?.checkpoint.committedStrokeIds).toHaveLength(1);
+      expect(fromRestoredSession(restored!).strokes[0]!.points[0]).toEqual({ x: 300, y: 300 });
+    });
+    expect(screen.queryByText(/Mode pensil: gambar dengan stylus/)).toBeNull();
+  });
+});
+
+describe('pinch and pan', () => {
+  it('zooms without a React commit per move, keeps the guide in the frame, and fits back', () => {
+    const store = new MemorySessionStore();
+    let commits = 0;
+    const view = render(
+      <Profiler id="pad" onRender={() => { commits += 1; }}>
+        <DrawingPad
+          lesson={CAT_LESSON}
+          store={store}
+          initialState={createSession(CAT_LESSON, 'zoom-session')}
+          durable
+          notice={null}
+          restorePending={false}
+          preferencesPending={false}
+          pendingSave={null}
+          surfaceRef={{ current: null }}
+          onActivity={() => undefined}
+          onControlChange={() => undefined}
+          onChoosePicture={() => undefined}
+        />
+      </Profiler>,
+    );
+    const canvas = stageCanvas(view.container);
+    const frame = view.container.querySelector('.stage__frame');
+    expect(frame?.querySelector('.guide-overlay')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sesuai layar' }).hasAttribute('disabled')).toBe(true);
+
+    const afterMount = commits;
+    act(() => {
+      pointerDown(canvas, { x: 200, y: 300 }, { pointerId: 1, pointerType: 'touch' });
+      pointerDown(canvas, { x: 400, y: 300 }, { pointerId: 2, pointerType: 'touch' });
+      for (let step = 1; step <= 8; step += 1) {
+        pointerMove(canvas, { x: 400 + step * 30, y: 300 }, { pointerId: 2, pointerType: 'touch' });
+      }
+    });
+    expect(commits).toBe(afterMount);
+    expect(frame?.getAttribute('style') ?? '').not.toMatch(/rotate/);
+    expect((frame as HTMLElement).style.transform).toMatch(/scale\((?!1\))/);
+
+    act(() => {
+      pointerUp(canvas, { x: 640, y: 300 }, { pointerId: 2, pointerType: 'touch' });
+      pointerUp(canvas, { x: 200, y: 300 }, { pointerId: 1, pointerType: 'touch' });
+    });
+    const fit = screen.getByRole('button', { name: 'Sesuai layar' });
+    expect(fit.hasAttribute('disabled')).toBe(false);
+    act(() => fit.click());
+    expect((frame as HTMLElement).style.transform).toContain('scale(1)');
+    expect(screen.getByRole('button', { name: 'Sesuai layar' }).hasAttribute('disabled')).toBe(true);
+    // The guide is still a child of the transformed frame, so it cannot drift
+    // from the paper. Export never reads this transform.
+    expect(frame?.querySelector('.guide-overlay')).toBeTruthy();
   });
 });
 
@@ -512,6 +651,61 @@ describe('navigation and colouring', () => {
     expect(screen.getByRole('button', { name: /Batas area/ }).textContent).toMatch(/nonaktif/);
   });
 
+  it('opens the colour circle, keeps a recent swatch, and can follow the guide again', () => {
+    setup();
+    const orb = screen.getByRole('button', { name: /Pilih warna/ });
+    expect(orb.getAttribute('aria-expanded')).toBe('false');
+    expect(orb.getAttribute('aria-pressed')).toBe('false');
+
+    act(() => orb.click());
+    expect(orb.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('group', { name: 'Palet' })).toBeTruthy();
+
+    act(() => screen.getByRole('button', { name: 'Warna Merah' }).click());
+    expect(orb.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText(/warna pilihanku/)).toBeTruthy();
+    const recent = screen.getByRole('button', { name: 'Warna terakhir Merah' });
+    expect(recent.getAttribute('aria-pressed')).toBe('true');
+
+    act(() => screen.getByRole('button', { name: 'Warna Biru' }).click());
+    const recents = screen.getByRole('group', { name: 'Warna terakhir' }).querySelectorAll('button');
+    expect(recents[0]?.getAttribute('aria-label')).toBe('Warna terakhir Biru');
+    expect(recents[1]?.getAttribute('aria-label')).toBe('Warna terakhir Merah');
+
+    act(() => screen.getByRole('button', { name: 'Warna terakhir Merah' }).click());
+    expect(screen.getByRole('button', { name: 'Warna Merah' }).getAttribute('aria-pressed')).toBe('true');
+
+    act(() => screen.getByRole('button', { name: /Ikuti panduan/ }).click());
+    expect(screen.getByText(/warna panduan/)).toBeTruthy();
+    expect(orb.getAttribute('aria-pressed')).toBe('false');
+    // The recent list is only the colours the child picked. Closing the guide
+    // choice does not forget them.
+    expect(screen.getByRole('button', { name: 'Warna terakhir Merah' })).toBeTruthy();
+  });
+
+  it('draws at the slider width, then takes the next step\'s own width (FR-03)', async () => {
+    const { store, canvas } = setup();
+    const slider = screen.getByRole('slider', { name: 'Ketebalan' });
+    expect(slider.getAttribute('aria-valuetext')).toBe('Ukuran langkah');
+
+    act(() => {
+      fireEvent.change(slider, { target: { value: '12' } });
+    });
+    expect(screen.getByRole('slider', { name: 'Ketebalan' }).getAttribute('aria-valuetext')).toBe(
+      'Ukuran pilihanku',
+    );
+
+    act(() => drawStroke(canvas, [{ x: 80, y: 80 }, { x: 140, y: 120 }]));
+    await waitFor(async () => {
+      const restored = await store.loadSession('test-session');
+      expect(restored?.strokes[0]?.width).toBe(12);
+    });
+
+    act(() => screen.getByRole('button', { name: /Lanjut/ }).click());
+    const nextWidth = String(CAT_LESSON.steps[1]!.toolPreset.widthViewbox);
+    expect(screen.getByRole('slider', { name: 'Ketebalan' }).getAttribute('value')).toBe(nextWidth);
+  });
+
   it('keeps a chosen colour when the step changes (FR-04, AT-02)', () => {
     setup();
     act(() => screen.getByRole('button', { name: 'Warna Ungu' }).click());
@@ -607,8 +801,14 @@ describe('finishing', () => {
     act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
 
     const reopened = stageCanvas(view.container);
+    const chrome = drawingChrome(layoutTier(window.innerWidth, window.innerHeight), false);
     const expected = backingSize(
-      fitViewport(CAT_LESSON.coordinateSpace, TEST_CANVAS_RECT.width, TEST_CANVAS_RECT.height, 1),
+      fitViewport(
+        CAT_LESSON.coordinateSpace,
+        TEST_CANVAS_RECT.width,
+        TEST_CANVAS_RECT.height - chrome.top - chrome.bottom,
+        1,
+      ),
     );
     // Sized to the stage it is in, not left at the intrinsic 300x150.
     expect(reopened.width).toBe(expected.width);
