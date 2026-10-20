@@ -33,8 +33,9 @@ describe('the step card', () => {
     expect(next.className).toContain('button--primary');
   });
 
-  it('collapses to the dots and opens the example larger', () => {
-    renderCard();
+  it('collapses to the dots and keeps the example out of the card', () => {
+    const { container } = renderCard();
+    expect(container.querySelector('.target-preview')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Sembunyikan langkah' }));
     expect(screen.queryByRole('heading', { name: CAT_LESSON.steps[0]!.instruction })).toBeNull();
     expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
@@ -42,12 +43,7 @@ describe('the step card', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tampilkan langkah' }));
     expect(screen.getByRole('heading', { name: CAT_LESSON.steps[0]!.instruction })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Perbesar contoh' }));
-    const dialog = screen.getByRole('dialog', { name: 'Contoh besar' });
-    expect(dialog.querySelector('svg')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Tutup contoh' }));
-    expect(screen.queryByRole('dialog', { name: 'Contoh besar' })).toBeNull();
+    expect(container.querySelector('.target-preview')).toBeNull();
   });
 
   it('starts folded when asked, with the step count and next button still there', () => {

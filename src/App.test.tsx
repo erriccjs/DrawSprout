@@ -325,7 +325,7 @@ describe('resume notice', () => {
     fireEvent.click(screen.getByRole('button', { name: /Mode jari/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Pen' }));
     fireEvent.click(screen.getByRole('button', { name: 'Ikuti panduan' }));
-    fireEvent.change(screen.getByRole('slider', { name: 'Ketebalan' }), { target: { value: '12' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Ukuran kuas' }), { target: { value: '12' } });
     expect(save).not.toHaveBeenCalled();
 
     await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));

@@ -46,6 +46,14 @@ export function snapWidth(value: number, range: BrushWidthRange): number {
   return roundWidth(range.min + steps * range.step);
 }
 
+/** CSS pixels for the live size dot. Stays inside the 52px phone column. */
+export function brushPreviewPx(value: number, range: BrushWidthRange): number {
+  const span = range.max - range.min;
+  const t = span <= 0 ? 1 : (value - range.min) / span;
+  const clamped = Math.min(1, Math.max(0, t));
+  return Math.round(6 + clamped * 16);
+}
+
 /** True when the thumb is on the step's own width, so the override should clear. */
 export function sliderFollowsStep(stepWidth: number, tool: ToolKind, value: number): boolean {
   return snapWidth(value, brushWidthRange(stepWidth)) === snapWidth(defaultBrushWidth(stepWidth, tool), brushWidthRange(stepWidth));

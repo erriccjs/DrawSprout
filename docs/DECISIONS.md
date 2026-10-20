@@ -556,6 +556,11 @@ double width land on a step. Returning the thumb to that default clears the
 custom width, which is the same engine action as before. A new step still
 clears a custom width.
 
+The column also shows what the slider is for (D-61): a live dot in the
+current colour, sized with the thumb, and a thick mark at the top of the
+track with a thin mark at the bottom. The column stays 64px on a tablet and
+52px on a portrait phone.
+
 The active colour is a circle. It opens a compact palette plus up to five
 recently used colours. Recent colours are component state. They are not saved
 in the session. *Ikuti panduan* still switches back to the guide colour. The
@@ -608,23 +613,22 @@ The instruction, the example, and *Lanjut* used to share one card. A hand
 resting on the lower part of a tablet covers that card while the child is
 drawing, which is when they need the instruction.
 
-**Choice.** The instruction, the step dots, and the example thumbnail sit at
-the top, under the header, on every layout. *Lanjut* and *Kembali* stay on
-the bottom edge, and *Lanjut* stays the large button. Advancing is one
-deliberate tap at the end of a step, and the hand is already down there, so
-the tap does not reach across the paper or hide the instruction. The paper
-is fitted into the band between those two bars (`drawingChrome` in
-`src/ui/drawing-chrome.ts`), so the guides are not under the card. The
-thumbnail still opens the same preview larger. Collapsing hides the
-instruction and the thumbnail. The dots stay, and the step count stays
-available to assistive tech.
+**Choice.** The instruction and the step dots sit at the top, under the
+header, on every layout. *Lanjut* and *Kembali* stay on the bottom edge, and
+*Lanjut* stays the large button. Advancing is one deliberate tap at the end
+of a step, and the hand is already down there, so the tap does not reach
+across the paper or hide the instruction. The paper is fitted into the band
+between those two bars (`drawingChrome` in `src/ui/drawing-chrome.ts`), so
+the guides are not under the card. The target picture is its own control,
+not part of this card (D-61). Collapsing hides the instruction. The dots
+stay, and the step count stays available to assistive tech.
 
 The finish screen adds three decorative dots above the existing title. They
 animate only when `prefers-reduced-motion` is not reduce. The decoration is
 `aria-hidden` and does not judge the drawing (D-41).
 
 On a phone the reference starts folded: dots and the expand control. The
-instruction and the thumbnail come back when the child opens it. *Lanjut*
+instruction comes back when the child opens it. *Lanjut*
 stays on the bottom edge either way. A tablet still starts with the reference
 open. The phone note, when it is showing, sits between the header and that
 reference so the two do not pile on top of each other.
@@ -749,6 +753,26 @@ warna". It opens the same colour popover as the circle in the header.
 *Bantuan* is a button inside that popover and opens the help sheet
 (assistance, the mode explanation, and boundary assist on a colour step).
 The header circle still changes colour on its own.
+
+### D-61 — Brush size is visible, and the example leaves the instruction card
+
+The size slider was a bare range. A child could not tell it changed the
+brush. The target picture was an 84×64 thumbnail inside the instruction
+card, too small to read the current step.
+
+**Choice.** The slider's accessible name is "Ukuran kuas". Above the track,
+a dot uses the active colour and grows with the width. A thick stroke marks
+the large end and a thin stroke marks the small end. Neither adds width:
+the column stays 64px, and 52px on a portrait phone.
+
+The instruction card keeps the words, the step dots, and the collapse
+button. The picture moves out. On a landscape tablet it is a 136×102 card
+in the top-left, inside the band above the paper (`drawingChrome` top is
+168px) and above the brush slider, so it does not cover the sheet or the
+hand at the bottom. On a portrait tablet and on a phone it is a thumbnail
+in that same top corner. A tap opens the large preview; a tap on the
+preview closes it. On a portrait tablet that thumbnail is 128×96, still
+inside the band above the paper. The sheet is not made smaller to make room.
 
 ### D-60 — Dock icons stay readable, and the phone sheet sits above the tools
 

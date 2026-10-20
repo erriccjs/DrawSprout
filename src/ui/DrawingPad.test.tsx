@@ -790,13 +790,13 @@ describe('navigation and colouring', () => {
 
   it('draws at the slider width, then takes the next step\'s own width (FR-03)', async () => {
     const { store, canvas } = setup();
-    const slider = screen.getByRole('slider', { name: 'Ketebalan' });
+    const slider = screen.getByRole('slider', { name: 'Ukuran kuas' });
     expect(slider.getAttribute('aria-valuetext')).toBe('Ukuran langkah');
 
     act(() => {
       fireEvent.change(slider, { target: { value: '12' } });
     });
-    expect(screen.getByRole('slider', { name: 'Ketebalan' }).getAttribute('aria-valuetext')).toBe(
+    expect(screen.getByRole('slider', { name: 'Ukuran kuas' }).getAttribute('aria-valuetext')).toBe(
       'Ukuran pilihanku',
     );
 
@@ -808,7 +808,7 @@ describe('navigation and colouring', () => {
 
     act(() => screen.getByRole('button', { name: /Lanjut/ }).click());
     const nextWidth = String(CAT_LESSON.steps[1]!.toolPreset.widthViewbox);
-    expect(screen.getByRole('slider', { name: 'Ketebalan' }).getAttribute('value')).toBe(nextWidth);
+    expect(screen.getByRole('slider', { name: 'Ukuran kuas' }).getAttribute('value')).toBe(nextWidth);
   });
 
   it('keeps a chosen colour when the step changes (FR-04, AT-02)', () => {

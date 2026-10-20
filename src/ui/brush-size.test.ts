@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  brushPreviewPx,
   brushWidthRange,
   defaultBrushWidth,
   sliderFollowsStep,
@@ -21,6 +22,15 @@ describe('brushWidthRange', () => {
     const range = brushWidthRange(0);
     expect(range.max).toBeGreaterThan(range.min);
     expect(range.step).toBeGreaterThan(0);
+  });
+});
+
+describe('brushPreviewPx', () => {
+  it('grows from a thin dot to a thick one without leaving the slider column', () => {
+    const range = brushWidthRange(8);
+    expect(brushPreviewPx(range.min, range)).toBeLessThan(brushPreviewPx(range.max, range));
+    expect(brushPreviewPx(range.max, range)).toBeLessThanOrEqual(22);
+    expect(brushPreviewPx(range.min, range)).toBeGreaterThanOrEqual(6);
   });
 });
 

@@ -27,7 +27,9 @@ export containing only the child's drawing.
   sits inside that colour popover.
   On a phone the step card starts folded, and the slider and tools sit in the
   space under the paper.
-- Brush size is a vertical slider. The active colour is a circle that opens a
+- Brush size is a vertical slider labelled *Ukuran kuas*. A dot above it
+  shows the current size and colour, with a thick mark at the large end and
+  a thin mark at the small end. The active colour is a circle that opens a
   small palette and the last few colours. Each step still starts with its own
   tool, width, and colour, and *Ikuti panduan* returns to the guide colour.
 - Two-finger tap undoes and three-finger tap redoes, as well as the buttons.
@@ -38,9 +40,11 @@ export containing only the child's drawing.
   (a magnifying glass) appears once the paper is zoomed and fits it again.
   *Layar penuh* stays the corner-bracket control. Strokes stay in the 1000×750
   lesson space. Export does not include the zoom.
-- The step reference (instruction, progress dots, and a small example that
-  opens larger) sits at the top of the drawing screen, so a hand resting on
-  the lower part does not cover it. *Lanjut* and *Kembali* stay on the bottom
+- The step reference (instruction and progress dots) sits at the top of the
+  drawing screen, so a hand resting on the lower part does not cover it. The
+  target picture is separate: a card at the top-left on a landscape tablet,
+  and a thumbnail that opens large on a portrait tablet or a phone. *Lanjut*
+  and *Kembali* stay on the bottom
   edge, with *Lanjut* the large button. On a phone the reference starts
   folded. Finishing a lesson plays a small decoration, which stays still when
   the system asks for less motion.

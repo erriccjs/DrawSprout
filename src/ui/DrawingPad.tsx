@@ -50,6 +50,7 @@ import { RESUME_NOTICE, RESUME_TOAST_MS } from './resume-notice';
 import { FinishScreen } from './FinishScreen';
 import { GuideOverlay } from './GuideOverlay';
 import { StepControls, StepNavigation, StepPanel } from './StepPanel';
+import { StepReference } from './StepReference';
 import { BrushSlider } from './BrushSlider';
 import { ColorWell } from './ColorWell';
 import { Toolbar, ToolbarSettings } from './Toolbar';
@@ -546,6 +547,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           dispatch={dispatch}
         />
 
+        <StepReference lesson={lesson} step={step} />
         <div className="step-card">
           <StepPanel lesson={lesson} state={state} step={step} startCollapsed={layout !== 'tablet'} />
         </div>
