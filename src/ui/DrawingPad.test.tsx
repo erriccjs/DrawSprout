@@ -894,8 +894,8 @@ describe('autosave and resume', () => {
  * "Hapus semua" on the drawing screen (the eraser's whole-drawing clear).
  *
  * The button only exists while the eraser is the chosen tool, it never clears
- * on one tap, and the clear it finally makes is one Batalkan away from being
- * undone. "Hapus semua" disables itself once there is nothing left to clear,
+ * on one tap, and Batalkan puts the cleared drawing back while the canvas is
+ * still empty. "Hapus semua" disables itself once there is nothing left to clear,
  * so it doubles as the readout for "the canvas is empty".
  */
 describe('clearing the whole drawing', () => {
@@ -935,6 +935,14 @@ describe('clearing the whole drawing', () => {
 
     act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
     expect(clearAll().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('stays unavailable when the canvas only holds undone strokes', () => {
+    const { canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 100, y: 100 }, { x: 200, y: 160 }]));
+    act(() => undoButton().click());
+    chooseEraser();
+    expect(clearAll().hasAttribute('disabled')).toBe(true);
   });
 
   it('asks first, and backing out changes nothing', async () => {

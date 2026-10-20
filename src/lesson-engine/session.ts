@@ -74,7 +74,7 @@ export function reduceSession(
     }
 
     case 'clear-all': {
-      if (state.strokes.length === 0 && state.redoStack.length === 0) return state;
+      if (state.strokes.length === 0) return state;
       return {
         ...state,
         strokes: [],
@@ -84,7 +84,7 @@ export function reduceSession(
         // `nextSequence` is deliberately left alone: the cleared strokes keep
         // their sequence numbers, so putting them back restores paint order.
         // Pushed, never replaced: a second clear leaves the first one still
-        // reachable, newest clear undone first.
+        // reachable, as a later step of undo once the newer drawing is gone.
         clearedArtworks: [...state.clearedArtworks, { strokes: state.strokes, redoStack: state.redoStack }],
       };
     }
@@ -94,10 +94,10 @@ export function reduceSession(
       // undo can never destroy work from a later step (FR-09).
       const stepId = activeStep(lesson, state).id;
       const index = lastIndexOfStep(state.strokes, stepId);
-      // Nothing of this step's own left to take back, so the clear is the
-      // operation this undo reverses. Putting the artwork back only ever adds
-      // strokes, so reaching past a later step's work cannot destroy any.
-      if (index === -1) return restoreClearedArtwork(state);
+      // Nothing of this step's own left to take back. The clear is the
+      // operation this undo reverses only while the canvas is empty, so a
+      // restored drawing is never laid over another one.
+      if (index === -1) return state.strokes.length === 0 ? restoreClearedArtwork(state) : state;
       const stroke = state.strokes[index]!;
       return {
         ...state,
@@ -219,21 +219,22 @@ function withStepIndex(lesson: LessonPackage, state: SessionState, index: number
 }
 
 /**
- * Puts the most recent cleared artwork back: a no-op when nothing was cleared.
+ * Puts the most recent cleared artwork back onto an empty canvas: a no-op when
+ * nothing was cleared.
  *
- * Strokes are reinserted by sequence so they land under or over whatever was
- * drawn after the clear, exactly as they were painted.
+ * The strokes keep their original sequence numbers, so replay order is
+ * unchanged.
  */
 function restoreClearedArtwork(state: SessionState): SessionState {
   const cleared = state.clearedArtworks[state.clearedArtworks.length - 1];
   if (!cleared) return state;
-  let strokes = state.strokes;
-  for (const stroke of cleared.strokes) strokes = insertBySequence(strokes, stroke);
   return {
     ...state,
-    strokes,
-    // Older undos first, so "most recently undone last" still holds.
-    redoStack: [...cleared.redoStack, ...state.redoStack],
+    strokes: cleared.strokes,
+    // Redo gets back what it held at the clear. Anything undone since belonged
+    // to a drawing that is no longer on screen, and redoing it would lay it
+    // over the restored one.
+    redoStack: cleared.redoStack,
     clearedArtworks: state.clearedArtworks.slice(0, -1),
   };
 }
@@ -340,13 +341,13 @@ export function guideOverlayMode(
 export function canUndo(lesson: LessonPackage, state: SessionState): boolean {
   return (
     lastIndexOfStep(state.strokes, activeStep(lesson, state).id) !== -1 ||
-    state.clearedArtworks.length > 0
+    (state.strokes.length === 0 && state.clearedArtworks.length > 0)
   );
 }
 
-/** Whether there is any artwork for `clear-all` to take away. */
+/** Whether there is any visible artwork for `clear-all` to take away. */
 export function canClearAll(state: SessionState): boolean {
-  return state.strokes.length > 0 || state.redoStack.length > 0;
+  return state.strokes.length > 0;
 }
 
 export function canRedo(state: SessionState): boolean {

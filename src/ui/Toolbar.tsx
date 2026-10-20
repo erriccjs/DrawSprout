@@ -183,8 +183,8 @@ export function Toolbar({
  * "Hapus semua": the eraser applied to the whole drawing at once.
  *
  * It never clears on a single tap. The first tap only asks the question, and
- * the clear it finally dispatches is one operation that Batalkan reverses, so
- * even a confirmed mistake is one tap from being undone.
+ * the clear it finally dispatches is one operation, and Batalkan puts that
+ * whole drawing back as long as nothing has been drawn since.
  */
 function EraserClearAll({
   state,

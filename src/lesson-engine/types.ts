@@ -46,7 +46,7 @@ export interface Stroke {
 }
 
 /**
- * The artwork a `clear-all` took away, kept whole so one `undo` brings all of
+ * The artwork a `clear-all` took away, kept whole so a single `undo` brings all of
  * it back (FR-02). Held in the session only and never checkpointed: the
  * persistence schema is unchanged, so a reload cannot undo a clear.
  */
@@ -121,7 +121,7 @@ export interface SessionPreferences {
 
 export type SessionAction =
   | { readonly type: 'commit-stroke'; readonly stroke: Omit<Stroke, 'sequence'> }
-  /** Takes the whole drawing away in one go; `undo` puts all of it back. */
+  /** Takes the whole drawing away in one go; once the canvas is empty, `undo` puts all of it back. */
   | { readonly type: 'clear-all' }
   | { readonly type: 'undo' }
   | { readonly type: 'redo' }

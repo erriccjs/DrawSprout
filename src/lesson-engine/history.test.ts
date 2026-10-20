@@ -179,26 +179,56 @@ describe('clearing the whole drawing', () => {
     expect(twice.strokes.map((stroke) => stroke.id)).toEqual(drawn.strokes.map((s) => s.id));
   });
 
-  it('stacks clears, so a second clear never buries the first drawing', () => {
+  it('stacks clears, and walks back one action at a time: restore B, remove B, restore A', () => {
     const drawnA = draw(newSessionState(), stepIdAt(0));
     const clearedA = reduceSession(lesson, drawnA, { type: 'clear-all' });
     const drawnB = draw(clearedA, stepIdAt(0));
     const clearedB = reduceSession(lesson, drawnB, { type: 'clear-all' });
     expect(clearedB.strokes).toEqual([]);
 
-    // The newest clear is undone first, and drawing B comes back on its own.
+    // First Batalkan: the newest clear is undone, so drawing B comes back alone.
     const bBack = reduceSession(lesson, clearedB, { type: 'undo' });
     expect(bBack.strokes).toEqual(drawnB.strokes);
     expect(bBack.strokes.map((s) => s.id)).not.toContain(drawnA.strokes[0]!.id);
 
-    // B's stroke is then taken back like any other stroke, and the clear
-    // beneath it is the next thing a Batalkan reaches: A is still reachable.
+    // Second Batalkan: B's stroke is taken back like any other stroke.
     const bGone = reduceSession(lesson, bBack, { type: 'undo' });
     expect(bGone.strokes).toEqual([]);
     expect(canUndo(lesson, bGone)).toBe(true);
+    // Third Batalkan: the canvas is empty, so the older clear is undone and A returns.
     const aBack = reduceSession(lesson, bGone, { type: 'undo' });
     expect(aBack.strokes).toEqual(drawnA.strokes);
     expect(aBack.clearedArtworks).toEqual([]);
+  });
+
+  it('never restores a cleared drawing underneath newer work on another step', () => {
+    const drawnA = draw(newSessionState(), stepIdAt(0));
+    const clearedA = reduceSession(lesson, drawnA, { type: 'clear-all' });
+    const drawnB = draw(clearedA, stepIdAt(0));
+    const onStepTwo = reduceSession(lesson, drawnB, { type: 'next-step' });
+
+    expect(canUndo(lesson, onStepTwo)).toBe(false);
+    const undone = reduceSession(lesson, onStepTwo, { type: 'undo' });
+    expect(undone).toBe(onStepTwo);
+    expect(undone.strokes).toEqual(drawnB.strokes);
+  });
+
+  it('does not let redo lay undone work over a restored drawing', () => {
+    const clearedA = reduceSession(lesson, draw(newSessionState(), stepIdAt(0)), { type: 'clear-all' });
+    const drawnB = draw(clearedA, stepIdAt(0));
+    const bUndone = reduceSession(lesson, drawnB, { type: 'undo' });
+    expect(canRedo(bUndone)).toBe(true);
+
+    const aBack = reduceSession(lesson, bUndone, { type: 'undo' });
+    expect(aBack.strokes).toHaveLength(1);
+    expect(canRedo(aBack)).toBe(false);
+  });
+
+  it('offers no clear while the canvas only holds undone strokes', () => {
+    const undone = reduceSession(lesson, draw(newSessionState(), stepIdAt(0)), { type: 'undo' });
+    expect(canRedo(undone)).toBe(true);
+    expect(canClearAll(undone)).toBe(false);
+    expect(reduceSession(lesson, undone, { type: 'clear-all' })).toBe(undone);
   });
 
   it('does not survive a restart', () => {
