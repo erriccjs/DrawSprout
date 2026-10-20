@@ -32,6 +32,13 @@ import type { SessionStore } from '../persistence/types';
 import { ArtworkSurface } from '../renderer/artwork-surface';
 import { backingSize, fitViewport } from '../renderer/coordinates';
 import type { LiveStrokeSpec, Viewport } from '../renderer/types';
+import {
+  FIT_VIEW,
+  pinchView,
+  sameView,
+  viewTransformCss,
+  type CanvasView,
+} from '../renderer/view';
 import { acceptsPointerType, rejectionMessage } from '../input/pointer-mode';
 import { useStrokeInput } from '../input/useStrokeInput';
 import { FinishScreen } from './FinishScreen';
@@ -121,6 +128,18 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const [stage, setStage] = useState<HTMLDivElement | null>(null);
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const [viewport, setViewport] = useState<Viewport | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const viewRef = useRef<CanvasView>(FIT_VIEW);
+  const pinchOriginRef = useRef<CanvasView | null>(null);
+  const stageSizeRef = useRef({ width: 0, height: 0 });
+  const [view, setView] = useState<CanvasView>(FIT_VIEW);
+
+  const applyView = useCallback((next: CanvasView, commit: boolean) => {
+    viewRef.current = next;
+    const frame = frameRef.current;
+    if (frame) frame.style.transform = viewTransformCss(next);
+    if (commit) setView((current) => (sameView(current, next) ? current : next));
+  }, []);
 
   useEffect(() => () => { surfaceRef.current = null; }, [surfaceRef]);
 
@@ -132,6 +151,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
 
     const measure = () => {
       const rect = stage.getBoundingClientRect();
+      stageSizeRef.current = { width: rect.width, height: rect.height };
       setViewport(
         fitViewport(lesson.coordinateSpace, rect.width, rect.height, window.devicePixelRatio),
       );
@@ -208,6 +228,32 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     discard: discardLiveStroke,
     undo: () => dispatch({ type: 'undo' }),
     redo: () => dispatch({ type: 'redo' }),
+    pinch: (gesture) => {
+      const fitted = viewport;
+      if (!fitted || fitted.cssWidth <= 0 || fitted.cssHeight <= 0) return;
+      if (pinchOriginRef.current === null) pinchOriginRef.current = viewRef.current;
+      const { width, height } = stageSizeRef.current;
+      applyView(
+        pinchView({
+          stageWidth: width,
+          stageHeight: height,
+          fittedWidth: fitted.cssWidth,
+          fittedHeight: fitted.cssHeight,
+          startView: pinchOriginRef.current,
+          startMidX: gesture.startMidX,
+          startMidY: gesture.startMidY,
+          startDistance: gesture.startDistance,
+          midX: gesture.midX,
+          midY: gesture.midY,
+          distance: gesture.distance,
+        }),
+        false,
+      );
+    },
+    settle: () => {
+      pinchOriginRef.current = null;
+      applyView(viewRef.current, true);
+    },
 
     begin: (point) => {
       const surface = surfaceRef.current;
@@ -341,6 +387,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
       <div className="pad__stage" ref={setStage}>
         <div
           className="stage__frame"
+          ref={frameRef}
           style={
             viewport
               ? { width: `${viewport.cssWidth}px`, height: `${viewport.cssHeight}px` }
@@ -435,6 +482,15 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
             onClick={() => setControlTab((tab) => (tab === 'help' ? 'drawing' : 'help'))}
           >
             Bantuan
+          </button>
+          <button
+            type="button"
+            className="chip float-dock__fit"
+            aria-label="Sesuai layar"
+            disabled={view.zoom === 1 && view.panX === 0 && view.panY === 0}
+            onClick={() => applyView(FIT_VIEW, true)}
+          >
+            <span aria-hidden="true">⛶</span>
           </button>
           <div className="pad__control-panel float-help" data-active={controlTab === 'help'}>
             <ToolbarSettings

@@ -385,6 +385,60 @@ describe('finger gestures', () => {
   });
 });
 
+describe('pinch and pan', () => {
+  it('zooms without a React commit per move, keeps the guide in the frame, and fits back', () => {
+    const store = new MemorySessionStore();
+    let commits = 0;
+    const view = render(
+      <Profiler id="pad" onRender={() => { commits += 1; }}>
+        <DrawingPad
+          lesson={CAT_LESSON}
+          store={store}
+          initialState={createSession(CAT_LESSON, 'zoom-session')}
+          durable
+          notice={null}
+          restorePending={false}
+          preferencesPending={false}
+          pendingSave={null}
+          surfaceRef={{ current: null }}
+          onActivity={() => undefined}
+          onControlChange={() => undefined}
+          onChoosePicture={() => undefined}
+        />
+      </Profiler>,
+    );
+    const canvas = stageCanvas(view.container);
+    const frame = view.container.querySelector('.stage__frame');
+    expect(frame?.querySelector('.guide-overlay')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sesuai layar' }).hasAttribute('disabled')).toBe(true);
+
+    const afterMount = commits;
+    act(() => {
+      pointerDown(canvas, { x: 200, y: 300 }, { pointerId: 1, pointerType: 'touch' });
+      pointerDown(canvas, { x: 400, y: 300 }, { pointerId: 2, pointerType: 'touch' });
+      for (let step = 1; step <= 8; step += 1) {
+        pointerMove(canvas, { x: 400 + step * 30, y: 300 }, { pointerId: 2, pointerType: 'touch' });
+      }
+    });
+    expect(commits).toBe(afterMount);
+    expect(frame?.getAttribute('style') ?? '').not.toMatch(/rotate/);
+    expect((frame as HTMLElement).style.transform).toMatch(/scale\((?!1\))/);
+
+    act(() => {
+      pointerUp(canvas, { x: 640, y: 300 }, { pointerId: 2, pointerType: 'touch' });
+      pointerUp(canvas, { x: 200, y: 300 }, { pointerId: 1, pointerType: 'touch' });
+    });
+    const fit = screen.getByRole('button', { name: 'Sesuai layar' });
+    expect(fit.hasAttribute('disabled')).toBe(false);
+    act(() => fit.click());
+    expect((frame as HTMLElement).style.transform).toContain('scale(1)');
+    expect(screen.getByRole('button', { name: 'Sesuai layar' }).hasAttribute('disabled')).toBe(true);
+    // The guide is still a child of the transformed frame, so it cannot drift
+    // from the paper. Export never reads this transform.
+    expect(frame?.querySelector('.guide-overlay')).toBeTruthy();
+  });
+});
+
 describe('the pointermove path', () => {
   it('does not re-render React while the pointer is down (PRD section 11)', () => {
     // PRD section 11: "Render stroke tidak bergantung pada rerender seluruh

@@ -315,7 +315,8 @@ body {
 
 .float-dock .toolbar__group--tools .chip:not(.chip--wide),
 .float-dock .toolbar__group--history .chip,
-.float-dock__help {
+.float-dock__help,
+.float-dock__fit {
   width: 56px;
   min-width: 56px;
   height: 56px;

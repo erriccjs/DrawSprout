@@ -38,8 +38,10 @@ export interface StrokeInputCallbacks {
   discard?(): void;
   undo?(): void;
   redo?(): void;
-  /** Two-finger move that has left the tap window. Optional until the view uses it. */
+  /** Two-finger move that has left the tap window. */
   pinch?(gesture: PinchGesture): void;
+  /** The multi-touch gesture has ended, so a view change can be committed. */
+  settle?(): void;
 }
 
 export function useStrokeInput(
@@ -70,6 +72,7 @@ export function useStrokeInput(
 
     const apply = (kind: 'down' | 'move' | 'up' | 'cancel', event: PointerEvent) => {
       const callbacks = callbacksRef.current;
+      const hadGesture = gestureRef.current.gestureIds.length > 0;
       const step = reduceGesture(
         gestureRef.current,
         {
@@ -127,6 +130,7 @@ export function useStrokeInput(
             break;
         }
       }
+      if (hadGesture && step.state.gestureIds.length === 0) callbacks.settle?.();
     };
 
     const release = (event: PointerEvent) => {
