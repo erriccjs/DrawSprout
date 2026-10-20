@@ -37,6 +37,8 @@ import { useStrokeInput } from '../input/useStrokeInput';
 import { FinishScreen } from './FinishScreen';
 import { GuideOverlay } from './GuideOverlay';
 import { StepControls, StepNavigation, StepPanel } from './StepPanel';
+import { BrushSlider } from './BrushSlider';
+import { ColorWell } from './ColorWell';
 import { Toolbar, ToolbarSettings } from './Toolbar';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 import { newId } from './ids';
@@ -359,6 +361,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           <p className="pad__status" role="status">
             {statusLabel(saveStatus, durable)}
           </p>
+          <ColorWell state={state} preset={preset} dispatch={dispatch} />
         </header>
 
         <div className="float-notices">
@@ -381,6 +384,13 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           {rejection !== null && <p className="banner">{rejection}</p>}
         </div>
 
+        <BrushSlider
+          stepWidth={lesson.steps[state.currentStepIndex]?.toolPreset.widthViewbox ?? preset.widthViewbox}
+          tool={preset.tool}
+          preset={preset}
+          dispatch={dispatch}
+        />
+
         <div className="step-card">
           <StepPanel lesson={lesson} state={state} step={step} />
           <StepNavigation
@@ -394,9 +404,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         <aside className="float-dock">
           <div className="pad__control-panel" data-active="true">
             <Toolbar
-              lesson={lesson}
               state={state}
-              preset={preset}
               canUndo={canUndo(lesson, state)}
               canRedo={canRedo(state)}
               dispatch={dispatch}

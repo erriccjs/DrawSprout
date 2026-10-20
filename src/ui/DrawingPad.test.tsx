@@ -10,7 +10,7 @@
 
 import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CAT_LESSON } from '../lesson-data/cat-lesson';
 import { backingSize, fitViewport } from '../renderer/coordinates';
 import { recordedCalls } from '../test/fake-canvas';
@@ -510,6 +510,61 @@ describe('navigation and colouring', () => {
     expect(toggle.textContent).toMatch(/aktif/);
     act(() => toggle.click());
     expect(screen.getByRole('button', { name: /Batas area/ }).textContent).toMatch(/nonaktif/);
+  });
+
+  it('opens the colour circle, keeps a recent swatch, and can follow the guide again', () => {
+    setup();
+    const orb = screen.getByRole('button', { name: /Pilih warna/ });
+    expect(orb.getAttribute('aria-expanded')).toBe('false');
+    expect(orb.getAttribute('aria-pressed')).toBe('false');
+
+    act(() => orb.click());
+    expect(orb.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('group', { name: 'Palet' })).toBeTruthy();
+
+    act(() => screen.getByRole('button', { name: 'Warna Merah' }).click());
+    expect(orb.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText(/warna pilihanku/)).toBeTruthy();
+    const recent = screen.getByRole('button', { name: 'Warna terakhir Merah' });
+    expect(recent.getAttribute('aria-pressed')).toBe('true');
+
+    act(() => screen.getByRole('button', { name: 'Warna Biru' }).click());
+    const recents = screen.getByRole('group', { name: 'Warna terakhir' }).querySelectorAll('button');
+    expect(recents[0]?.getAttribute('aria-label')).toBe('Warna terakhir Biru');
+    expect(recents[1]?.getAttribute('aria-label')).toBe('Warna terakhir Merah');
+
+    act(() => screen.getByRole('button', { name: 'Warna terakhir Merah' }).click());
+    expect(screen.getByRole('button', { name: 'Warna Merah' }).getAttribute('aria-pressed')).toBe('true');
+
+    act(() => screen.getByRole('button', { name: /Ikuti panduan/ }).click());
+    expect(screen.getByText(/warna panduan/)).toBeTruthy();
+    expect(orb.getAttribute('aria-pressed')).toBe('false');
+    // The recent list is only the colours the child picked. Closing the guide
+    // choice does not forget them.
+    expect(screen.getByRole('button', { name: 'Warna terakhir Merah' })).toBeTruthy();
+  });
+
+  it('draws at the slider width, then takes the next step\'s own width (FR-03)', async () => {
+    const { store, canvas } = setup();
+    const slider = screen.getByRole('slider', { name: 'Ketebalan' });
+    expect(slider.getAttribute('aria-valuetext')).toBe('Ukuran langkah');
+
+    act(() => {
+      fireEvent.change(slider, { target: { value: '12' } });
+    });
+    expect(screen.getByRole('slider', { name: 'Ketebalan' }).getAttribute('aria-valuetext')).toBe(
+      'Ukuran pilihanku',
+    );
+
+    act(() => drawStroke(canvas, [{ x: 80, y: 80 }, { x: 140, y: 120 }]));
+    await waitFor(async () => {
+      const restored = await store.loadSession('test-session');
+      expect(restored?.strokes[0]?.width).toBe(12);
+    });
+
+    act(() => screen.getByRole('button', { name: /Lanjut/ }).click());
+    const nextWidth = String(CAT_LESSON.steps[1]!.toolPreset.widthViewbox);
+    expect(screen.getByRole('slider', { name: 'Ketebalan' }).getAttribute('value')).toBe(nextWidth);
   });
 
   it('keeps a chosen colour when the step changes (FR-04, AT-02)', () => {

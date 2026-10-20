@@ -302,6 +302,153 @@ body {
   box-shadow: 0 2px 8px rgba(31, 41, 51, 0.12);
 }
 
+.float-dock .toolbar {
+  align-items: flex-end;
+}
+
+.float-dock .toolbar__group--tools,
+.float-dock .toolbar__group--history {
+  flex-direction: column;
+  align-items: flex-end;
+  width: max-content;
+}
+
+.float-dock .toolbar__group--tools .chip:not(.chip--wide),
+.float-dock .toolbar__group--history .chip,
+.float-dock__help {
+  width: 56px;
+  min-width: 56px;
+  height: 56px;
+  padding: 0;
+  font-size: 1.45rem;
+}
+
+.float-dock .chip__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.brush-slider {
+  position: absolute;
+  left: max(8px, env(safe-area-inset-left, 0px));
+  top: 46%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: 64px;
+  height: min(46vh, 340px);
+  min-height: 188px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 6px 18px rgba(31, 41, 51, 0.12);
+}
+
+.brush-slider__input {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 56px;
+  height: 100%;
+  min-height: 172px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.brush-slider__input::-webkit-slider-runnable-track {
+  width: 14px;
+  border-radius: 999px;
+  background: #d9d3c7;
+}
+
+.brush-slider__input::-webkit-slider-thumb {
+  appearance: none;
+  width: 48px;
+  height: 48px;
+  margin-left: -17px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--ink);
+  box-shadow: 0 2px 6px rgba(31, 41, 51, 0.28);
+}
+
+.brush-slider__input::-moz-range-track {
+  width: 14px;
+  border-radius: 999px;
+  background: #d9d3c7;
+}
+
+.brush-slider__input::-moz-range-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--ink);
+}
+
+.color-well {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 6;
+}
+
+.color-well__orb {
+  width: 64px;
+  height: 64px;
+  min-width: 64px;
+  min-height: 64px;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 10px rgba(31, 41, 51, 0.22), inset 0 0 0 1px rgba(31, 41, 51, 0.35);
+  cursor: pointer;
+}
+
+.color-well__orb[aria-pressed='true'] {
+  box-shadow: 0 0 0 3px var(--accent), 0 2px 10px rgba(31, 41, 51, 0.22);
+}
+
+.color-well__popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(292px, 72vw);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(31, 41, 51, 0.2);
+}
+
+.color-well__popover[data-open='false'] {
+  display: none;
+}
+
+.color-well__popover .swatches {
+  display: grid;
+  grid-template-columns: repeat(5, var(--tap));
+  justify-content: start;
+  gap: 6px;
+}
+
+.color-well__recents {
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
 .step-card {
   position: absolute;
   left: 50%;
@@ -843,6 +990,13 @@ body {
   }
 }
 
+/* The dock is a slim icon stack on every size. The older two-column toolbar
+   grid was for the swatch row, which no longer lives here. */
+.float-dock .toolbar:not(.toolbar--settings) {
+  display: flex;
+  flex-direction: column;
+}
+
 /* --- phone ----------------------------------------------------------------- */
 /*
  * Phones are a secondary layout. The tier comes from `data-layout` (see
@@ -1057,6 +1211,24 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 
 .shell[data-layout='phone-portrait'] .float-header__titles {
   display: none;
+}
+
+.shell[data-layout^='phone'] .brush-slider {
+  height: min(30vh, 200px);
+  min-height: 148px;
+  top: 38%;
+}
+
+.shell[data-layout^='phone'] .color-well__orb {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
+}
+
+.shell[data-layout^='phone'] .float-dock .toolbar:not(.toolbar--settings) {
+  display: flex;
+  flex-direction: column;
 }
 
 .shell[data-layout='phone-portrait'] .step-panel {
@@ -1443,4 +1615,10 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 
 .shell[data-layout^='phone'] .banner {
   font-size: 0.875rem;
+}
+
+.shell[data-layout^='phone'] .float-dock .toolbar:not(.toolbar--settings) {
+  display: flex;
+  flex-direction: column;
+  width: max-content;
 }
