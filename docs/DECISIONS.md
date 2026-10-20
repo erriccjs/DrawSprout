@@ -684,9 +684,8 @@ ulang* on the toast starts the lesson over: the session is deleted and
 a full disk, and a lesson whose content version changed stay banners, because
 those are warnings rather than "you are already continuing".
 
-On a portrait phone the toast sits under the folded step reference, in the
-band above the sheet. It does not cover the mode box or the other tools
-(D-60).
+On a portrait phone the toast sits below the tools and above *Lanjut*. It
+does not cover the mode box, the sheet, or the other tools (D-60).
 
 ### D-57 — Finger mode avoids the screen edge; a page cannot stop Android gestures
 
@@ -706,9 +705,11 @@ did not do this.
 - Mouse input in finger mode is not filtered, so a desktop check can still
   draw at the window edge.
 
-The paper is fitted with that same 28px inset on the left and right
-(`drawingChrome.side`). The top and bottom bars are already taller than
-28px, so the guides sit inside the margin.
+On a tablet and in phone landscape the paper is fitted with that same 28px
+inset on the left and right (`drawingChrome.side`). A portrait phone uses an
+8px visual margin so the 4:3 sheet can use the screen width. Finger strokes
+still do not start within 28px of the screen edge. The top and bottom bars
+are already taller than 28px, so the guides sit inside the margin.
 
 The canvas, and `html` and `body` while a drawing is open, use
 `touch-action: none` and `overscroll-behavior: none`. Cancelable touch and
@@ -766,13 +767,15 @@ the large end and a thin stroke marks the small end. Neither adds width:
 the column stays 64px, and 52px on a portrait phone.
 
 The instruction card keeps the words, the step dots, and the collapse
-button. The picture moves out. On a landscape tablet it is a 136×102 card
-in the top-left, inside the band above the paper (`drawingChrome` top is
-168px) and above the brush slider, so it does not cover the sheet or the
-hand at the bottom. On a portrait tablet and on a phone it is a thumbnail
-in that same top corner. A tap opens the large preview; a tap on the
-preview closes it. On a portrait tablet that thumbnail is 128×96, still
-inside the band above the paper. The sheet is not made smaller to make room.
+button. The picture moves out. On a landscape tablet it is a 200×150 card
+in the top-left column, above the brush slider. The card is 4:3 with no
+padding, and the picture is framed on the artwork so the drawing fills the
+card. A tap on the card opens the large preview;
+a tap on the preview closes it. The sheet stays the same size and slides
+right until its left edge clears the card. On a portrait tablet and on a
+phone it is a thumbnail in that same top corner, and a tap opens the same
+preview. On a portrait tablet that thumbnail is 128×96, still inside the
+band above the paper. The sheet is not made smaller to make room.
 
 ### D-60 — Dock icons stay readable, and the phone sheet sits above the tools
 
@@ -786,9 +789,9 @@ under the step reference, leaving an empty band above the toolbar.
 border only. *Sesuai layar* is a magnifying glass with a "1" in the lens, and
 it is not shown while zoom is 1. *Layar penuh* stays the four corner brackets.
 
-On a portrait phone the sheet is still the largest 4:3 that fits the width,
-with the 28px side inset (D-57). It rests just above the brush slider
-(`drawingChrome` bottom is that slider's 128px offset plus its 132px height,
-plus 16px) instead of under the step card. The toast uses the band that opens
-above the sheet. A taller phone is where this shows; the sheet does not grow
+On a portrait phone the sheet is the largest 4:3 that fits the screen width,
+with an 8px side margin (D-57). It sits just under the step card. The brush
+slider and the dock follow the bottom of the sheet, so the open space is
+below the tools rather than around the paper. The toast sits in that lower
+band, above *Lanjut*, and does not cover the tools. The sheet does not grow
 past 4:3, because cropping the lesson would hide strokes at the sides.

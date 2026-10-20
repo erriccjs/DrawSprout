@@ -12,6 +12,7 @@
  */
 
 import type { ColorRegion, CoordinateSpace, GuidePath, LessonStep } from '../lesson-data/schema';
+import { previewViewBox } from './preview-frame';
 
 interface TargetPreviewProps {
   readonly space: CoordinateSpace;
@@ -30,10 +31,14 @@ export function TargetPreview({ space, paths, title, step, steps, colorRegions }
   const futureRegions = new Set(
     steps.slice(stepIndex + 1).flatMap((item) => item.colorRegionIds),
   );
+  const viewBox = previewViewBox(space, [
+    ...paths.map((path) => path.d),
+    ...colorRegions.map((region) => region.d),
+  ]);
   return (
     <svg
       className="target-preview"
-      viewBox={`0 0 ${space.width} ${space.height}`}
+      viewBox={viewBox}
       role="img"
       aria-label={`Contoh hasil akhir: ${title}`}
     >

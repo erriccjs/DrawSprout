@@ -2022,8 +2022,8 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 }
 
 .shell[data-layout='phone-portrait'] .float-dock {
-  top: auto;
-  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  top: calc(var(--sheet-bottom, 420px) + 8px);
+  bottom: auto;
   left: 72px;
   right: 8px;
   transform: none;
@@ -2082,15 +2082,10 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   height: 48px;
 }
 
-/* Under the folded step card, in the band above the sheet. The sheet itself
-   sits lower, just above the brush slider, so this does not cover the tools. */
+/* Below the tools that follow the sheet, and above Lanjut. */
 .shell[data-layout='phone-portrait'] .resume-toast {
-  top: 128px;
-  bottom: auto;
-}
-
-.shell[data-layout='phone-portrait'][data-tablet-notice='open'] .resume-toast {
-  top: 196px;
+  top: auto;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 }
 
 .shell[data-layout='phone-landscape'] .resume-toast {
@@ -2116,8 +2111,8 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 }
 
 .shell[data-layout='phone-portrait'] .brush-slider {
-  top: auto;
-  bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  top: calc(var(--sheet-bottom, 420px) + 8px);
+  bottom: auto;
   left: max(8px, env(safe-area-inset-left, 0px));
   width: 52px;
   height: 132px;
@@ -2163,8 +2158,12 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   position: absolute;
   z-index: 5;
   display: flex;
-  padding: 4px;
+  padding: 0;
   border: 1px solid var(--line);
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.97);
   box-shadow: 0 8px 24px rgba(31, 41, 51, 0.16);
@@ -2186,17 +2185,19 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 }
 
 @media (orientation: landscape) {
+  /* 200×150 is 4:3, matching the lesson, so the drawing fills the card.
+     Width matches TABLET_REFERENCE_CARD_RIGHT in drawing-chrome.ts. */
   .shell[data-layout='tablet'] .step-reference--card {
-    top: 62px;
+    top: 58px;
     left: max(8px, env(safe-area-inset-left, 0px));
-    width: 136px;
-    height: 102px;
+    width: 200px;
+    height: 150px;
   }
 
   .shell[data-layout='tablet'] .step-card {
-    left: 156px;
+    left: 220px;
     transform: none;
-    width: min(760px, calc(100% - 172px));
+    width: min(720px, calc(100% - 236px));
   }
 }
 

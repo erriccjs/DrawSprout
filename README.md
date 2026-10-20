@@ -42,8 +42,9 @@ export containing only the child's drawing.
   lesson space. Export does not include the zoom.
 - The step reference (instruction and progress dots) sits at the top of the
   drawing screen, so a hand resting on the lower part does not cover it. The
-  target picture is separate: a card at the top-left on a landscape tablet,
-  and a thumbnail that opens large on a portrait tablet or a phone. *Lanjut*
+  target picture is separate: a 200×150 card at the top-left on a landscape
+  tablet, and a thumbnail on a portrait tablet or a phone. A tap on either
+  opens a large preview. *Lanjut*
   and *Kembali* stay on the bottom
   edge, with *Lanjut* the large button. On a phone the reference starts
   folded. Finishing a lesson plays a small decoration, which stays still when
@@ -58,11 +59,12 @@ export containing only the child's drawing.
   without opening help.
 - Continuing a saved drawing shows a small toast for about 3 seconds. Drawing
   is not blocked. *Mulai ulang* on the toast starts that picture over. On a
-  phone the toast sits under the step reference, and the sheet rests above
-  the tools.
+  phone the sheet sits between the step card and the tools, and the toast
+  sits below the tools, above *Lanjut*.
 - In finger mode, a touch in the outer 28px of the screen does not start a
   stroke, and a very large reported contact is ignored. The paper stays inset
-  from the side edges. *Layar penuh* asks the browser to go fullscreen, and
+  from the side edges (8px on a portrait phone, 28px otherwise). *Layar penuh*
+  asks the browser to go fullscreen, and
   the first stroke asks once. An installed copy prefers fullscreen and falls
   back to standalone. None of this disables Android's own edge gestures
   (back, home, recents, the notification shade). See D-57.

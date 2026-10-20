@@ -792,10 +792,20 @@ describe('navigation and colouring', () => {
     const { store, canvas } = setup();
     const slider = screen.getByRole('slider', { name: 'Ukuran kuas' });
     expect(slider.getAttribute('aria-valuetext')).toBe('Ukuran langkah');
+    const dot = () => document.querySelector<HTMLElement>('.brush-slider__dot')!;
+    expect(dot().style.backgroundColor).toBeTruthy();
+    const thin = Number.parseFloat(dot().style.width);
 
     act(() => {
       fireEvent.change(slider, { target: { value: '12' } });
     });
+    expect(Number.parseFloat(dot().style.width)).toBeGreaterThan(thin);
+    const ink = dot().style.backgroundColor;
+    act(() => screen.getByRole('button', { name: /Pilih warna/ }).click());
+    act(() => screen.getByRole('button', { name: 'Warna Merah' }).click());
+    const red = dot().style.backgroundColor.replace(/\s/g, '').toLowerCase();
+    expect(red).not.toBe(ink.replace(/\s/g, '').toLowerCase());
+    expect(red).toMatch(/e8552d|232,85,45/);
     expect(screen.getByRole('slider', { name: 'Ukuran kuas' }).getAttribute('aria-valuetext')).toBe(
       'Ukuran pilihanku',
     );

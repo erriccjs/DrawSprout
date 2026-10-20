@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { RefObject } from 'react';
+import type { CSSProperties, RefObject } from 'react';
 import type { LessonPackage } from '../lesson-data/schema';
 import {
   activeClipRegionIds,
@@ -36,7 +36,7 @@ import {
   CENTERED_PLACEMENT,
   FIT_VIEW,
   pinchView,
-  placementForBottom,
+  placementClearingLeft,
   placementForTop,
   sameView,
   viewTransformCss,
@@ -54,7 +54,7 @@ import { StepReference } from './StepReference';
 import { BrushSlider } from './BrushSlider';
 import { ColorWell } from './ColorWell';
 import { Toolbar, ToolbarSettings } from './Toolbar';
-import { drawingChrome } from './drawing-chrome';
+import { TABLET_REFERENCE_CARD_RIGHT, drawingChrome } from './drawing-chrome';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 import { useLayoutTier } from './useLayoutTier';
 import { newId } from './ids';
@@ -159,13 +159,22 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const placement = useMemo(() => {
     if (!viewport || stageBox.height <= 0) return CENTERED_PLACEMENT;
     const chrome = drawingChrome(layout, tabletNoticeOpen);
-    // A portrait phone is taller than a 4:3 sheet. Rest the sheet on the
-    // bottom of the free band so the open space above the tools is the paper.
-    if (layout === 'phone-portrait') {
-      return placementForBottom(stageBox.height, viewport.cssHeight, chrome.bottom);
+    const topAligned = placementForTop(stageBox.height, viewport.cssHeight, chrome.top);
+    // The landscape sample card occupies the left margin. Slide the sheet
+    // right of it. The sheet stays the same 4:3 size; only its left edge moves.
+    if (layout === 'tablet' && stageBox.width > stageBox.height) {
+      return placementClearingLeft(
+        stageBox.width,
+        stageBox.height,
+        viewport.cssWidth,
+        viewport.cssHeight,
+        chrome.top,
+        TABLET_REFERENCE_CARD_RIGHT,
+        stageBox.width - 80,
+      );
     }
-    return placementForTop(stageBox.height, viewport.cssHeight, chrome.top);
-  }, [layout, viewport, stageBox.height, tabletNoticeOpen]);
+    return topAligned;
+  }, [layout, viewport, stageBox.width, stageBox.height, tabletNoticeOpen]);
 
   const applyView = useCallback((next: CanvasView, commit: boolean) => {
     viewRef.current = next;
@@ -450,8 +459,19 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     );
   }
 
+  const sheetBottom = viewport == null
+    ? null
+    : stageBox.height / 2 + placement.offsetY + viewport.cssHeight / 2;
+
   return (
-    <div className="pad">
+    <div
+      className="pad"
+      style={
+        sheetBottom == null
+          ? undefined
+          : ({ '--sheet-bottom': `${Math.round(sheetBottom)}px` } as CSSProperties)
+      }
+    >
       {/* The stage is the whole screen. Controls overlay it; they do not
           reserve a column, so the paper can use every pixel (D-49). */}
       <div className="pad__stage" ref={setStage}>

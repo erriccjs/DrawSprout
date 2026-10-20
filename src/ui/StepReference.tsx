@@ -53,18 +53,14 @@ export function StepReference({ lesson, step, presentation }: StepReferenceProps
 
   return (
     <>
-      {spot === 'card' ? (
-        <div className="step-reference step-reference--card">{preview()}</div>
-      ) : (
-        <button
-          type="button"
-          className="step-reference step-reference--thumb"
-          aria-label="Perbesar contoh"
-          onClick={() => setOpen(true)}
-        >
-          {preview()}
-        </button>
-      )}
+      <button
+        type="button"
+        className={`step-reference step-reference--${spot}`}
+        aria-label="Perbesar contoh"
+        onClick={() => setOpen(true)}
+      >
+        {preview()}
+      </button>
       {open && (
         <div
           className="example-lightbox"

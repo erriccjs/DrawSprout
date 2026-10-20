@@ -17,11 +17,14 @@ describe('reference presentation', () => {
 describe('step reference', () => {
   const step = activeStep(CAT_LESSON, createSession(CAT_LESSON, 'reference'));
 
-  it('shows the target on a landscape card without a second tap', () => {
+  it('opens the large preview from the landscape card and closes it on a tap', () => {
     render(<StepReference lesson={CAT_LESSON} step={step} presentation="card" />);
-    expect(screen.getByRole('img', { name: /Contoh hasil akhir/ })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Perbesar contoh' })).toBeNull();
     expect(document.querySelector('.step-reference--card')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Perbesar contoh' }));
+    const dialog = screen.getByRole('dialog', { name: 'Contoh besar' });
+    expect(dialog.querySelector('svg')).toBeTruthy();
+    fireEvent.click(dialog);
+    expect(screen.queryByRole('dialog', { name: 'Contoh besar' })).toBeNull();
   });
 
   it('opens a large preview from the thumbnail and closes it on a tap', () => {
