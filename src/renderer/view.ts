@@ -21,6 +21,26 @@ export interface CanvasView {
 
 export const FIT_VIEW: CanvasView = { zoom: 1, panX: 0, panY: 0 };
 
+/**
+ * A shift of the fitted frame away from the center of the stage.
+ * Zoom and pan stay in `CanvasView`. This offset is layout only: it lets a
+ * phone sit the paper under the header without storing a different geometry.
+ */
+export interface PaperPlacement {
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
+
+export const CENTERED_PLACEMENT: PaperPlacement = { offsetX: 0, offsetY: 0 };
+
+/** Move a centered frame so its top edge lands at `top`, clamped inside the stage. */
+export function placementForTop(stageHeight: number, fittedHeight: number, top: number): PaperPlacement {
+  if (stageHeight <= 0 || fittedHeight <= 0) return CENTERED_PLACEMENT;
+  const centeredTop = (stageHeight - fittedHeight) / 2;
+  const desired = clamp(finite(top, centeredTop), 0, Math.max(0, stageHeight - fittedHeight));
+  return { offsetX: 0, offsetY: desired - centeredTop };
+}
+
 export interface FrameRect {
   readonly left: number;
   readonly top: number;
@@ -29,8 +49,8 @@ export interface FrameRect {
 }
 
 /** CSS transform for a frame whose layout box is the fitted paper, origin at its center. */
-export function viewTransformCss(view: CanvasView): string {
-  return `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})`;
+export function viewTransformCss(view: CanvasView, placement: PaperPlacement = CENTERED_PLACEMENT): string {
+  return `translate(${view.panX + placement.offsetX}px, ${view.panY + placement.offsetY}px) scale(${view.zoom})`;
 }
 
 /**
@@ -44,12 +64,13 @@ export function frameVisualRect(
   fittedWidth: number,
   fittedHeight: number,
   view: CanvasView,
+  placement: PaperPlacement = CENTERED_PLACEMENT,
 ): FrameRect {
   const width = fittedWidth * view.zoom;
   const height = fittedHeight * view.zoom;
   return {
-    left: stageWidth / 2 + view.panX - width / 2,
-    top: stageHeight / 2 + view.panY - height / 2,
+    left: stageWidth / 2 + view.panX + placement.offsetX - width / 2,
+    top: stageHeight / 2 + view.panY + placement.offsetY - height / 2,
     width,
     height,
   };
@@ -65,10 +86,11 @@ export function stagePointToSpace(
   view: CanvasView,
   stageX: number,
   stageY: number,
+  placement: PaperPlacement = CENTERED_PLACEMENT,
 ): Point {
   return clientToSpace(
     space,
-    frameVisualRect(stageWidth, stageHeight, fittedWidth, fittedHeight, view),
+    frameVisualRect(stageWidth, stageHeight, fittedWidth, fittedHeight, view, placement),
     stageX,
     stageY,
   );
@@ -110,6 +132,7 @@ export interface PinchInput {
   readonly midX: number;
   readonly midY: number;
   readonly distance: number;
+  readonly placement?: PaperPlacement;
 }
 
 /**
@@ -122,17 +145,18 @@ export function pinchView(input: PinchInput): CanvasView {
     return input.startView;
   }
   const zoom = input.startView.zoom * (input.distance / input.startDistance);
+  const placement = input.placement ?? CENTERED_PLACEMENT;
   const startVisualWidth = input.fittedWidth * input.startView.zoom;
   const startVisualHeight = input.fittedHeight * input.startView.zoom;
-  const centerX = input.stageWidth / 2 + input.startView.panX;
-  const centerY = input.stageHeight / 2 + input.startView.panY;
+  const centerX = input.stageWidth / 2 + input.startView.panX + placement.offsetX;
+  const centerY = input.stageHeight / 2 + input.startView.panY + placement.offsetY;
   const across = startVisualWidth === 0 ? 0 : (input.startMidX - centerX) / startVisualWidth;
   const down = startVisualHeight === 0 ? 0 : (input.startMidY - centerY) / startVisualHeight;
   return clampView(
     {
       zoom,
-      panX: input.midX - input.stageWidth / 2 - across * input.fittedWidth * zoom,
-      panY: input.midY - input.stageHeight / 2 - down * input.fittedHeight * zoom,
+      panX: input.midX - input.stageWidth / 2 - placement.offsetX - across * input.fittedWidth * zoom,
+      panY: input.midY - input.stageHeight / 2 - placement.offsetY - down * input.fittedHeight * zoom,
     },
     input.stageWidth,
     input.stageHeight,

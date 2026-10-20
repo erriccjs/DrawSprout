@@ -126,6 +126,9 @@ describe('starting a lesson', () => {
     setup();
     expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Gambar lingkaran besar untuk kepala.' })).toBeTruthy();
+    const help = screen.getByRole('button', { name: 'Bantuan' });
+    expect(help.textContent).toContain('?');
+    expect(help.textContent).not.toContain('Bantuan');
   });
 
   it('shows the dashed guide for the active step only', () => {

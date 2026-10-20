@@ -7,6 +7,7 @@ import {
   clampView,
   frameVisualRect,
   pinchView,
+  placementForTop,
   stagePointToSpace,
   viewTransformCss,
 } from './view';
@@ -141,5 +142,53 @@ describe('canvas view mapping', () => {
     expect(Math.abs(high.panX)).toBeLessThan(5000);
     expect(Math.abs(high.panY)).toBeLessThan(5000);
     expect(clampView({ zoom: Number.NaN, panX: Number.NaN, panY: 0 }, 800, 600, 800, 600)).toEqual(FIT_VIEW);
+  });
+
+  it('can rest the paper higher on the stage and still map a pinch', () => {
+    const phone = { width: 390, height: 844 };
+    const phoneFit = fitViewport(space, phone.width, phone.height);
+    const placement = placementForTop(phone.height, phoneFit.cssHeight, 68);
+    expect(placement.offsetY).toBeLessThan(0);
+    const rect = frameVisualRect(phone.width, phone.height, phoneFit.cssWidth, phoneFit.cssHeight, FIT_VIEW, placement);
+    expect(rect.top).toBeCloseTo(68, 5);
+    const before = stagePointToSpace(
+      space,
+      phone.width,
+      phone.height,
+      phoneFit.cssWidth,
+      phoneFit.cssHeight,
+      FIT_VIEW,
+      180,
+      200,
+      placement,
+    );
+    const next = pinchView({
+      stageWidth: phone.width,
+      stageHeight: phone.height,
+      fittedWidth: phoneFit.cssWidth,
+      fittedHeight: phoneFit.cssHeight,
+      startView: FIT_VIEW,
+      startMidX: 180,
+      startMidY: 200,
+      startDistance: 120,
+      midX: 200,
+      midY: 210,
+      distance: 240,
+      placement,
+    });
+    const after = stagePointToSpace(
+      space,
+      phone.width,
+      phone.height,
+      phoneFit.cssWidth,
+      phoneFit.cssHeight,
+      next,
+      200,
+      210,
+      placement,
+    );
+    expect(after.x).toBeCloseTo(before.x, 4);
+    expect(after.y).toBeCloseTo(before.y, 4);
+    expect(viewTransformCss(next, placement)).not.toMatch(/rotate/);
   });
 });

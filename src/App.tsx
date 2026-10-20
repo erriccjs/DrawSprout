@@ -207,6 +207,7 @@ export function App() {
               case 'set-boundary-assist': controls.tools.colorBoundaryAssist = state.toolPreferences.colorBoundaryAssist; break;
             }
           }}
+          tabletNoticeOpen={showTabletNotice}
           onChoosePicture={(saved, state) => {
             const handoff = { state, saved };
             handoffRef.current = openLesson.restorePending && (!touchedRef.current || state === openLesson.initialState) ? null : handoff;

@@ -24,6 +24,8 @@ interface StepPanelProps {
   readonly lesson: LessonPackage;
   readonly state: SessionState;
   readonly step: LessonStep;
+  /** Phones open folded so the instruction does not cover the paper. */
+  readonly startCollapsed?: boolean;
 }
 
 interface StepNavigationProps {
@@ -44,8 +46,9 @@ export function StepPanel({
   lesson,
   state,
   step,
+  startCollapsed = false,
 }: StepPanelProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(startCollapsed);
   const [enlarged, setEnlarged] = useState(false);
   const stepNumber = state.currentStepIndex + 1;
   const stepCount = lesson.steps.length;

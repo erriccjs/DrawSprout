@@ -9,7 +9,7 @@
  * finished stroke is committed to the session (PRD section 11).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import type { LessonPackage } from '../lesson-data/schema';
 import {
@@ -33,11 +33,14 @@ import { ArtworkSurface } from '../renderer/artwork-surface';
 import { backingSize, fitViewport } from '../renderer/coordinates';
 import type { LiveStrokeSpec, Viewport } from '../renderer/types';
 import {
+  CENTERED_PLACEMENT,
   FIT_VIEW,
   pinchView,
+  placementForTop,
   sameView,
   viewTransformCss,
   type CanvasView,
+  type PaperPlacement,
 } from '../renderer/view';
 import { acceptsPointerType, rejectionMessage } from '../input/pointer-mode';
 import { useStrokeInput } from '../input/useStrokeInput';
@@ -48,6 +51,7 @@ import { BrushSlider } from './BrushSlider';
 import { ColorWell } from './ColorWell';
 import { Toolbar, ToolbarSettings } from './Toolbar';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
+import { useLayoutTier } from './useLayoutTier';
 import { newId } from './ids';
 import { useAutosave, type SaveStatus } from './useAutosave';
 
@@ -64,7 +68,15 @@ interface DrawingPadProps {
   readonly onActivity: () => void;
   readonly onControlChange: (action: SessionAction, state: SessionState) => void;
   readonly onChoosePicture: (saved: Promise<boolean>, state: SessionState) => void;
+  /** The phone "best on a tablet" note is covering the top of this screen. */
+  readonly tabletNoticeOpen?: boolean;
 }
+
+/** Room kept above the paper on a phone, matching the floating header and note. */
+const PHONE_PAPER_TOP_PX = 64;
+const PHONE_PAPER_TOP_WITH_NOTICE_PX = 128;
+/** Tools, slider and the step card live in this band under the paper. */
+const PHONE_BOTTOM_RESERVE_PX = 210;
 
 /** What the pointer began drawing, frozen at pointer-down (FR-03). */
 interface PendingStroke {
@@ -73,7 +85,8 @@ interface PendingStroke {
   readonly tool: Stroke['tool'];
 }
 
-export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onControlChange, onChoosePicture }: DrawingPadProps) {
+export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onControlChange, onChoosePicture, tabletNoticeOpen = false }: DrawingPadProps) {
+  const layout = useLayoutTier();
   const [state, setState] = useState(initialState);
   const stateRef = useRef(state);
   const preferencesDirtyRef = useRef(false);
@@ -132,14 +145,26 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const viewRef = useRef<CanvasView>(FIT_VIEW);
   const pinchOriginRef = useRef<CanvasView | null>(null);
   const stageSizeRef = useRef({ width: 0, height: 0 });
+  const [stageBox, setStageBox] = useState({ width: 0, height: 0 });
   const [view, setView] = useState<CanvasView>(FIT_VIEW);
+  const placementRef = useRef<PaperPlacement>(CENTERED_PLACEMENT);
+  const placement = useMemo(() => {
+    if (layout !== 'phone-portrait' || !viewport || stageBox.height <= 0) return CENTERED_PLACEMENT;
+    const maxTop = Math.max(0, stageBox.height - viewport.cssHeight - PHONE_BOTTOM_RESERVE_PX);
+    const preferred = tabletNoticeOpen ? PHONE_PAPER_TOP_WITH_NOTICE_PX : PHONE_PAPER_TOP_PX;
+    return placementForTop(stageBox.height, viewport.cssHeight, Math.min(preferred, maxTop));
+  }, [layout, viewport, stageBox.height, tabletNoticeOpen]);
 
   const applyView = useCallback((next: CanvasView, commit: boolean) => {
     viewRef.current = next;
     const frame = frameRef.current;
-    if (frame) frame.style.transform = viewTransformCss(next);
+    if (frame) frame.style.transform = viewTransformCss(next, placementRef.current);
     if (commit) setView((current) => (sameView(current, next) ? current : next));
   }, []);
+
+  useLayoutEffect(() => {
+    placementRef.current = placement;
+  }, [placement]);
 
   useEffect(() => () => { surfaceRef.current = null; }, [surfaceRef]);
 
@@ -151,7 +176,11 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
 
     const measure = () => {
       const rect = stage.getBoundingClientRect();
-      stageSizeRef.current = { width: rect.width, height: rect.height };
+      const nextBox = { width: rect.width, height: rect.height };
+      stageSizeRef.current = nextBox;
+      setStageBox((current) => (
+        current.width === nextBox.width && current.height === nextBox.height ? current : nextBox
+      ));
       setViewport(
         fitViewport(lesson.coordinateSpace, rect.width, rect.height, window.devicePixelRatio),
       );
@@ -246,6 +275,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           midX: gesture.midX,
           midY: gesture.midY,
           distance: gesture.distance,
+          placement: placementRef.current,
         }),
         false,
       );
@@ -390,7 +420,11 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           ref={frameRef}
           style={
             viewport
-              ? { width: `${viewport.cssWidth}px`, height: `${viewport.cssHeight}px` }
+              ? {
+                  width: `${viewport.cssWidth}px`,
+                  height: `${viewport.cssHeight}px`,
+                  transform: viewTransformCss(view, placement),
+                }
               : undefined
           }
         >
@@ -456,7 +490,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         />
 
         <div className="step-card">
-          <StepPanel lesson={lesson} state={state} step={step} />
+          <StepPanel lesson={lesson} state={state} step={step} startCollapsed={layout !== 'tablet'} />
           <StepNavigation
             lesson={lesson}
             state={state}
@@ -477,11 +511,12 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           <button
             type="button"
             className="chip float-dock__help"
+            aria-label="Bantuan"
             aria-pressed={controlTab === 'help'}
             aria-expanded={controlTab === 'help'}
             onClick={() => setControlTab((tab) => (tab === 'help' ? 'drawing' : 'help'))}
           >
-            Bantuan
+            <span aria-hidden="true">?</span>
           </button>
           <button
             type="button"

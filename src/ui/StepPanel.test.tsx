@@ -49,4 +49,29 @@ describe('the step card', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tutup contoh' }));
     expect(screen.queryByRole('dialog', { name: 'Contoh besar' })).toBeNull();
   });
+
+  it('starts folded when asked, with the step count and next button still there', () => {
+    const state = createSession(CAT_LESSON, 'step-card-phone');
+    render(
+      <div className="step-card">
+        <StepPanel
+          lesson={CAT_LESSON}
+          state={state}
+          step={activeStep(CAT_LESSON, state)}
+          startCollapsed
+        />
+        <StepNavigation
+          lesson={CAT_LESSON}
+          state={state}
+          onFinish={() => undefined}
+          dispatch={() => undefined}
+        />
+      </div>,
+    );
+    expect(screen.queryByRole('heading', { name: CAT_LESSON.steps[0]!.instruction })).toBeNull();
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Lanjut/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Tampilkan langkah' }));
+    expect(screen.getByRole('heading', { name: CAT_LESSON.steps[0]!.instruction })).toBeTruthy();
+  });
 });

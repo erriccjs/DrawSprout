@@ -539,6 +539,12 @@ The column measurements in [`TABLET_LAYOUT_FIT.md`](./TABLET_LAYOUT_FIT.md)
 describe the layout this replaces. They are not the sizes of the full-bleed
 paper.
 
+On a phone the paper is still the largest 4:3 that fits the width, so a tall
+screen has empty bands above and below it. The paper is shifted up to sit
+under the header. The brush slider and the tool row sit in the band below the
+paper, and *Bantuan* is a `?` icon so the word cannot spill past the screen
+edge. A tablet keeps the vertical tool stack on the right.
+
 ### D-50 — Brush size is a slider; colour is one circle
 
 The row of width chips and the row of swatches took a band of the old dock.
@@ -610,6 +616,10 @@ stays available to assistive tech.
 The finish screen adds three decorative dots above the existing title. They
 animate only when `prefers-reduced-motion` is not reduce. The decoration is
 `aria-hidden` and does not judge the drawing (D-41).
+
+On a phone the card starts folded: dots, the expand control, and *Lanjut*.
+The instruction and the thumbnail come back when the child opens it. A tablet
+still starts with the card open.
 
 ### D-54 — A phone says a tablet is more comfortable, once
 

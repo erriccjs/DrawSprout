@@ -22,7 +22,9 @@ export containing only the child's drawing.
 - Canvas drawing with Pointer Events, pen / brush / eraser, undo and redo.
 - A full-bleed drawing screen. The paper fills the stage, and the tools, the
   brush-size slider, and the step card float at the edges instead of taking a
-  column beside it.
+  column beside it. *Bantuan* is an icon, so the label stays inside its button.
+  On a phone the step card starts folded, and the slider and tools sit in the
+  space under the paper.
 - Brush size is a vertical slider. The active colour is a circle that opens a
   small palette and the last few colours. Each step still starts with its own
   tool, width, and colour, and *Ikuti panduan* returns to the guide colour.
