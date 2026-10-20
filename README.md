@@ -137,6 +137,9 @@ npx wrangler deploy
 `wrangler.jsonc` is the deploy. It uploads `./dist` as static assets and, for a
 path that is not a file, serves `index.html`. There is no Worker script.
 `npx wrangler deploy` uses the Wrangler 4 version locked in `package-lock.json`.
+A branch build on Workers Builds runs `npx wrangler preview` instead. That
+command needs the empty top-level `previews` object in `wrangler.jsonc`.
+Production `wrangler deploy` does not use it.
 A project with no Wrangler config is
 [auto-configured](https://developers.cloudflare.com/workers/framework-guides/automatic-configuration/)
 on deploy, which rewrites `vite.config.ts` and installs the Cloudflare Vite

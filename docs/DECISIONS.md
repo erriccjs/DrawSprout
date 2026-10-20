@@ -491,6 +491,9 @@ The file is assets only:
 - No `main`, and no assets binding. A binding is only valid alongside a script.
 - `assets.directory` is `./dist`. `assets.not_found_handling` is
   `single-page-application`.
+- `previews` is `{}`. Workers Builds runs `npx wrangler preview` for a branch,
+  and that command exits unless the block is present. An empty object is
+  enough. Production `wrangler deploy` does not read it.
 
 Routing follows the static-assets decision diagram: a request that matches a
 file is served as that file, and only a miss is rewritten to `/index.html`.

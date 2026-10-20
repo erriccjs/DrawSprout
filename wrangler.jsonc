@@ -18,5 +18,9 @@
     // A missing file is index.html. A path that matches a file, including
     // /sw.js, is that file. See https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/
     "not_found_handling": "single-page-application"
-  }
+  },
+  // Workers Builds runs `wrangler preview` for a branch build. That command
+  // refuses to start without this block. An empty object is enough, and
+  // `wrangler deploy` does not read it.
+  "previews": {}
 }
