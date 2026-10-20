@@ -188,9 +188,26 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const [rejection, setRejection] = useState<string | null>(null);
   const [controlTab, setControlTab] = useState<'drawing' | 'help'>('drawing');
 
+  const discardLiveStroke = () => {
+    // A multi-finger gesture must not leave the dot the first finger started.
+    // Replay the committed strokes only — no session update, so this stays off
+    // the React path the same way a pointermove does.
+    const surface = surfaceRef.current;
+    pendingRef.current = null;
+    if (!surface) return;
+    surface.endStroke();
+    surface.replay(toRenderStrokes(stateRef.current.strokes));
+    paint();
+  };
+
   useStrokeInput(canvas, lesson.coordinateSpace, {
     accepts: (pointerType) => acceptsPointerType(state.inputMode, pointerType),
+    inputMode: state.inputMode,
     rejected: (pointerType) => setRejection(rejectionMessage(state.inputMode, pointerType)),
+    clearRejection: () => setRejection(null),
+    discard: discardLiveStroke,
+    undo: () => dispatch({ type: 'undo' }),
+    redo: () => dispatch({ type: 'redo' }),
 
     begin: (point) => {
       const surface = surfaceRef.current;

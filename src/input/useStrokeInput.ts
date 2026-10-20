@@ -15,19 +15,31 @@
  */
 
 import { useEffect, useRef } from 'react';
+import type { InputMode } from '../lesson-engine/types';
 import { clampToSpace, clientToSpace } from '../renderer/coordinates';
 import type { Point, RenderSpace } from '../renderer/types';
+import { initialGestureState, reduceGesture, type PinchGesture } from './gesture-tracker';
 
 export type StrokeEndReason = 'up' | 'cancel';
 
 export interface StrokeInputCallbacks {
   /** `false` ignores the pointer entirely; used for the pencil/finger filter. */
   accepts(pointerType: string): boolean;
+  /** Which gestures may draw and which are free for fingers. */
+  inputMode: InputMode;
   begin(point: Point, event: PointerEvent): void;
   extend(point: Point, event: PointerEvent): void;
   end(reason: StrokeEndReason): void;
   /** Called when a pointer is refused, so the UI can explain why. */
   rejected?(pointerType: string): void;
+  /** Drops the banner once a refused touch turns out to be a gesture. */
+  clearRejection?(): void;
+  /** Drops the in-progress stroke without committing it. */
+  discard?(): void;
+  undo?(): void;
+  redo?(): void;
+  /** Two-finger move that has left the tap window. Optional until the view uses it. */
+  pinch?(gesture: PinchGesture): void;
 }
 
 export function useStrokeInput(
@@ -44,67 +56,102 @@ export function useStrokeInput(
     callbacksRef.current = callbacks;
   }, [callbacks]);
 
-  const activePointerRef = useRef<number | null>(null);
+  const gestureRef = useRef(initialGestureState);
 
   useEffect(() => {
     // The element itself is the dependency, so a canvas that remounts - after
     // the finish screen is dismissed, say - gets its own listeners instead of
     // silently going deaf.
     if (!canvas) return;
+    gestureRef.current = initialGestureState;
 
     const toPoint = (event: PointerEvent): Point =>
       clampToSpace(space, clientToSpace(space, canvas.getBoundingClientRect(), event.clientX, event.clientY));
 
-    const finish = (reason: StrokeEndReason, pointerId: number) => {
-      if (activePointerRef.current !== pointerId) return;
-      activePointerRef.current = null;
-      if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
-      callbacksRef.current.end(reason);
+    const apply = (kind: 'down' | 'move' | 'up' | 'cancel', event: PointerEvent) => {
+      const callbacks = callbacksRef.current;
+      const step = reduceGesture(
+        gestureRef.current,
+        {
+          type: kind,
+          pointerId: event.pointerId,
+          pointerType: event.pointerType,
+          x: event.clientX,
+          y: event.clientY,
+          time: event.timeStamp,
+        },
+        { inputMode: callbacks.inputMode, accepts: (pointerType) => callbacks.accepts(pointerType) },
+      );
+      gestureRef.current = step.state;
+
+      for (const command of step.commands) {
+        switch (command.type) {
+          case 'draw-begin':
+            callbacks.begin(toPoint(event), event);
+            break;
+          case 'draw-move': {
+            event.preventDefault();
+            // Coalesced events give every sample the digitiser produced
+            // between frames. The event itself is used when that is missing.
+            const samples =
+              typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
+            if (samples.length === 0) {
+              callbacks.extend(toPoint(event), event);
+              break;
+            }
+            for (const sample of samples) callbacks.extend(toPoint(sample), sample);
+            break;
+          }
+          case 'draw-end':
+            callbacks.end(command.reason);
+            break;
+          case 'draw-discard':
+            callbacks.discard?.();
+            break;
+          case 'reject':
+            callbacks.rejected?.(event.pointerType);
+            break;
+          case 'clear-rejection':
+            callbacks.clearRejection?.();
+            break;
+          case 'undo':
+            callbacks.undo?.();
+            break;
+          case 'redo':
+            callbacks.redo?.();
+            break;
+          case 'pinch':
+            callbacks.pinch?.(command);
+            break;
+          default:
+            break;
+        }
+      }
     };
 
+    const release = (event: PointerEvent) => {
+      if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    };
     const onPointerDown = (event: PointerEvent) => {
-      if (!callbacksRef.current.accepts(event.pointerType)) {
-        callbacksRef.current.rejected?.(event.pointerType);
-        return;
-      }
-      // One stroke at a time. A palm or second finger arriving mid-stroke is
-      // dropped; it does not steal or fork the line being drawn.
-      if (activePointerRef.current !== null) return;
-
-      activePointerRef.current = event.pointerId;
-      try {
-        canvas.setPointerCapture(event.pointerId);
-      } catch {
-        // The spec lets this throw when the pointer is already gone. Capture
-        // only matters for a stroke that leaves the canvas, so drawing without
-        // it is better than refusing the stroke.
-      }
+      apply('down', event);
       // The canvas sets `touch-action: none`, so this only suppresses text
       // selection and the synthetic mouse events, not page-level gestures.
       event.preventDefault();
-      callbacksRef.current.begin(toPoint(event), event);
-    };
-
-    const onPointerMove = (event: PointerEvent) => {
-      if (activePointerRef.current !== event.pointerId) return;
-      event.preventDefault();
-
-      // Coalesced events give every sample the digitiser produced between
-      // frames, which matters for fast strokes on a high-rate pen. Purely an
-      // optimisation: the event itself is used when it is unavailable.
-      const samples =
-        typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
-      if (samples.length === 0) {
-        callbacksRef.current.extend(toPoint(event), event);
-        return;
-      }
-      for (const sample of samples) {
-        callbacksRef.current.extend(toPoint(sample), sample);
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch {
+        // Already gone, or capture is unsupported. The stroke still stands.
       }
     };
-
-    const onPointerUp = (event: PointerEvent) => finish('up', event.pointerId);
-    const onPointerCancel = (event: PointerEvent) => finish('cancel', event.pointerId);
+    const onPointerMove = (event: PointerEvent) => apply('move', event);
+    const onPointerUp = (event: PointerEvent) => {
+      apply('up', event);
+      release(event);
+    };
+    const onPointerCancel = (event: PointerEvent) => {
+      apply('cancel', event);
+      release(event);
+    };
 
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);

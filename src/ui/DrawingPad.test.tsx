@@ -166,21 +166,32 @@ describe('drawing', () => {
     await waitFor(() => expect(undo.hasAttribute('disabled')).toBe(false));
   });
 
-  it('ignores a second pointer that lands mid-stroke', async () => {
+  it('drops the in-progress stroke when a second finger lands, so the tap leaves no ink', async () => {
     const { store, canvas } = setup();
 
     act(() => {
       pointerDown(canvas, { x: 100, y: 100 }, { pointerId: 1 });
-      // A palm or a second finger. It must not open a second stroke.
+      // A second finger. The dot from the first finger is discarded rather than
+      // committed, and it must not open a second stroke either.
       pointerDown(canvas, { x: 400, y: 400 }, { pointerId: 2 });
       pointerUp(canvas, { x: 150, y: 150 }, { pointerId: 2 });
       pointerUp(canvas, { x: 150, y: 150 }, { pointerId: 1 });
     });
 
+    act(() =>
+      drawStroke(canvas, [
+        { x: 700, y: 600 },
+        { x: 740, y: 640 },
+      ]),
+    );
+
     await waitFor(async () => {
       const restored = await store.loadSession('test-session');
       expect(restored?.checkpoint.committedStrokeIds).toHaveLength(1);
     });
+    const restored = await store.loadSession('test-session');
+    const [stroke] = fromRestoredSession(restored!).strokes;
+    expect(stroke!.points[0]).toEqual({ x: 700, y: 600 });
   });
 
   it('ends a cancelled pointer cleanly, with no line joining it to the next stroke (AT-17)', async () => {
@@ -301,6 +312,75 @@ describe('drawing', () => {
         { pointerType: 'pen', pointerId: 8 },
       ),
     );
+    expect(screen.queryByText(/Mode pensil: gambar dengan stylus/)).toBeNull();
+  });
+});
+
+describe('finger gestures', () => {
+  function tapFingers(target: Element, count: number): void {
+    act(() => {
+      for (let index = 0; index < count; index += 1) {
+        pointerDown(target, { x: 160 + index * 48, y: 240 }, { pointerId: 40 + index, pointerType: 'touch' });
+      }
+      for (let index = 0; index < count; index += 1) {
+        pointerUp(target, { x: 164 + index * 48, y: 244 }, { pointerId: 40 + index, pointerType: 'touch' });
+      }
+    });
+  }
+
+  it('undoes with two fingers and redoes with three, and the buttons still work', async () => {
+    const { store, canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 120, y: 120 }, { x: 200, y: 180 }]));
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    tapFingers(canvas, 2);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
+    });
+    expect(screen.getByRole('button', { name: /Ulangi/ }).hasAttribute('disabled')).toBe(false);
+
+    tapFingers(canvas, 3);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    });
+
+    act(() => screen.getByRole('button', { name: /Batalkan/ }).click());
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Ulangi/ }).hasAttribute('disabled')).toBe(false);
+    });
+  });
+
+  it('lets a finger tap undo in pencil mode without ending the pen stroke', async () => {
+    const { store, canvas } = setup();
+    act(() => screen.getByRole('button', { name: /Mode pensil/ }).click());
+    act(() =>
+      drawStroke(
+        canvas,
+        [
+          { x: 80, y: 80 },
+          { x: 140, y: 120 },
+        ],
+        { pointerType: 'pen', pointerId: 3 },
+      ),
+    );
+    await waitFor(async () => {
+      expect((await store.loadSession('test-session'))?.strokes).toHaveLength(1);
+    });
+
+    act(() => {
+      pointerDown(canvas, { x: 300, y: 300 }, { pointerType: 'pen', pointerId: 4 });
+      pointerMove(canvas, { x: 340, y: 330 }, { pointerType: 'pen', pointerId: 4 });
+    });
+    tapFingers(canvas, 2);
+    act(() => pointerUp(canvas, { x: 360, y: 350 }, { pointerType: 'pen', pointerId: 4 }));
+
+    await waitFor(async () => {
+      const restored = await store.loadSession('test-session');
+      expect(restored?.checkpoint.committedStrokeIds).toHaveLength(1);
+      expect(fromRestoredSession(restored!).strokes[0]!.points[0]).toEqual({ x: 300, y: 300 });
+    });
     expect(screen.queryByText(/Mode pensil: gambar dengan stylus/)).toBeNull();
   });
 });
