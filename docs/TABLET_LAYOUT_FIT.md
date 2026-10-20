@@ -1,4 +1,10 @@
-# Drawing screen: tablet fit measurements
+# Drawing screen: tablet and phone fit
+
+Tablet landscape is still the primary layout. The phone section below is a
+separate pass for roughly 360–430px portrait and for phone landscape. The
+tablet numbers were measured again after that pass and did not move.
+
+## Tablet fit measurements
 
 Measured in headless Chrome (viewport emulation, touch, DPR 1) against the dev
 server, lesson "Kucing Duduk", worst case over steps 1, 8 and 9 (the last two
@@ -54,6 +60,76 @@ In portrait the controls row is content-sized (capped at 50vh), so Column equals
 the Drawing height; the canvas takes the rest. Every Drawing column is under the
 580px target. At 1024x768 and 1180x820, with or without simulated chrome, no
 internal scrolling is needed in either tab.
+
+Rechecked after the phone layout, still in headless Chrome at DPR 1, lesson
+"Kucing Duduk", step 1: 1024×768 canvas 668×501 with no side scroll, 768×1024
+canvas 744×558 with no side scroll, 1024×600 canvas 440×330 with no side
+scroll, and 1024×430 still scrolls 18px inside the controls column. Those match
+the rows above.
+
+## Phone fit
+
+Same method: headless Chrome, touch emulation, DPR 1, lesson "Kucing Duduk".
+This is browser emulation, not a phone. Safe-area insets were 0 in that
+browser, so a notch or the home indicator was not pictured. The CSS does pad
+the shell with `env(safe-area-inset-*)`.
+
+The tier is `data-layout` from `src/ui/layout-tier.ts`, not a CSS width query,
+so a short tablet such as 1024×430 stays on the table above.
+
+What the phone layout was doing before this pass:
+
+| Viewport | What was wrong |
+| --- | --- |
+| 375×667 portrait | The canvas collapsed to 1×1. The header was 150px and the step panel 216px, and the tool row was squeezed to about 11px wide. |
+| 360×800 portrait | Canvas 152×114. Width and undo chips were about 10px wide. The Bantuan tab ran off the right edge. |
+| 390×844 portrait | Canvas 238×179. The five-across 48px swatch column crushed the tools. |
+| 667×375 landscape | Canvas 83×62. The short-landscape rule locks the controls at 548px, which is wider than the phone. |
+| 844×390 landscape | Canvas 247×185, and the colour row sat below the fold. |
+
+The drawing screen does not scroll the page (`page scroll` 0). Pull-to-refresh
+is suppressed with `overscroll-behavior: none` on the document while the pad or
+the finish screen is open. Only the canvas sets `touch-action: none`. Colour
+swatches that do not fit scroll sideways inside their own row
+(`touch-action: pan-x`), and the Bantuan tab scrolls inside the dock. The
+1000×750 lesson space is still fitted with `fitViewport`, so a phone-sized
+stage stays 4:3 and a touch maps to the same lesson point as on a tablet.
+
+Phone portrait keeps the instruction and a 76px example above a canvas that
+uses the remaining width, then a dock capped so the canvas cannot be crushed.
+Phone landscape moves the example and the dock into a rail of at most 320px
+and gives the canvas the full height under the header. On that rail the step
+hint and the "Warna sekarang" sentence are visually hidden (they stay in the
+accessibility tree), the back control shows the arrow, and tool buttons are
+icons. The words Pen, Kuas, and Penghapus stay visible in portrait.
+
+Canvas size after the change. Side scroll is the controls dock, not the page.
+
+| Viewport | Tier | Canvas | Side scroll |
+| --- | --- | --- | --- |
+| 360×800 | phone portrait | 344×258 | 0 |
+| 375×667 | phone portrait | 250×187 | 0 |
+| 390×844 | phone portrait | 374×281 | 0 |
+| 430×932 | phone portrait | 414×311 | 0 |
+| 667×375 | phone landscape | 336×252 | 0 |
+| 800×360 | phone landscape | 384×288 | 0 |
+| 844×390 | phone landscape | 424×318 | 0 |
+
+Touch targets that are on screen stay at least 48px. Extra colours sit in the
+horizontal strip, so a 360px portrait shows about three swatches and the edge
+of the next one. The picture-choosing screen uses shorter cards so the next
+picture peeks in portrait and a full row fits in landscape; that screen scrolls
+inside the shell. The finish screen keeps the preview and stacks the actions
+so each one is still a 48px target.
+
+The offline-ready line and the update prompt were checked in the same headless
+Chrome pass, not on a handset. At 390×844 and 360×800 the line sits under the
+introduction, *Nanti saja* and *Muat versi baru* stack at 48px and the full
+width, and the first picture is still on screen. At 844×390, 800×360 and
+667×375 those two actions sit side by side, each 48px tall, with no horizontal
+overflow, and a picture row is on screen. *Hapus semua* stays its own 48px row
+in the phone tool group, and the canvas sizes in the table above did not move
+when the eraser was chosen.
 
 ## The eraser's "Hapus semua" and its question
 

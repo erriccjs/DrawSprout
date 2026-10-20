@@ -317,38 +317,38 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
 
   return (
     <div className="pad">
-      <header className="pad__header">
-        <button type="button" className="button" onClick={choosePicture}>
-          ← Pilih gambar
-        </button>
-        <div>
-          <h1 className="pad__title">{lesson.title}</h1>
-          <p className="pad__subtitle">{lesson.subtitle}</p>
-        </div>
-        <p className="pad__status" role="status">
-          {statusLabel(saveStatus, durable)}
-        </p>
-      </header>
+      <div className="pad__top">
+        <header className="pad__header">
+          <button type="button" className="button" onClick={choosePicture}>
+            ← Pilih gambar
+          </button>
+          <div>
+            <h1 className="pad__title">{lesson.title}</h1>
+            <p className="pad__subtitle">{lesson.subtitle}</p>
+          </div>
+          <p className="pad__status" role="status">
+            {statusLabel(saveStatus, durable)}
+          </p>
+        </header>
 
-      {notice !== null && <p className="banner">{notice}</p>}
-      {!durable && (
-        <p className="banner banner--warning">
-          Penyimpanan permanen tidak tersedia di browser ini, jadi karya ini hanya bertahan
-          selama tab terbuka.
-        </p>
-      )}
-      {saveStatus.kind === 'storage-full' && (
-        <p className="banner banner--warning">
-          Penyimpanan penuh. Karya yang sudah tersimpan tetap aman, tetapi goresan terbaru belum
-          tersimpan. Kosongkan ruang, lalu coba lagi.
-        </p>
-      )}
-      {saveStatus.kind === 'failed' && (
-        <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
-      )}
-      {rejection !== null && <p className="banner">{rejection}</p>}
-
-      <StepPanel lesson={lesson} state={state} step={step} />
+        {notice !== null && <p className="banner">{notice}</p>}
+        {!durable && (
+          <p className="banner banner--warning">
+            Penyimpanan permanen tidak tersedia di browser ini, jadi karya ini hanya bertahan
+            selama tab terbuka.
+          </p>
+        )}
+        {saveStatus.kind === 'storage-full' && (
+          <p className="banner banner--warning">
+            Penyimpanan penuh. Karya yang sudah tersimpan tetap aman, tetapi goresan terbaru belum
+            tersimpan. Kosongkan ruang, lalu coba lagi.
+          </p>
+        )}
+        {saveStatus.kind === 'failed' && (
+          <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
+        )}
+        {rejection !== null && <p className="banner">{rejection}</p>}
+      </div>
 
       <div className="pad__body">
         <div className="pad__stage" ref={setStage}>
@@ -378,55 +378,61 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           </div>
         </div>
 
-        <aside className="pad__side">
-          <StepNavigation
-            lesson={lesson}
-            state={state}
-            onFinish={() => dispatch({ type: 'finish' })}
-            dispatch={dispatch}
-          />
-          <div className="pad__tabs" role="group" aria-label="Kelompok kontrol">
-            <button
-              type="button"
-              className="chip"
-              aria-pressed={controlTab === 'drawing'}
-              onClick={() => setControlTab('drawing')}
-            >
-              Alat gambar
-            </button>
-            <button
-              type="button"
-              className="chip"
-              aria-pressed={controlTab === 'help'}
-              onClick={() => setControlTab('help')}
-            >
-              Bantuan
-            </button>
-          </div>
-          <div className="pad__control-panel" data-active={controlTab === 'drawing'}>
-            <Toolbar
+        {/* On a tablet the rail box disappears (`display: contents`) so the step
+            stays full width above the canvas. On a phone in landscape it becomes
+            the side column, which keeps the canvas as tall as the screen. */}
+        <div className="pad__rail">
+          <StepPanel lesson={lesson} state={state} step={step} />
+          <aside className="pad__side">
+            <StepNavigation
               lesson={lesson}
               state={state}
-              preset={preset}
-              canUndo={canUndo(lesson, state)}
-              canRedo={canRedo(state)}
+              onFinish={() => dispatch({ type: 'finish' })}
               dispatch={dispatch}
             />
-          </div>
-          <div className="pad__control-panel" data-active={controlTab === 'help'}>
-            <ToolbarSettings
-              state={state}
-              isColorStep={isColorStep}
-              dispatch={dispatch}
-            />
-            <StepControls
-              state={state}
-              guidesVisible={guidesVisible}
-              onShowHint={showHint}
-              dispatch={dispatch}
-            />
-          </div>
-        </aside>
+            <div className="pad__tabs" role="group" aria-label="Kelompok kontrol">
+              <button
+                type="button"
+                className="chip"
+                aria-pressed={controlTab === 'drawing'}
+                onClick={() => setControlTab('drawing')}
+              >
+                Alat gambar
+              </button>
+              <button
+                type="button"
+                className="chip"
+                aria-pressed={controlTab === 'help'}
+                onClick={() => setControlTab('help')}
+              >
+                Bantuan
+              </button>
+            </div>
+            <div className="pad__control-panel" data-active={controlTab === 'drawing'}>
+              <Toolbar
+                lesson={lesson}
+                state={state}
+                preset={preset}
+                canUndo={canUndo(lesson, state)}
+                canRedo={canRedo(state)}
+                dispatch={dispatch}
+              />
+            </div>
+            <div className="pad__control-panel" data-active={controlTab === 'help'}>
+              <ToolbarSettings
+                state={state}
+                isColorStep={isColorStep}
+                dispatch={dispatch}
+              />
+              <StepControls
+                state={state}
+                guidesVisible={guidesVisible}
+                onShowHint={showHint}
+                dispatch={dispatch}
+              />
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
   );
