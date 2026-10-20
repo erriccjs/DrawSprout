@@ -37,10 +37,16 @@ export interface PrecacheManifest {
 
 export const PRECACHE_CACHE_PREFIX = 'drawsprout-precache-';
 
-/** The service worker script is fetched by the browser's own update check. */
+/**
+ * The service worker script is fetched by the browser's own update check.
+ * `_headers` and `_redirects` are Workers asset config. They are copied into
+ * `dist/` but are not served, so caching them would fetch the SPA fallback.
+ */
 export function shouldPrecache(relativePath: string): boolean {
   if (relativePath === 'sw.js' || relativePath.endsWith('/sw.js')) return false;
   if (relativePath.endsWith('.map')) return false;
+  const base = relativePath.split('/').pop() ?? relativePath;
+  if (base === '_headers' || base === '_redirects') return false;
   if (relativePath.split('/').some((part) => part.startsWith('.'))) return false;
   return true;
 }

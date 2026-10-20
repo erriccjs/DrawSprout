@@ -22,6 +22,7 @@ describe('precache manifest from a build directory', () => {
     await writeFile(path.join(directory, 'icon.svg'), '<svg></svg>');
     await writeFile(path.join(directory, 'manifest.webmanifest'), '{}');
     await writeFile(path.join(directory, 'sw.js'), '/* previous worker */');
+    await writeFile(path.join(directory, '_headers'), '/sw.js\n  Cache-Control: no-cache\n');
   }
 
   it('includes the shell and every bundled lesson, and leaves the worker out', async () => {

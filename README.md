@@ -104,6 +104,44 @@ npm run preview
 The build output lands in `dist/` and is a static site; any static host will
 serve it.
 
+## Deploy
+
+Production is the Cloudflare Worker `drawsprout`, on the custom domain
+`drawsprout.erriccjs.cloud`. [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/)
+runs two commands from the repository root, on `main`:
+
+```bash
+npm run build
+npx wrangler deploy
+```
+
+`wrangler.jsonc` is the deploy. It uploads `./dist` as static assets and, for a
+path that is not a file, serves `index.html`. There is no Worker script.
+`npx wrangler deploy` uses the Wrangler 4 version locked in `package-lock.json`.
+A project with no Wrangler config is
+[auto-configured](https://developers.cloudflare.com/workers/framework-guides/automatic-configuration/)
+on deploy, which rewrites `vite.config.ts` and installs the Cloudflare Vite
+plugin. That plugin packages assets during the Vite build, before
+`drawsproutOffline()` writes `dist/sw.js`, so the uploaded site was missing the
+service worker and `/sw.js` was the `index.html` fallback. The committed config
+is what stops that.
+
+A request that matches a real file is that file. `/sw.js` is JavaScript because
+Wrangler sets `Content-Type` from the `.js` extension; the single-page fallback
+does not replace it. `public/_headers` is copied into the build and sends
+`Cache-Control: no-cache` for `/sw.js` and `/manifest.webmanifest`, the two
+stable URLs that must not be pinned. Hashed files under `/assets/` keep the
+platform default.
+
+The custom domain stays on the Worker in the dashboard. This file does not
+declare `routes`, so a deploy does not replace it. Check a build without
+publishing:
+
+```bash
+npm run build
+npx wrangler deploy --dry-run
+```
+
 ## Test
 
 ```bash

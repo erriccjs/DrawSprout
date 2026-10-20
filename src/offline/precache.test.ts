@@ -36,6 +36,8 @@ describe('precache manifest', () => {
     expect(shouldPrecache('sw.js')).toBe(false);
     expect(shouldPrecache('assets/index-abc.js.map')).toBe(false);
     expect(shouldPrecache('.vite/manifest.json')).toBe(false);
+    expect(shouldPrecache('_headers')).toBe(false);
+    expect(shouldPrecache('_redirects')).toBe(false);
   });
 
   it('names the cache from the manifest revision and only retires older precaches', () => {
