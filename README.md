@@ -207,15 +207,16 @@ Worker vars, not secrets: `IMAGE_PROVIDER` (`openai` by default, or
 send `quality=medium` on OpenAI. *Lebih sederhana* stays on `gpt-image-1.5` at
 `quality=low` and ignores `OPENAI_IMAGE_MODEL` (D-67). Set
 `OPENAI_IMAGE_MODEL=gpt-image-1-mini` only for a default or faithful job.
-A photo makes two images: a kid-book cartoon in black line, then a flat
-colouring of that drawing at `quality=low` (D-74, D-75, D-76, D-77). The
-cartoon keeps the photo's pose, key features, and framing in both directions.
-A vision plan orders the parts from one big shape down to the small details.
-Step 1 is that shape (a circle, an oval, or a dome). Each later step adds one
-part, using the cartoon's own strokes, and the reference draws those new lines
+A photo makes two images: a faithful simplified line drawing, then a flat
+colouring of that drawing at `quality=low` (D-74, D-75, D-76, D-77, D-78).
+The line drawing keeps this photo's pose and framing, both ways, and it does
+not add a subject that is not in the photo. A vision plan of this photo only
+orders the parts from one big shape down to the small details. Step 1 is the
+fitted primitive (a circle, an oval, or a dome). The real outline is the next
+step. Each later step adds one part, and the reference draws those new lines
 in red. A faint guide, such as a centre cross, is optional and is left out of
 the finished ink. Colour is last: one flat colour per region, named by the
-part that contains it. A white area is not a colour step. Drawing steps stay
+part that overlaps it. A white area is not a colour step. Drawing steps stay
 within about eleven. OpenAI stays the default image model. The earlier
 part-by-part builder is still covered by the regression tests (D-76).
 
@@ -225,10 +226,10 @@ On a machine with the key, Node.js 20.16 or newer (`CompressionStream`; this
 repo's tests still need 22.12+), after `npm install`:
 
 ```bash
-OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --out photo-eval-out-v11
+OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --out photo-eval-out-v12
 REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --provider replicate --model black-forest-labs/flux-kontext-pro
 OPENAI_API_KEY=... REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --compare
-OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --steps both --out photo-eval-out-v11-steps
+OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --steps both --out photo-eval-out-v12-steps
 ```
 
 `<photo-directory>` is a folder of JPEG or PNG photos. The command writes
@@ -255,13 +256,14 @@ after the first pair. The harness writes `illustrations/<photo>-line.png` and
 one contact sheet and stops if either provider fails. `flux-1.1-pro` is
 unsuitable (it returns near-photos) and is not part of compare. Kontext uses
 its own short prompt and retries HTTP 429. The idempotency key for this
-revision ends in `v11`, so a rerun after the construction-plan change is a
-new paid job. Compare it with a v10 sheet by writing v11 to its own `--out`
-directory; `--steps strokes` (the default) assigns the cartoon's strokes,
+revision ends in `v12`, so a rerun after the faithful-line change is a
+new paid job. Compare it with a v11 sheet by writing v12 to its own `--out`
+directory; `--steps strokes` (the default) assigns the line drawing's strokes,
 `--steps reverse` erases one part at a time, and `--steps both` puts both on
 the sheet. Reverse adds at most five low-quality edits and stays optional, so
 the default run stays near the previous cost. Each row in `metrics.json`
-includes `reviewReasons`.
+includes `reviewReasons`, and a reverse run also includes `reverseCalls` and
+`reverseUsd`. `costUsd` is the whole job.
 `REPLICATE_API_TOKEN` is read only when `REPLICATE_API_KEY` is unset.
 
 CC0 samples, with credits, are in `scripts/photo-eval/samples/` (`LICENSES.md`).

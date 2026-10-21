@@ -4,9 +4,10 @@
  * A circle or oval is added first only when it fits that outline. When the
  * vision model names nothing usable, the lesson falls back to one named
  * outline and drops unnamed scraps instead of printing a generic sentence.
- * `buildTutorialLesson` is the how-to-draw path: one simple mass, then one
- * part at a time (D-77). `buildPhotoLesson` stays for the earlier pins.
- * See D-70, D-71, D-72, D-73, D-76, and D-77.
+ * `buildTutorialLesson` orders the steps like a how-to-draw page: one
+ * primitive, then one part at a time (D-77, D-78). The line art itself stays
+ * a faithful drawing of the photo. `buildPhotoLesson` stays for the earlier pins.
+ * See D-70, D-71, D-72, D-73, D-76, D-77, and D-78.
  */
 
 import { assertValidLessons } from '../lesson-data/validate';
@@ -445,7 +446,7 @@ function orderParts(parts: readonly DetectedPart[]): DetectedPart[] {
 function groupParts(parts: readonly DetectedPart[]): TutorialGroup[] {
   const groups: TutorialGroup[] = [];
   for (const part of parts) {
-    const name = plainNoun(bareName(part.name)) || part.name;
+    const name = stepNoun(part.name) || part.name;
     const existing = groups.find((group) => group.name === name && group.guide === (part.guide === true));
     if (existing) {
       existing.parts.push(part);
@@ -514,6 +515,80 @@ function groupKey(group: TutorialGroup): string {
   return `${group.guide ? 'g' : 'p'}:${group.name}`;
 }
 
+const SIDE_WORDS = new Set(['kiri', 'kanan', 'depan', 'belakang', 'atas', 'bawah']);
+
+function stepNoun(name: string): string {
+  const plain = plainNoun(bareName(name));
+  const words = plain.split(' ').filter((word) => word.length > 0 && !SIDE_WORDS.has(word));
+  return words.join(' ') || plain;
+}
+
+function massPrimitive(
+  group: TutorialGroup,
+  contour: MappedContour | undefined,
+): { d: string; word: string } | null {
+  const part = [...group.parts].sort((left, right) => areaOf(right) - areaOf(left))[0];
+  if (part) {
+    const shape = massShape(group, part, contour);
+    const drawn = renderGuide({ ...part, shape }, 'mass')[0];
+    if (!drawn) return null;
+    const word = shape === 'dome' ? 'kubah' : shape === 'oval' ? 'oval' : 'lingkaran';
+    return { d: drawn.d, word };
+  }
+  if (!contour) return null;
+  const fit = constructionOf(contour.points);
+  if (!fit) return null;
+  return { d: fit.d, word: fit.kind === 'circle' ? 'lingkaran' : 'oval' };
+}
+
+function massShape(
+  group: TutorialGroup,
+  part: DetectedPart,
+  contour: MappedContour | undefined,
+): 'circle' | 'oval' | 'dome' {
+  if (group.shape === 'circle' || group.shape === 'oval' || group.shape === 'dome') return group.shape;
+  if (contour) {
+    const fit = constructionOf(contour.points);
+    if (fit?.kind === 'circle') return 'circle';
+    if (fit?.kind === 'ellipse') return 'oval';
+  }
+  const ratio = part.width / Math.max(1, part.height);
+  return ratio > 1.35 || ratio < 1 / 1.35 ? 'oval' : 'circle';
+}
+
+function boxPrimitive(part: DetectedPart, id: string): GuidePath | null {
+  if (part.shape === 'line') {
+    const cy = part.y + part.height / 2;
+    return {
+      id,
+      d: `M ${n(part.x)} ${n(cy)} L ${n(part.x + part.width)} ${n(cy)}`,
+      role: 'final-outline',
+    };
+  }
+  const shape = part.shape === 'circle' || part.shape === 'oval' || part.shape === 'dome' || part.shape === 'triangle'
+    ? part.shape
+    : part.width / Math.max(1, part.height) > 1.35 || part.height / Math.max(1, part.width) > 1.35
+      ? 'oval'
+      : 'circle';
+  const drawn = renderGuide({ ...part, shape }, id)[0];
+  if (!drawn) return null;
+  return { ...drawn, id, role: 'final-outline' };
+}
+
+const ANIMAL_WORD = /\b(kucing|anjing|burung|ikan|lebah|sapi|panda|kelinci|kuda|katak|hamster|tikus|hewan)\b/;
+const ANIMAL_DETAIL = /^(telinga|mata|hidung|lidah|kaki|ekor|kumis|sayap|paruh|cakar)$/;
+
+function animalDetailGap(title: string, groups: readonly TutorialGroup[], steps: readonly LessonStep[]): string | null {
+  const blob = `${title} ${groups.map((group) => group.name).join(' ')}`.toLowerCase();
+  if (!ANIMAL_WORD.test(blob)) return null;
+  const planned = groups.filter((group) => !group.guide && ANIMAL_DETAIL.test(group.name));
+  if (planned.length < 4) return null;
+  const text = steps.filter((step) => step.phase !== 'color').map((step) => normalizeInstruction(step.instruction)).join(' ');
+  const present = planned.filter((group) => text.includes(group.name)).length;
+  if (present < planned.length) return 'Detail hewan terlalu sedikit. Cek dulu sebelum dipakai.';
+  return null;
+}
+
 function smallestGroup(contour: MappedContour, groups: readonly TutorialGroup[], subject: Box): TutorialGroup | null {
   let best: TutorialGroup | null = null;
   let bestArea = Number.POSITIVE_INFINITY;
@@ -550,9 +625,36 @@ function assembleTutorial(
   const notes: string[] = [];
   let invisible = false;
   let dropped = 0;
+  const pushContours = (group: TutorialGroup, contours: readonly MappedContour[], outline: boolean) => {
+    if (contours.length === 0) return;
+    const id = `draw-${steps.length + 1}`;
+    const guides = guidesFor(id, contours);
+    stampContours(mask, contours);
+    preview.push(...guides);
+    if (names[names.length - 1] !== group.name) names.push(group.name);
+    const text = outline ? `Gambar garis luar ${group.name}.` : tutorialInstruction(group, false, contours, null);
+    steps.push(lineStep(id, steps.length === 0 ? 'outline' : 'detail', text, guides));
+  };
+  const pushSynthetic = (group: TutorialGroup): boolean => {
+    const paths = group.parts
+      .map((part, partIndex) => boxPrimitive(part, `box-${partIndex}`))
+      .filter((path): path is GuidePath => path !== null);
+    if (paths.length === 0) return false;
+    const id = `draw-${steps.length + 1}`;
+    const guides = paths.map((path, pathIndex) => ({ ...path, id: `${id}-${pathIndex + 1}` }));
+    preview.push(...guides);
+    if (names[names.length - 1] !== group.name) names.push(group.name);
+    const pair = guides.length === 2 && (group.pair || group.count === 2 || group.parts.length === 2) && !/\bdua\b/.test(group.name);
+    steps.push(lineStep(
+      id,
+      steps.length === 0 ? 'outline' : 'detail',
+      pair ? `Tambahkan dua ${group.name}.` : `Gambar ${group.name}.`,
+      guides,
+    ));
+    return true;
+  };
   groups.forEach((group, index) => {
     if (leading.includes(group)) return;
-    const guides: GuidePath[] = [];
     const isMass = index === massAt;
     let contours = group.contours;
     if (isMass && contours.length > 1 && group.parts.length > 0) {
@@ -560,37 +662,45 @@ function assembleTutorial(
       dropped += contours.length - 1;
       contours = [primary];
     }
-    if (!group.guide && contours.length > 0) {
-      const own = ownInk(contours);
-      const fresh = steps.length === 0 ? own : freshInk(mask, contours);
-      const mostlyThere = own > 0 && fresh / own < 0.3;
-      if (fresh < MIN_NEW_INK || (steps.length > 0 && mostlyThere)) {
-        if (own >= MIN_NEW_INK && fresh < MIN_NEW_INK) invisible = true;
+    if (isMass) {
+      const primitive = massPrimitive(group, contours[0]);
+      if (primitive) {
+        const id = `draw-${steps.length + 1}`;
+        const guides: GuidePath[] = [{ id: `${id}-1`, d: primitive.d, role: 'final-outline' }];
+        leading.forEach((guide, guideIndex) => {
+          guides.push(...guidePaths(guide, `${id}-g${guideIndex + 1}`));
+        });
+        const drawn = guides[0];
+        if (drawn) preview.push(drawn);
+        if (names[names.length - 1] !== group.name) names.push(group.name);
+        steps.push(lineStep(id, 'outline', `Gambar ${primitive.word} besar untuk ${group.name}.`, guides));
+        if (contours.length > 0) pushContours(group, contours, true);
         return;
       }
     }
-    const id = `draw-${steps.length + 1}`;
-    if (group.guide || (isMass && leading.length > 0)) {
-      const extras = group.guide ? [group] : leading;
-      extras.forEach((guide, guideIndex) => {
-        guides.push(...guidePaths(guide, `${id}-g${guideIndex + 1}`));
-      });
+    if (group.guide) {
+      const id = `draw-${steps.length + 1}`;
+      const guides = guidePaths(group, `${id}-g1`);
+      if (guides.length === 0) return;
+      steps.push(lineStep(id, 'detail', tutorialInstruction(group, false, contours, null), guides));
+      return;
     }
-    if (!group.guide && contours.length > 0) {
-      guides.push(...guidesFor(id, contours).map((path) => ({ ...path, role: 'final-outline' as const })));
-      stampContours(mask, contours);
-      preview.push(...guides.filter((path) => path.role === 'final-outline'));
-      names.push(group.name);
+    if (contours.length > 0) {
+      const own = ownInk(contours);
+      const fresh = steps.length === 0 ? own : freshInk(mask, contours);
+      const mostlyThere = own > 0 && fresh / own < 0.3;
+      if (fresh >= MIN_NEW_INK && !(steps.length > 0 && mostlyThere)) {
+        pushContours(group, contours, false);
+        return;
+      }
+      if (pushSynthetic(group)) return;
+      if (own >= MIN_NEW_INK && fresh < MIN_NEW_INK) invisible = true;
+      return;
     }
-    if (guides.length === 0) return;
-    const fit = isMass && contours[0] ? constructionOf(contours[0].points) : null;
-    steps.push(lineStep(
-      id,
-      steps.length === 0 ? 'outline' : 'detail',
-      tutorialInstruction(group, isMass, contours, fit?.kind ?? null),
-      guides,
-    ));
+    pushSynthetic(group);
   });
+  const animalGap = animalDetailGap(input.title, groups, steps);
+  if (animalGap) notes.push(animalGap);
   const regions: ColorRegion[] = [];
   const spoken = headNoun(input.title) || groups.find((group) => !group.guide)?.name || '';
   const subject = unionBox(mapped.map((contour) => boxOf(contour.points)));
@@ -742,7 +852,7 @@ function appendFlatColours(
     const mapped = mapContour({ points: region.points, closed: true }, input.sourceWidth, input.sourceHeight);
     if (mapped.points.length < 3) continue;
     const area = boxOf(mapped.points).area;
-    if (area < 400) continue;
+    if (area < 80) continue;
     if (fillSamples(mapped.points) < 4) {
       empty = true;
       continue;
@@ -814,9 +924,14 @@ function keepColourRegions(regions: readonly FlatRegion[]): FlatRegion[] {
   const largest = sorted[0]?.pixels ?? 0;
   const kept: FlatRegion[] = [];
   for (const region of sorted) {
-    if (largest > 0 && region.pixels < largest * 0.02 && region.pixels < 500) continue;
     const covered = kept.some((other) => coffeePair(region.name, other.name) && polygonShare(region.points, other.points) >= 0.6);
     if (covered) continue;
+    const largeEnough = largest === 0 || region.pixels >= largest * 0.02 || region.pixels >= 500;
+    if (!largeEnough && region.pixels < 40) continue;
+    if (!largeEnough) {
+      const swallowed = kept.some((other) => other.name === region.name && polygonShare(region.points, other.points) >= 0.6);
+      if (swallowed) continue;
+    }
     kept.push(region);
   }
   return kept;
@@ -855,12 +970,18 @@ function collapseDoublePaint(regions: Array<{ label: string; colour: string; hex
   return kept;
 }
 
-/** Smallest part that actually contains the region. A wide whisker box does not name the face. */
+/**
+ * Smallest part that actually contains the region. A wide whisker box does not
+ * name the face. A small region, such as a tongue, uses the tightest box that
+ * overlaps it, so a large neck box does not win just by containing it.
+ */
 function nameRegion(points: readonly Point[], parts: readonly DetectedPart[], spoken: string): string {
+  const small = boxOf(points).area < 22000;
+  const bar = small ? 0.28 : ENCLOSE;
   let best: DetectedPart | null = null;
   let bestArea = Number.POSITIVE_INFINITY;
   for (const part of parts) {
-    if (regionShare(points, part) < ENCLOSE) continue;
+    if (regionShare(points, part) < bar) continue;
     const area = areaOf(part);
     if (area < bestArea) {
       best = part;

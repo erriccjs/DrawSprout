@@ -227,6 +227,119 @@ describe('how-to-draw construction', () => {
     expect(countTone(added!, (red, _green, _blue, x) => red < 20 && x < 14)).toBe(0);
     expect(subtractInk(earlier, { ...later, width: 10 })).toBeNull();
   });
+
+  it('draws the fitted primitive first and the real outline after it', () => {
+    const built = buildTutorialLesson({
+      id: 'tutorial-primitive',
+      title: 'Kucing',
+      targetHash: 'abcdef1234567890',
+      contours: [circle(400, 280, 180)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      parts: [planned('kepala', 1, 'circle', cover(220, 100, 360, 360))],
+    });
+    const drawing = built.lesson.steps.filter((step) => step.phase !== 'color');
+    expect(drawing[0]?.instruction).toMatch(/lingkaran besar untuk kepala/);
+    expect(drawing[0]?.guidePaths[0]?.d).toMatch(/\bA\b/);
+    expect(drawing[1]?.instruction).toBe('Gambar garis luar kepala.');
+    expect(drawing[0]?.guidePaths[0]?.d).not.toBe(drawing[1]?.guidePaths[0]?.d);
+  });
+
+  it('gives each planned animal detail its own step', () => {
+    const built = buildTutorialLesson({
+      id: 'tutorial-dog-details',
+      title: 'Anjing',
+      targetHash: 'abcdef1234567890',
+      contours: [square(120, 80, 700)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      parts: [
+        planned('badan', 1, 'oval', cover(120, 80, 700, 560)),
+        planned('telinga', 2, 'oval', cover(180, 90, 80, 70)),
+        planned('mata', 3, 'circle', cover(300, 180, 40, 40)),
+        planned('hidung', 4, 'circle', cover(360, 240, 36, 30)),
+        planned('lidah', 5, '', cover(350, 280, 40, 36)),
+        planned('kaki', 6, 'line', cover(200, 480, 80, 120)),
+      ],
+    });
+    const text = built.lesson.steps.filter((step) => step.phase !== 'color').map((step) => step.instruction).join(' ');
+    for (const name of ['telinga', 'mata', 'hidung', 'lidah', 'kaki']) {
+      expect(text).toContain(name);
+    }
+    expect(built.reviewReason ?? '').not.toContain('Detail hewan terlalu sedikit');
+  });
+
+  it('highlights every wheel in the one wheel step', () => {
+    const built = buildTutorialLesson({
+      id: 'tutorial-wheels',
+      title: 'Mobil mainan',
+      targetHash: 'abcdef1234567890',
+      contours: [square(80, 160, 640), square(90, 520, 90), square(620, 500, 100)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      parts: [
+        planned('mobil', 1, 'oval', cover(80, 160, 640, 520)),
+        planned('roda kiri', 2, 'circle', cover(90, 520, 90, 90), { pair: true, count: 2 }),
+        planned('roda kanan', 2, 'circle', cover(620, 500, 100, 100), { pair: true, count: 2 }),
+      ],
+    });
+    const wheelAt = built.lesson.steps.findIndex((step) => step.instruction.includes('roda'));
+    const wheel = built.lesson.steps[wheelAt];
+    expect(wheel?.guidePaths.filter((path) => path.role === 'final-outline')).toHaveLength(2);
+    const highlighted = renderCumulativeStep(built.lesson, wheelAt + 1, 180, { r: 255, g: 255, b: 255 }, true);
+    const isRed = (r: number, g: number, b: number) => r > 180 && g < 100 && b < 100;
+    expect(countTone(highlighted, (r, g, b, x) => isRed(r, g, b) && x < highlighted.width * 0.45)).toBeGreaterThan(2);
+    expect(countTone(highlighted, (r, g, b, x) => isRed(r, g, b) && x > highlighted.width * 0.55)).toBeGreaterThan(2);
+    expect(built.needsReview).toBe(false);
+  });
+
+  it('keeps a small pink ear and names a small tongue by the tighter box', () => {
+    const built = buildTutorialLesson({
+      id: 'tutorial-small-colour',
+      title: 'Kucing',
+      targetHash: 'abcdef1234567890',
+      contours: [circle(400, 280, 180)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      flatRegions: [
+        { name: 'abu-abu', hex: '#888888', points: square(200, 160, 400).points, pixels: 8000, cx: 400, cy: 360 },
+        { name: 'merah muda', hex: '#f4a4b0', points: square(230, 120, 36).points, pixels: 120, cx: 248, cy: 138 },
+        { name: 'merah', hex: '#c62828', points: square(360, 340, 28).points, pixels: 140, cx: 374, cy: 354 },
+      ],
+      parts: [
+        planned('kepala', 1, 'circle', cover(200, 80, 400, 400)),
+        planned('telinga', 2, 'oval', cover(210, 100, 80, 80)),
+        planned('lidah', 3, '', cover(350, 320, 50, 50)),
+        planned('leher', 4, '', cover(280, 280, 220, 180)),
+      ],
+    });
+    const colours = built.lesson.steps.filter((step) => step.phase === 'color').map((step) => step.instruction);
+    expect(colours.some((text) => text.includes('telinga') && text.includes('merah muda'))).toBe(true);
+    expect(colours.some((text) => text.includes('lidah') && text.includes('merah'))).toBe(true);
+    expect(colours.join(' ')).not.toMatch(/leher/);
+  });
+
+  it('does not treat a shifted copy of the same lines as new ink', () => {
+    const earlier = painted(32, 24, (x, y) => (x >= 4 && x < 16 && y >= 4 && y < 16 ? [0, 0, 0] : [255, 255, 255]));
+    const later = painted(32, 24, (x, y) => {
+      const body = x >= 7 && x < 19 && y >= 6 && y < 18;
+      const mark = x >= 24 && x < 30 && y >= 4 && y < 10;
+      return body || mark ? [0, 0, 0] : [255, 255, 255];
+    });
+    const added = subtractInk(earlier, later);
+    expect(added).not.toBeNull();
+    const dark = countTone(added!, (red) => red < 20);
+    expect(dark).toBeGreaterThan(8);
+    expect(dark).toBeLessThan(80);
+  });
 });
 
 function planned(

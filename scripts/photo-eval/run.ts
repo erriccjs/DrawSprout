@@ -11,8 +11,9 @@
  *
  * `--steps` defaults to `strokes` (call A's ink, two image calls). `reverse`
  * erases one part at a time at low quality. `both` keeps the stroke lesson and
- * adds the reverse images on the sheet. A v10 run and a v11 run are different
- * paid jobs; write v11 to its own `--out` directory.
+ * adds the reverse images on the sheet. A v11 run and a v12 run are different
+ * paid jobs; write v12 to its own `--out` directory. `reverseUsd` is only the
+ * erase edits. `costUsd` is the whole job.
  *
  * `--compare` runs OpenAI and flux-kontext-pro. flux-1.1-pro is unsuitable.
  *
@@ -49,7 +50,7 @@ import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../
 import { composeContactSheet } from '../../src/photo/sheet';
 
 /** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
-const EVAL_KEY_REVISION = 'v11';
+const EVAL_KEY_REVISION = 'v12';
 
 interface Args {
   readonly score?: string;
@@ -178,7 +179,17 @@ async function main(): Promise<void> {
         text: result.textUsage,
         imageCalls: result.imageCalls,
       });
+      const reversePriced = result.reverseCalls > 0
+        ? listCostUsd({
+          imageModel: result.model,
+          image: result.reverseUsage,
+          textModel,
+          text: null,
+          imageCalls: result.reverseCalls,
+        })
+        : null;
       const costUsd = flatUsd ?? priced.usd;
+      const reverseUsd = reversePriced?.imageUsd ?? null;
       const photoB64 = base64(photo.png);
       const illustrationB64 = base64(result.illustrationPng);
       const stem = `${slug(name)}${jobs.length > 1 ? `-${slug(job.label)}` : ''}`;
@@ -211,6 +222,7 @@ async function main(): Promise<void> {
         imageUsage: result.imageUsage,
         textUsage: result.textUsage,
         costUsd,
+        reverseUsd,
         needsReview: result.needsReview,
         reviewReasons: result.reviewReasons,
         regenerated: result.regenerated,
@@ -234,6 +246,8 @@ async function main(): Promise<void> {
         listCostUsd: priced.usd,
         imageUsd: priced.imageUsd,
         textUsd: priced.textUsd,
+        reverseCalls: result.reverseCalls,
+        reverseUsd,
         needsReview: result.needsReview,
         reviewReasons: result.reviewReasons,
         regenerated: result.regenerated,
@@ -241,7 +255,7 @@ async function main(): Promise<void> {
         stepMode,
         reverseSteps: result.reverseLesson?.steps.length ?? result.reverseStages.length,
       });
-      console.log(`${label}: ${ms} ms, ${result.model} ${result.quality}, image ${tokens(result.imageUsage)}, text ${tokens(result.textUsage)}, usd ${costUsd ?? 'unknown'}, steps ${result.lesson.steps.length}, ${stepMode}${result.regenerated ? ', regenerated' : ''}`);
+      console.log(`${label}: ${ms} ms, ${result.model} ${result.quality}, image ${tokens(result.imageUsage)}, text ${tokens(result.textUsage)}, usd ${costUsd ?? 'unknown'}${reverseUsd !== null ? `, reverse usd ${reverseUsd}` : ''}, steps ${result.lesson.steps.length}, ${stepMode}${result.regenerated ? ', regenerated' : ''}`);
     } catch (error) {
       failures += 1;
       const message = error instanceof Error ? error.message.slice(0, 300) : 'failed';
@@ -443,6 +457,8 @@ interface PhotoMetric {
   readonly targetHash?: string;
   readonly stepMode?: string;
   readonly reverseSteps?: number;
+  readonly reverseCalls?: number;
+  readonly reverseUsd?: number | null;
   readonly error?: string;
 }
 
@@ -459,6 +475,7 @@ function htmlRow(input: {
   readonly imageUsage: TokenUsage | null;
   readonly textUsage: TokenUsage | null;
   readonly costUsd: number | null;
+  readonly reverseUsd?: number | null;
   readonly needsReview: boolean;
   readonly reviewReasons: readonly string[];
   readonly regenerated: boolean;
@@ -473,6 +490,7 @@ function htmlRow(input: {
   return `<section><h2>${escapeHtml(input.name)}</h2>`
     + `<p>${input.ms} ms, ${escapeHtml(input.model)} ${escapeHtml(input.quality)}, `
     + `image ${escapeHtml(tokens(input.imageUsage))}, text ${escapeHtml(tokens(input.textUsage))}, usd ${cost}`
+    + (input.reverseUsd != null ? `, reverse usd ${input.reverseUsd.toFixed(4)}` : '')
     + `${input.needsReview ? ', review' : ''}${input.regenerated ? ', regenerated' : ''}`
     + (input.stepMode ? `, ${escapeHtml(input.stepMode)}` : '')
     + (input.reviewReasons.length > 0 ? ` — ${escapeHtml(input.reviewReasons.join(' '))}` : '')

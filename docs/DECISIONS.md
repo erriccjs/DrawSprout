@@ -1299,4 +1299,20 @@ v8, v9, and v10 each fixed one failure and broke another. They traced a detailed
 
 **Reference.** The example panel shows lines up to the current step. Lines already drawn are dark. The current step's new lines are red. A guide is a dashed red line and is gone on the next step.
 
-The eval idempotency key ends in `v11`. The gate is still not claimed.
+The eval idempotency key ended in `v11`. D-78 bumps it to `v12`. The gate is still not claimed.
+
+### D-78 — Faithful line art, this photo's parts only
+
+The v11 run (commit d22a359, OpenAI, `--steps both`, five samples) was a no-go. The how-to-draw step order was starting to show, and the new lines were red, but call A invented subjects: the cup grew a cat, and the flower became a cat in a toy car. The shared prompt listed every sample's parts and asked for a chibi cartoon, so the model drew them. Step 1 said "oval" or "dome" and drew the full silhouette. A lying close-up became a sitting full body. The dog stopped at the silhouette, the neck, and the tail. The pink inside of the ears and part of the red collar were dropped, and the tongue was named leher. Reverse erase stages shifted, so the red lines doubled. The cat passed review with the wrong pose. One wheel of a pair was highlighted. The job cost $1.06 with reverse. This is not a pass. `claimedPass` stays false.
+
+**Call A.** The line drawing is a simplified, faithful illustration of this exact subject: clean, thick, closed outlines, little texture, and no shading. It is not a cartoon and it does not use chibi proportions. The pose and the framing are binding, including a subject that is lying stays lying and a close-up stays a close-up. The shared prompt names no other sample's parts. A photo-only vision call lists the parts of this photo, and only those names are added to the prompt.
+
+**Gate.** After call A, the vision model names the objects in the drawing and in the photo and checks the pose and the crop. A wrong or extra subject, or a different pose or framing, is drawn once more. If it is still wrong, `needsReview` is set and the lesson is not drawn again.
+
+**Steps.** The step order is still a how-to-draw page, and that order is not a drawing style. Step 1 is the circle, oval, or dome fitted to the planned mass. The real outline is the next step. Each planned part is its own step, including when the trace has no separate contour. An animal plan that lists four or more of those details must show each of them. Repeated parts, such as both wheels, share one step and every instance is highlighted. Colour stays last.
+
+**Colour.** A small region with its own colour is kept, down to a few dozen pixels, including a separate patch of a colour that is already used. A small region is named by the tightest planned part that overlaps it.
+
+**Reverse.** Each erase stage is aligned to the previous one before the new ink is taken, so a small shift does not paint the whole drawing red. `reverseCalls` and `reverseUsd` are recorded on their own. `costUsd` stays the whole job. Reverse remains opt-in. The default, including the app, is still stroke assignment and two image calls.
+
+The eval idempotency key ends in `v12`. The gate is still not claimed.

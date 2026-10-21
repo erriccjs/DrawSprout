@@ -13,6 +13,7 @@ import { buildNamedLesson, buildTutorialLesson, lessonPieces, outlineCoverage, s
 import { sumUsage, type ImageEditor, type InstructionResult, type InstructionWriter, type TokenUsage } from './openai';
 import { decodePng, encodePng, type RgbaImage } from './png';
 import type { ImageProvider } from './provider';
+import { cleanPartName } from './parts';
 import { erasePrompt, imageModelFor, imageQualityFor, type ImageQuality, type PhotoVariant } from './prompts';
 import { replicateModelFor } from './replicate';
 import { MAX_REVERSE_ERASES, subtractInk } from './reverse';
@@ -63,6 +64,10 @@ export interface PhotoPipelineResult {
   readonly reverseLesson: LessonPackage | null;
   /** Cumulative line drawings, simplest first. Empty unless reverse ran. */
   readonly reverseStages: readonly Uint8Array[];
+  /** Low-quality erase edits. Zero unless reverse ran. Not part of `regenerated`. */
+  readonly reverseCalls: number;
+  /** Token usage of the erase edits only. Null when reverse did not run or the provider omits usage. */
+  readonly reverseUsage: TokenUsage | null;
 }
 
 interface TracedEdit {
@@ -88,14 +93,19 @@ export async function runPhotoPipeline(
     : imageModelFor(input.variant, input.configuredImageModel);
   const quality = imageQualityFor(input.variant);
   const photoPng = await encodePng(downscaleLongEdge(photo, 512));
+  const photoPlan = await askPhotoPlan(deps.instructions, input, photoPng);
+  let textUsage = photoPlan?.usage ?? null;
+  const hints = hintNames(photoPlan);
   let pairCalls = 0;
   let extraCalls = 0;
-  let traced = await drawPass(deps.images, input, photo, model, quality, false, false, input.idempotencyKey);
+  let reverseCalls = 0;
+  let reverseUsage: TokenUsage | null = null;
+  let traced = await drawPass(deps.images, input, photo, model, quality, false, false, input.idempotencyKey, hints);
   pairCalls += traced.calls;
   let imageUsage = traced.usage;
   let retried = false;
   if (shouldRedraw(outlineCoverage(traced.contours))) {
-    const second = await drawPass(deps.images, input, photo, model, quality, true, false, `${input.idempotencyKey}-redraw`).catch(() => null);
+    const second = await drawPass(deps.images, input, photo, model, quality, true, false, `${input.idempotencyKey}-redraw`, hints).catch(() => null);
     retried = true;
     if (second) {
       pairCalls += second.calls;
@@ -105,9 +115,9 @@ export async function runPhotoPipeline(
   }
 
   let written = await askParts(deps.instructions, input, traced, photoPng, '');
-  let textUsage = written?.usage ?? null;
-  if (written && !written.sameSubject && !retried) {
-    const second = await drawPass(deps.images, input, photo, model, quality, true, true, `${input.idempotencyKey}-redraw`).catch(() => null);
+  textUsage = sumUsage(textUsage, written?.usage ?? null);
+  if (written && mismatchesPhoto(written) && !retried) {
+    const second = await drawPass(deps.images, input, photo, model, quality, true, true, `${input.idempotencyKey}-redraw`, hints).catch(() => null);
     retried = true;
     if (second) {
       pairCalls += second.calls;
@@ -129,8 +139,9 @@ export async function runPhotoPipeline(
       model,
       quality,
       true,
-      written?.sameSubject === false,
+      mismatchesPhoto(written),
       `${input.idempotencyKey}-redraw`,
+      hints,
     ).catch(() => null);
     if (second) {
       pairCalls += second.calls;
@@ -174,6 +185,8 @@ export async function runPhotoPipeline(
       written?.sameSubject ? written.parts : [],
     );
     extraCalls += erased.calls;
+    reverseCalls = erased.calls;
+    reverseUsage = erased.usage;
     imageUsage = sumUsage(imageUsage, erased.usage);
     reverseStages = erased.stages;
     const staged = erased.lesson;
@@ -185,8 +198,12 @@ export async function runPhotoPipeline(
   }
 
   const subjectMismatch = written?.sameSubject === false;
+  const extraSubject = (written?.extraObjects?.length ?? 0) > 0;
+  const poseMismatch = written?.samePose === false;
   const reasons = [...built.reviewReasons];
   if (comparison.reviewReason) reasons.push(comparison.reviewReason);
+  if (extraSubject) reasons.push('Gambar menambah benda yang tidak ada di foto. Cek dulu sebelum dipakai.');
+  if (poseMismatch) reasons.push('Pose atau bingkai gambar tidak sama dengan foto. Cek dulu sebelum dipakai.');
   if (subjectMismatch) reasons.push('Gambar tidak sama dengan foto. Cek dulu sebelum dipakai.');
   const shown = traced.colouredPng ?? traced.png;
   return {
@@ -210,7 +227,48 @@ export async function runPhotoPipeline(
     stepMode: mode,
     reverseLesson: mode === 'reverse' ? null : reverseLesson,
     reverseStages,
+    reverseCalls,
+    reverseUsage,
   };
+}
+
+function mismatchesPhoto(written: InstructionResult | null): boolean {
+  if (!written) return false;
+  if (written.sameSubject === false) return true;
+  if (written.samePose === false) return true;
+  return (written.extraObjects?.length ?? 0) > 0;
+}
+
+function hintNames(written: InstructionResult | null): string[] {
+  if (!written) return [];
+  const names: string[] = [];
+  for (const part of written.parts) {
+    const name = cleanPartName(part.name);
+    if (!name || names.includes(name)) continue;
+    names.push(name);
+    if (names.length === 8) break;
+  }
+  return names;
+}
+
+async function askPhotoPlan(
+  instructions: InstructionWriter | undefined,
+  input: PhotoPipelineInput,
+  photoPng: Uint8Array,
+): Promise<InstructionResult | null> {
+  if (!instructions) return null;
+  try {
+    return await instructions.write({
+      model: input.textModel,
+      photoPng,
+      illustrationPng: photoPng,
+      signal: input.signal,
+      idempotencyKey: `${input.idempotencyKey}-plan`,
+      photoOnly: true,
+    });
+  } catch {
+    return null;
+  }
 }
 
 async function eraseBackwards(
@@ -297,6 +355,7 @@ async function drawPass(
   reinforceSilhouette: boolean,
   reinforceSubject: boolean,
   idempotencyKey: string,
+  partHints: readonly string[],
 ): Promise<TracedEdit> {
   const edited = await images.edit({
     png: input.png,
@@ -309,6 +368,7 @@ async function drawPass(
     signal: input.signal,
     ...(reinforceSilhouette ? { reinforceSilhouette: true } : {}),
     ...(reinforceSubject ? { reinforceSubject: true } : {}),
+    ...(partHints.length > 0 ? { partHints } : {}),
   });
   const traced = await traceLine(edited.png);
   let usage = edited.usage;

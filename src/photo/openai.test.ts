@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bytesToBase64, openAiClients } from './openai';
+import { imagePrompt } from './prompts';
+
+const SUBJECT_WORDS = /\b(eyes|nose|whiskers|ears|collar|tongue|petals|leaves|wheels|seat|handle|chibi|animals|cartoon|character|cup|saucer|flower|steering|markings)\b|kid-book/i;
 
 const png = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1]);
 
@@ -39,7 +42,8 @@ describe('OpenAI client', () => {
     expect(form.get('size')).toBe('1536x1024');
     const prompt = form.get('prompt');
     const promptText = typeof prompt === 'string' ? prompt : '';
-    expect(promptText).toContain('Do not add limbs');
+    expect(promptText).toContain('lying stays lying');
+    expect(promptText).not.toMatch(SUBJECT_WORDS);
     expect(promptText).toContain('closed outer silhouette');
     expect(promptText).toContain('No shading, no colour');
     expect(promptText).toContain('barcode');
@@ -155,6 +159,20 @@ describe('OpenAI client', () => {
     expect(form.get('quality')).toBe('low');
     const prompt = form.get('prompt');
     expect(typeof prompt === 'string' ? prompt : '').toContain('Do not redesign');
+    expect(typeof prompt === 'string' ? prompt : '').not.toMatch(SUBJECT_WORDS);
+  });
+
+  it('keeps other subjects out of the shared line prompt and adds only this photo\'s hints', () => {
+    for (const variant of ['default', 'faithful', 'simple'] as const) {
+      const prompt = imagePrompt(variant);
+      expect(prompt).not.toMatch(SUBJECT_WORDS);
+      expect(prompt).toContain('closed outer silhouette');
+      expect(prompt).toContain('lying stays lying');
+      expect(prompt).toContain('close-up stays a close-up');
+      expect(prompt).not.toMatch(/chibi|cartoon|character|kid-book/i);
+    }
+    expect(imagePrompt('default', false, false, ['kelopak', 'daun'])).toContain('Draw only these parts of this one subject: kelopak, daun.');
+    expect(imagePrompt('default')).not.toContain('kelopak');
   });
 
   it('colours the line drawing and sends the photo as the second image', async () => {

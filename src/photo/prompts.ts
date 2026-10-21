@@ -1,4 +1,4 @@
-/** Image-edit prompts. They ask the model to keep pose and not invent parts. */
+/** Image-edit prompts. They keep this photo's pose and framing, and they do not name other subjects. */
 
 export const IMAGE_MODELS = ['gpt-image-2', 'gpt-image-1.5', 'gpt-image-1', 'gpt-image-1-mini'] as const;
 
@@ -13,31 +13,30 @@ export const DEFAULT_TEXT_MODEL = 'gpt-4.1-mini';
 export type PhotoVariant = 'default' | 'faithful' | 'simple';
 
 const SHARED = [
-  'Turn this photo into a simple drawing guide for a five-year-old.',
-  'Draw one kid-book cartoon of that subject: thick, clean, closed black shapes on a plain white background.',
-  'Animals use chibi proportions, with a big round head, a small body, few strokes, and no texture.',
+  'Turn this photo into a simplified line illustration of this exact subject.',
+  'Draw a faithful line drawing: clean, thick, closed black outlines, little texture, and no shading.',
   'No shading, no colour, and no fill. Lines only.',
-  'The finished picture is the last line-art step: one closed outer silhouette around the whole subject, then the few interior lines a child needs: eyes, nose, whiskers, ears, collar, tongue, petals, leaves, wheels, seat, handle.',
-  'A cup and its saucer are two closed outlines, one above the other, that do not share a line. A flower keeps every line between the petals, from the centre out to the edge.',
-  'Keep the pose, the direction the subject faces, the key features, the colours those features will need, and the count of visible parts of that subject.',
-  'Keep the same framing and crop as the photo. Do not zoom in. Do not zoom out. A full body stays a full body. A close-up stays a close-up.',
-  'Keep distinctive features that identify it: markings, ears, wheels, handle, petals, leaves.',
-  'Leave out the background and anything that is not the subject: people, hands, legs, leashes, furniture, ground, sky, and scenery.',
-  'Do not draw letters, numbers, barcodes, logos, racing numbers, or writing, unless the writing itself is the only subject.',
-  'Do not draw a barcode, QR code, price sticker, or any row of vertical black bars. If the photo has one, leave that area blank. Do not copy stripes, ticks, or a grille.',
-  'A toy car keeps its body, wheels, seat, and steering wheel only. Omit the side number and the barcode.',
-  'Do not add limbs, clothes, hats, poles, flowers, wheels, vehicles, characters, or any object that is not in the photo.',
-  'Do not invent parts that are hidden.',
+  'One closed outer silhouette around the whole subject, then only the interior lines that are actually visible on this subject.',
+  'Keep the same pose as the photo. The pose is binding. A subject that is lying stays lying. A subject that is sitting stays sitting.',
+  'Keep the same framing and crop as the photo. Do not zoom in. Do not zoom out. A full body stays a full body. A close-up stays a close-up. Simplify only inside that crop.',
+  'Leave out the background and anything that is not the subject.',
+  'Do not draw letters, numbers, barcodes, logos, or writing, unless the writing itself is the only subject.',
+  'Do not draw a barcode, QR code, price sticker, or any row of vertical black bars. If the photo has one, leave that area blank.',
+  'Do not add any object that is not in the photo. Do not invent parts that are hidden.',
   'Opaque white background. No transparency.',
 ].join(' ');
 
-export function imagePrompt(variant: PhotoVariant, reinforceSilhouette = false, reinforceSubject = false): string {
+export function imagePrompt(
+  variant: PhotoVariant,
+  reinforceSilhouette = false,
+  reinforceSubject = false,
+  partHints: readonly string[] = [],
+): string {
   const base = variant === 'simple'
     ? [
       SHARED,
-      'Same subject and same pose as the photo. Do not redesign it and do not turn it into a character.',
-      'Fewer interior lines than a careful copy. One closed outer silhouette, then only the marks a child needs to recognise this exact subject.',
-      'Do not add a wheel, flower, vehicle, hat, or any extra object.',
+      'Same subject and same pose as the photo. Do not redesign it.',
+      'Fewer interior lines than a careful copy. One closed outer silhouette, then only the marks needed to recognise this exact subject.',
     ].join(' ')
     : variant === 'faithful'
       ? `${SHARED} Stay close to the photo of this one subject. Do not drop a feature that identifies it. The outer silhouette must be one closed shape.`
@@ -47,6 +46,10 @@ export function imagePrompt(variant: PhotoVariant, reinforceSilhouette = false, 
     extra.push('The previous drawing was only a fragment. Draw the FULL subject: one continuous closed outer silhouette around all of it, on an opaque white background, with no labels and no row of short parallel lines.');
   }
   if (reinforceSubject) extra.push('The drawing must be the same object as the photo. Do not turn it into something else.');
+  const hints = cleanHints(partHints);
+  if (hints.length > 0) {
+    extra.push(`Draw only these parts of this one subject: ${hints.join(', ')}. Do not draw any other object.`);
+  }
   return extra.length === 0 ? base : `${base} ${extra.join(' ')}`;
 }
 
@@ -79,7 +82,12 @@ export function colourPrompt(): string {
  * Replicate Kontext prompt. Positive only: naming vehicles in a negative
  * list made flux-kontext-pro draw cars (D-70). OpenAI keeps `imagePrompt`.
  */
-export function replicatePrompt(reinforceSilhouette = false, reinforceSubject = false, colour = false): string {
+export function replicatePrompt(
+  reinforceSilhouette = false,
+  reinforceSubject = false,
+  colour = false,
+  partHints: readonly string[] = [],
+): string {
   if (colour) {
     return [
       'Only fill this line drawing. Keep every line exactly where it is.',
@@ -89,13 +97,16 @@ export function replicatePrompt(reinforceSilhouette = false, reinforceSubject = 
     ].join(' ');
   }
   const lines = [
-    'Black line drawing of this one subject for a young child.',
-    'A simple cartoon with thick clean closed shapes and few interior lines.',
+    'Faithful line drawing of this one subject.',
+    'Clean thick closed outlines, little texture, and no shading.',
     'Plain opaque white background. No colour, no shading, no texture, no text.',
-    "Keep the photo's framing and crop. Do not zoom in or zoom out.",
+    'Keep the photo\'s pose. A subject that is lying stays lying. A subject that is sitting stays sitting.',
+    'Keep the photo\'s framing and crop. Do not zoom in or zoom out. A close-up stays a close-up. A full body stays a full body.',
   ];
   if (reinforceSilhouette) lines.push('Draw the full subject as one continuous closed outer silhouette.');
   if (reinforceSubject) lines.push('The drawing must be the same object as the photo.');
+  const hints = cleanHints(partHints);
+  if (hints.length > 0) lines.push(`Draw only these parts of this one subject: ${hints.join(', ')}.`);
   return lines.join(' ');
 }
 
@@ -117,4 +128,15 @@ export function imageSize(width: number, height: number): '1024x1024' | '1536x10
   if (width > height * 1.15) return '1536x1024';
   if (height > width * 1.15) return '1024x1536';
   return '1024x1024';
+}
+
+function cleanHints(hints: readonly string[]): string[] {
+  const names: string[] = [];
+  for (const hint of hints) {
+    const name = hint.toLowerCase().replace(/[^\p{L}\p{N} '-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 32);
+    if (name.length < 2 || names.includes(name)) continue;
+    names.push(name);
+    if (names.length === 8) break;
+  }
+  return names;
 }

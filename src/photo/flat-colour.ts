@@ -399,7 +399,8 @@ function unite(parent: Int32Array, left: number, right: number): void {
 function dropTinyRegions(regions: readonly FlatRegion[], imageArea: number): FlatRegion[] {
   const largest = regions.reduce((max, region) => Math.max(max, region.pixels), 0);
   const floor = Math.max(24, imageArea * 0.004);
-  return regions.filter((region) => region.pixels >= largest * 0.02 || region.pixels >= floor);
+  // Keep a small distinct patch, such as an ear interior or the rest of a collar, and still drop a speck.
+  return regions.filter((region) => region.pixels >= largest * 0.02 || region.pixels >= floor || region.pixels >= 40);
 }
 
 /** One fill for the area inside the outer lines, when thin interior lines have sliced it into slivers. */

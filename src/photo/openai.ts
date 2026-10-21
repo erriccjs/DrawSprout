@@ -32,6 +32,8 @@ export interface ImageEditRequest {
   readonly referencePng?: Uint8Array;
   /** Replaces the line or colour prompt. Used to erase one part at low quality. */
   readonly instruction?: string;
+  /** Part names from this photo only. Omitted from the shared prompt when empty. */
+  readonly partHints?: readonly string[];
 }
 
 export interface ImageEditResult {
@@ -61,6 +63,8 @@ export interface InstructionRequest {
   readonly pieces?: readonly InstructionPiece[];
   /** A second text call after the first left interior pieces unnamed. */
   readonly relabel?: boolean;
+  /** Name this photo's parts before the line drawing. The illustration is not sent. */
+  readonly photoOnly?: boolean;
 }
 
 export interface InstructionResult {
@@ -69,6 +73,12 @@ export interface InstructionResult {
   readonly title: string;
   readonly parts: readonly DetectedPart[];
   readonly usage: TokenUsage | null;
+  /** False when the drawing's pose or crop does not match the photo. Missing means no objection. */
+  readonly samePose?: boolean;
+  /** Objects drawn that are not in the photo. Missing or empty means none were reported. */
+  readonly extraObjects?: readonly string[];
+  readonly photoObjects?: readonly string[];
+  readonly drawingObjects?: readonly string[];
 }
 
 export interface InstructionWriter {
@@ -88,7 +98,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
           ? input.instruction
           : input.referencePng
             ? colourPrompt()
-            : imagePrompt(input.variant, input.reinforceSilhouette === true, input.reinforceSubject === true));
+            : imagePrompt(input.variant, input.reinforceSilhouette === true, input.reinforceSubject === true, input.partHints ?? []));
         form.set('quality', input.quality);
         form.set('size', imageSize(input.width, input.height));
         form.set('n', '1');
@@ -134,37 +144,9 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
               content: [
                 {
                   type: 'text',
-                  text: [
-                    'Gambar pertama adalah foto. Gambar kedua adalah garis hitam saja, tanpa warna.',
-                    'sameSubject true hanya bila gambar itu adalah benda yang sama dengan foto. Kucing yang digambar menjadi mobil adalah false.',
-                    'subject adalah satu kata benda bahasa Indonesia untuk benda di foto (kucing, cangkir, bunga), tanpa kata sifat.',
-                    'title pendek, 2 sampai 4 kata, tanpa kata sifat.',
-                    'parts adalah rencana konstruksi, dari bentuk besar ke detail kecil, seperti buku cara menggambar. name adalah satu kata benda saja, tanpa kata sifat dan tanpa warna: "anjing", bukan "anjing hitam lucu"; "bunga", bukan "bunga putih merah". Bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
-                    'shape adalah circle, oval, dome, line, atau triangle. Kosongkan bila bukan bentuk dasar. Bagian pertama adalah satu bentuk besar untuk massa utama: circle, oval, atau dome.',
-                    'order adalah urutan langkah, mulai dari 1. dependsOn adalah nama bagian yang sudah digambar, atau string kosong.',
-                    'guide true hanya untuk garis bantu yang dihapus nanti, seperti salib tengah wajah, oval panduan kelopak, atau segitiga badan. Garis yang tetap di gambar akhir memakai guide false.',
-                    'Jangan memakai "bagian berikutnya", "bentuk utama", "buih", "latar belakang", "wajah anak", "barcode", atau "ventilasi".',
-                    'Jangan memasukkan setiap potongan ke dalam satu kotak.',
-                    'Sebut bagian yang terlihat: garis luar, telinga, mata, hidung, kumis, kaki, ekor, roda, gagang, kelopak, daun, tengah bunga, kopi, kalung, lidah, kursi.',
-                    'Kopi bukan cangkir. Piring dan cangkir bagian terpisah. Kalung bukan mata dan bukan badan. Daun bukan kelopak. Roda bukan badan. Setir bukan badan mobil. Mata, hidung, dan kumis masing-masing bagian sendiri. Foto close-up kepala tidak punya kaki atau ekor. Jangan sebut bagian yang tidak ada garisnya.',
-                    'Kotak sebuah bagian hanya menutupi bagian itu. Kumis tidak menutupi seluruh wajah. Nama daerah warna adalah bagian yang mengelilingi daerah itu.',
-                    'Kotak harus ketat di garis bagian itu. Jangan menamai bagian yang tidak ada garisnya.',
-                    'pieceIds adalah nomor potongan yang termasuk bagian itu. Bagian garis luar hanya berisi potongan siluet, bukan detail di dalamnya.',
-                    'pair true bila satu langkah menggambar sepasang simetris (dua telinga, dua mata, dua roda). pair true boleh berisi dua pieceIds.',
-                    'count adalah jumlah yang digambar dalam satu langkah: 1 untuk gagang, permukaan kopi, kalung, atau lidah; 2 hanya untuk sepasang yang memang dua (dua telinga, dua mata, dua roda). Kelopak yang banyak bukan 2.',
-                    'x, y, width, height adalah kotak dalam ruang 1000 kali 750. points adalah polygon bagian itu dalam ruang yang sama, paling banyak 8 titik. Kotak harus ketat di bagian itu, bukan seluruh gambar.',
-                    'colorName adalah warna bagian itu pada gambar: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, cokelat tua, hitam, abu-abu, atau putih. Putih untuk benda yang putih, bukan abu-abu. Cokelat tua untuk kopi yang gelap.',
-                    'Jangan menambah bagian yang tidak ada.',
-                    input.relabel === true
-                      ? 'Beberapa potongan dalam belum punya nama sendiri. Beri tiap potongan dalam sebuah bagian yang lebih kecil dari garis luar.'
-                      : '',
-                    (input.pieces ?? []).length > 0
-                      ? `Potongan garis yang sudah dinomori:\n${(input.pieces ?? []).map((piece) => `${piece.id}. x=${Math.round(piece.x)} y=${Math.round(piece.y)} width=${Math.round(piece.width)} height=${Math.round(piece.height)}`).join('\n')}`
-                      : '',
-                  ].filter((line) => line.length > 0).join('\n'),
+                  text: instructionText(input),
                 },
-                { type: 'image_url', image_url: { url: `data:image/png;base64,${bytesToBase64(input.photoPng)}` } },
-                { type: 'image_url', image_url: { url: `data:image/png;base64,${bytesToBase64(input.illustrationPng)}` } },
+                ...instructionImages(input),
               ],
             }],
             response_format: {
@@ -175,11 +157,15 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                 schema: {
                   type: 'object',
                   additionalProperties: false,
-                  required: ['sameSubject', 'subject', 'title', 'parts'],
+                  required: ['sameSubject', 'samePose', 'subject', 'title', 'photoObjects', 'drawingObjects', 'extraObjects', 'parts'],
                   properties: {
                     sameSubject: { type: 'boolean' },
+                    samePose: { type: 'boolean' },
                     subject: { type: 'string' },
                     title: { type: 'string' },
+                    photoObjects: { type: 'array', items: { type: 'string' } },
+                    drawingObjects: { type: 'array', items: { type: 'string' } },
+                    extraObjects: { type: 'array', items: { type: 'string' } },
                     parts: {
                       type: 'array',
                       items: {
@@ -232,16 +218,99 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
         const subject = typeof parsed.subject === 'string' ? parsed.subject : '';
         const title = typeof parsed.title === 'string' ? parsed.title : '';
         const sameSubject = parsed.sameSubject !== false;
+        const samePose = parsed.samePose !== false;
         const rows = Array.isArray(parsed.parts) ? parsed.parts : [];
         const parts: DetectedPart[] = [];
         for (const row of rows) {
           const part = detectedPartFrom(row);
           if (part) parts.push(part);
         }
-        return { sameSubject, subject, title, parts, usage: usageFrom(record.usage) };
+        return {
+          sameSubject,
+          samePose,
+          subject,
+          title,
+          parts,
+          photoObjects: stringList(parsed.photoObjects),
+          drawingObjects: stringList(parsed.drawingObjects),
+          extraObjects: stringList(parsed.extraObjects),
+          usage: usageFrom(record.usage),
+        };
       },
     },
   };
+}
+
+function instructionText(input: InstructionRequest): string {
+  if (input.photoOnly) {
+    return [
+      'Foto ini satu subjek. Sebut hanya bagian yang benar-benar terlihat pada foto ini.',
+      'sameSubject true. samePose true.',
+      'photoObjects adalah benda yang terlihat di foto, satu kata benda tiap item. drawingObjects dan extraObjects array kosong.',
+      'subject adalah satu kata benda bahasa Indonesia untuk benda di foto, tanpa kata sifat.',
+      'title pendek, 2 sampai 4 kata, tanpa kata sifat.',
+      'parts hanya bagian foto ini, dari bentuk besar ke detail kecil. Jangan menambah bagian dari subjek lain.',
+      'name adalah satu kata benda saja, tanpa kata sifat dan tanpa warna. Bukan kalimat, tanpa kata "dua".',
+      'shape adalah circle, oval, dome, line, triangle, atau string kosong. Bagian pertama adalah circle, oval, atau dome untuk massa utama.',
+      'order mulai dari 1. dependsOn adalah nama bagian yang sudah digambar, atau string kosong. guide false.',
+      'pair true hanya untuk sepasang yang memang dua. count 1 atau 2.',
+      'x, y, width, height adalah kotak dalam ruang 1000 kali 750. points paling banyak 8 titik. pieceIds array kosong.',
+      'colorName adalah warna bagian itu: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, cokelat tua, hitam, abu-abu, atau putih.',
+      'Jangan menambah benda yang tidak ada di foto.',
+    ].join('\n');
+  }
+  return [
+    'Gambar pertama adalah foto. Gambar kedua adalah garis hitam saja, tanpa warna.',
+    'sameSubject true hanya bila gambar itu adalah benda yang sama dengan foto. Kucing yang digambar menjadi mobil adalah false.',
+    'samePose true hanya bila pose dan bingkai gambar sama dengan foto. Subjek yang berbaring menjadi duduk adalah false. Close-up yang menjadi seluruh badan adalah false.',
+    'photoObjects adalah benda di foto. drawingObjects adalah benda di gambar garis. extraObjects adalah benda di gambar garis yang tidak ada di foto. Kosong bila tidak ada tambahan.',
+    'subject adalah satu kata benda bahasa Indonesia untuk benda di foto (kucing, cangkir, bunga), tanpa kata sifat.',
+    'title pendek, 2 sampai 4 kata, tanpa kata sifat.',
+    'parts adalah rencana konstruksi, dari bentuk besar ke detail kecil, seperti urutan langkah. name adalah satu kata benda saja, tanpa kata sifat dan tanpa warna: "anjing", bukan "anjing hitam lucu"; "bunga", bukan "bunga putih merah". Bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
+    'shape adalah circle, oval, dome, line, atau triangle. Kosongkan bila bukan bentuk dasar. Bagian pertama adalah satu bentuk besar untuk massa utama: circle, oval, atau dome.',
+    'order adalah urutan langkah, mulai dari 1. dependsOn adalah nama bagian yang sudah digambar, atau string kosong.',
+    'guide true hanya untuk garis bantu yang dihapus nanti, seperti salib tengah wajah, oval panduan kelopak, atau segitiga badan. Garis yang tetap di gambar akhir memakai guide false.',
+    'Jangan memakai "bagian berikutnya", "bentuk utama", "buih", "latar belakang", "wajah anak", "barcode", atau "ventilasi".',
+    'Jangan memasukkan setiap potongan ke dalam satu kotak.',
+    'Contoh nama bila bagian itu memang terlihat: garis luar, telinga, mata, hidung, kumis, kaki, ekor, roda, gagang, kelopak, daun, tengah bunga, kopi, kalung, lidah, kursi. Jangan menyebut contoh yang tidak ada di foto ini.',
+    'Kopi bukan cangkir. Piring dan cangkir bagian terpisah. Kalung bukan mata dan bukan badan. Daun bukan kelopak. Roda bukan badan. Setir bukan badan mobil. Mata, hidung, dan kumis masing-masing bagian sendiri. Foto close-up kepala tidak punya kaki atau ekor. Jangan sebut bagian yang tidak ada garisnya.',
+    'Kotak sebuah bagian hanya menutupi bagian itu. Kumis tidak menutupi seluruh wajah. Nama daerah warna adalah bagian yang mengelilingi daerah itu.',
+    'Kotak harus ketat di garis bagian itu. Jangan menamai bagian yang tidak ada garisnya.',
+    'pieceIds adalah nomor potongan yang termasuk bagian itu. Bagian garis luar hanya berisi potongan siluet, bukan detail di dalamnya.',
+    'pair true bila satu langkah menggambar sepasang simetris (dua telinga, dua mata, dua roda). pair true boleh berisi dua pieceIds.',
+    'count adalah jumlah yang digambar dalam satu langkah: 1 untuk gagang, permukaan kopi, kalung, atau lidah; 2 hanya untuk sepasang yang memang dua (dua telinga, dua mata, dua roda). Kelopak yang banyak bukan 2.',
+    'x, y, width, height adalah kotak dalam ruang 1000 kali 750. points adalah polygon bagian itu dalam ruang yang sama, paling banyak 8 titik. Kotak harus ketat di bagian itu, bukan seluruh gambar.',
+    'colorName adalah warna bagian itu pada gambar: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, cokelat tua, hitam, abu-abu, atau putih. Putih untuk benda yang putih, bukan abu-abu. Cokelat tua untuk kopi yang gelap.',
+    'Jangan menambah bagian yang tidak ada.',
+    input.relabel === true
+      ? 'Beberapa potongan dalam belum punya nama sendiri. Beri tiap potongan dalam sebuah bagian yang lebih kecil dari garis luar.'
+      : '',
+    (input.pieces ?? []).length > 0
+      ? `Potongan garis yang sudah dinomori:\n${(input.pieces ?? []).map((piece) => `${piece.id}. x=${Math.round(piece.x)} y=${Math.round(piece.y)} width=${Math.round(piece.width)} height=${Math.round(piece.height)}`).join('\n')}`
+      : '',
+  ].filter((line) => line.length > 0).join('\n');
+}
+
+function instructionImages(input: InstructionRequest): { type: string; image_url: { url: string } }[] {
+  const photo = { type: 'image_url', image_url: { url: `data:image/png;base64,${bytesToBase64(input.photoPng)}` } };
+  if (input.photoOnly) return [photo];
+  return [
+    photo,
+    { type: 'image_url', image_url: { url: `data:image/png;base64,${bytesToBase64(input.illustrationPng)}` } },
+  ];
+}
+
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const names: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const name = item.replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (name.length < 2 || names.includes(name)) continue;
+    names.push(name);
+    if (names.length === 8) break;
+  }
+  return names;
 }
 
 export function sumUsage(left: TokenUsage | null, right: TokenUsage | null): TokenUsage | null {

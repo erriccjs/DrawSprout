@@ -76,7 +76,9 @@ describe('photo pipeline wiring', () => {
     expect(result.lesson.title).toBe('Kotak');
     expect(result.lesson.steps[0]?.instruction).toBe('Gambar garis luar kotak.');
     expect(result.lesson.steps[0]?.instruction).not.toMatch(/wajah/);
-    expect(result.textUsage).toEqual({ inputTokens: 11, outputTokens: 7, totalTokens: 18 });
+    expect(result.textUsage).toEqual({ inputTokens: 22, outputTokens: 14, totalTokens: 36 });
+    expect(result.reverseCalls).toBe(0);
+    expect(result.reverseUsage).toBeNull();
     expect(result.imageCalls).toBe(2);
     expect(result.regenerated).toBe(false);
     expect(result.lineArtPng[0]).toBe(137);
@@ -161,6 +163,53 @@ describe('photo pipeline wiring', () => {
     expect(result.reverseStages.length).toBeGreaterThanOrEqual(2);
     expect(result.lesson.steps.some((step) => step.instruction.includes('mata'))).toBe(true);
     expect(result.reverseLesson?.steps.some((step) => step.instruction.includes('mata'))).toBe(true);
+    expect(result.reverseCalls).toBeGreaterThan(0);
+  });
+
+  it('redraws once when the line drawing adds a subject, then flags the pose if it is still wrong', async () => {
+    const art = await encodePng(frame());
+    let compared = 0;
+    const images: ImageEditor = {
+      edit() {
+        return Promise.resolve({ png: art, usage: null });
+      },
+    };
+    const instructions: InstructionWriter = {
+      write(input) {
+        if (input.photoOnly) {
+          return Promise.resolve({
+            sameSubject: true,
+            subject: 'Cangkir',
+            title: 'Cangkir',
+            parts: [{ name: 'cangkir', pair: false, x: 80, y: 40, width: 200, height: 160, points: [], colorName: 'putih', pieceIds: [], count: 1, shape: 'oval', order: 1 }],
+            usage: null,
+          });
+        }
+        compared += 1;
+        return Promise.resolve({
+          sameSubject: true,
+          samePose: compared > 1 ? false : true,
+          subject: 'Cangkir',
+          title: 'Cangkir',
+          extraObjects: compared === 1 ? ['kucing'] : [],
+          parts: [{ name: 'cangkir', pair: false, x: 80, y: 40, width: 200, height: 160, points: [], colorName: 'putih', pieceIds: [], count: 1, shape: 'oval', order: 1 }],
+          usage: null,
+        });
+      },
+    };
+    const result = await runPhotoPipeline({
+      png: art,
+      variant: 'default',
+      idempotencyKey: 'extra-subject',
+      signal: AbortSignal.timeout(5_000),
+      textModel: 'gpt-4.1-mini',
+      lessonId: 'photo-extra',
+    }, { images, instructions });
+    expect(result.regenerated).toBe(true);
+    expect(result.imageCalls).toBe(4);
+    expect(result.reviewReason ?? '').toContain('Pose atau bingkai gambar tidak sama dengan foto');
+    expect(result.reviewReason ?? '').not.toContain('menambah benda');
+    expect(result.needsReview).toBe(true);
   });
 });
 
