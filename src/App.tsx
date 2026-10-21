@@ -8,6 +8,7 @@ import { fromRestoredSession } from './persistence/mapping';
 import type { SessionCheckpoint } from './persistence/types';
 import { gateUpdate } from './offline/update-policy';
 import { useOfflineSupport } from './offline/useOffline';
+import { ArtworkGallery } from './ui/ArtworkGallery';
 import { DrawingPad } from './ui/DrawingPad';
 import { requestDocumentFullscreen } from './ui/fullscreen';
 import { RESUME_NOTICE } from './ui/resume-notice';
@@ -174,6 +175,61 @@ export function App() {
     });
   };
 
+  const openArtwork = (sessionId: string) => {
+    // Same gesture rule as choosing a picture: fullscreen is asked for on the
+    // tap, not on the first stroke (D-57).
+    requestDocumentFullscreen();
+    setUpdateDismissed(false);
+    const selection = ++selectionRef.current;
+    touchedRef.current = true;
+    controlsRef.current = { preferences: {}, tools: {} };
+    handoffRef.current = null;
+    setExitNotice(null);
+
+    void bootstrap.store.loadSession(sessionId).then((restored) => {
+      if (selectionRef.current !== selection) return;
+      if (!restored) {
+        setExitNotice('Karya itu tidak dapat dibuka.');
+        return;
+      }
+      let lesson: LessonPackage;
+      try {
+        lesson = getLesson(restored.checkpoint.lessonId);
+      } catch {
+        setExitNotice('Pelajaran untuk karya ini sudah tidak ada.');
+        return;
+      }
+      if (restored.checkpoint.lessonContentVersion !== lesson.contentVersion) {
+        setOpenLesson({
+          lesson,
+          initialState: createSession(lesson, newId(), DEFAULT_PREFERENCES),
+          notice: 'Pelajaran sudah diperbarui, jadi karya lama dibuka sebagai karya baru.',
+          restorePending: false,
+          preferencesPending: false,
+          pendingSave: null,
+          revision: 0,
+        });
+        return;
+      }
+      try {
+        const state = fromRestoredSession(restored);
+        setOpenLesson({
+          lesson,
+          initialState: state,
+          notice: state.finished || !hasProgress(restored.checkpoint) ? null : RESUME_NOTICE,
+          restorePending: false,
+          preferencesPending: false,
+          pendingSave: null,
+          revision: 0,
+        });
+      } catch {
+        setExitNotice(LOAD_FAILURE_NOTICE);
+      }
+    }).catch(() => {
+      if (selectionRef.current === selection) setExitNotice(LOAD_FAILURE_NOTICE);
+    });
+  };
+
   return (
     <main className="shell" data-layout={layout} data-tablet-notice={showTabletNotice ? 'open' : 'closed'}>
       {showTabletNotice && <TabletNotice onDismiss={dismissTabletHint} />}
@@ -237,14 +293,21 @@ export function App() {
           }}
         />
       ) : (
-        <LessonPicker
-          onSelect={selectLesson}
-          notice={exitNotice}
-          offlineReady={offlineReady}
-          updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}
-          onApplyUpdate={requestApply}
-          onDismissUpdate={() => { setUpdateDismissed(true); }}
-        />
+        <>
+          <LessonPicker
+            onSelect={selectLesson}
+            notice={exitNotice}
+            offlineReady={offlineReady}
+            updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}
+            onApplyUpdate={requestApply}
+            onDismissUpdate={() => { setUpdateDismissed(true); }}
+          />
+          <ArtworkGallery
+            store={bootstrap.store}
+            actionsDisabled={updateGate.showPrompt && applyRequested}
+            onOpen={openArtwork}
+          />
+        </>
       )}
     </main>
   );

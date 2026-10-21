@@ -801,3 +801,21 @@ slider and the dock follow the bottom of the sheet, so the open space is
 below the tools rather than around the paper. The toast sits in that lower
 band, above *Lanjut*, and does not cover the tools. The sheet does not grow
 past 4:3, because cropping the lesson would hide strokes at the sides.
+
+### D-63 — Karyaku lists saved drawings on the picture-choosing screen
+
+PNG export already omitted guides. There was no way to see, reopen, or
+delete an earlier drawing except by opening that lesson again, which only
+restored the latest session.
+
+**Choice.** `SessionStore.listSavedArtworks` returns checkpoints that have
+strokes, a later step, redo history, or a finished flag, newest first. An
+opening that was never drawn is not listed. Karyaku sits under the lesson
+grid on the picture-choosing screen. Each card shows a thumbnail painted by
+the same export path as the PNG (committed strokes and clip paths only — no
+guide parameter), the lesson title, and the date. *Buka* restores that
+session. *Simpan PNG* downloads it. *Hapus* asks "Hapus karya ini?" before
+`deleteSession`. The picture-choosing shell scrolls; the drawing screen does
+not, and the dock is unchanged.
+
+D-62 is the ten-lesson catalogue, recorded on its own change.

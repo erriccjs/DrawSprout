@@ -109,6 +109,30 @@ describe.each([
     expect(await store.loadLatestSessionForLesson('missing')).toBeNull();
   });
 
+  it('lists saved artworks newest first and skips an untouched session', async () => {
+    const untouched = createSession(lesson, 'untouched');
+    const older = { ...draw(newSessionState(), stepIdAt(0)), sessionId: 'older-art' };
+    const newer = { ...draw(newSessionState(), stepIdAt(0)), sessionId: 'newer-art' };
+    const finishedLesson = { ...lesson, id: 'finished-lesson' };
+    const finished = reduceSession(finishedLesson, createSession(finishedLesson, 'finished-empty'), { type: 'finish' });
+    await save(store, untouched, 1);
+    await save(store, older, 2);
+    await save(store, finished, 3);
+    await save(store, newer, 4);
+
+    expect((await store.listSavedArtworks()).map((item) => item.sessionId)).toEqual([
+      'newer-art',
+      'finished-empty',
+      'older-art',
+    ]);
+
+    await store.deleteSession('newer-art');
+    expect((await store.listSavedArtworks()).map((item) => item.sessionId)).toEqual([
+      'finished-empty',
+      'older-art',
+    ]);
+  });
+
   it('keeps sessions apart and deletes only the one asked for', async () => {
     const a: SessionState = { ...draw(newSessionState(), stepIdAt(0)), sessionId: 'a' };
     const b: SessionState = { ...draw(newSessionState(), stepIdAt(0)), sessionId: 'b' };
