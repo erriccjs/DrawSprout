@@ -24,6 +24,9 @@ tablet and on a phone.
   reopens that picture's latest saved drawing; leaving a drawing returns to the
   screen without waiting on storage. Changing a tool or mode while the drawing
   opens keeps the saved strokes, and an empty session cannot replace them.
+  Karyaku, on the same screen, lists saved drawings (thumbnail without guides,
+  lesson name, date). Open one to continue or view it, save a PNG, or delete
+  it after a confirmation.
 - Canvas drawing with Pointer Events, pen / brush / eraser, undo and redo.
 - A full-bleed drawing screen. The paper fills the stage, and the tools, the
   brush-size slider, and the step card float at the edges instead of taking a

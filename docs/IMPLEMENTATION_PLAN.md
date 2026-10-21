@@ -24,7 +24,7 @@ Two cautions carried over from the PRD itself:
 | --- | --- | --- | --- |
 | **M1 — Vertical slice** | Tahap A prototype; section 16 phase 1 | One hand-authored cat lesson, end to end: canvas, pencil/finger modes, assistance modes, tool presets, undo/redo, manual navigation, colouring with optional boundaries, IndexedDB autosave/resume, PNG export | **Done** |
 | M2 — Pilot usability | section 16 phase 2 | Observe 5–8 children on real tablets, fix the main obstacles, close the AT-16..AT-22 device gap | Next |
-| M3 — MVP foundations | section 16 phase 3 | Lesson catalogue (~10 templates), local gallery, service worker and offline packaging, project backup import/export, audio instructions, automatic step completion, full error handling | **In progress** — the service worker, offline packaging, the safe update flow, and a ten-lesson catalogue are in the tree. Gallery, backup, audio, automatic completion, and checkpoint migration are still deferred |
+| M3 — MVP foundations | section 16 phase 3 | Lesson catalogue (~10 templates), local gallery, service worker and offline packaging, project backup import/export, audio instructions, automatic step completion, full error handling | **In progress** — the service worker, offline packaging, the safe update flow, a ten-lesson catalogue, and the local gallery are in the tree. Backup, audio, automatic completion, and checkpoint migration are still deferred |
 | M4 — Photo spike | section 16 phase 4 | Photo → illustration candidates, geometry extraction, step sequencing, 30-photo rubric evaluation | Deferred |
 | M5 — Beta integration | section 16 phase 5 | Backend, job queue, privacy and retention, parent area, device test matrix | Deferred |
 
@@ -53,7 +53,7 @@ real tablet.
 | FR-11 | Colouring with optional boundary assist | M1 | **Done** | Colour regions clip paint; the child can switch the boundary off and the clip is frozen per stroke. |
 | FR-12 | Free creation after the lesson | M3 | **Deferred** | The session state machine has no `free_creation` state yet. Reopening a finished artwork to keep drawing *is* supported. |
 | FR-13 | IndexedDB autosave and resume | M1 | **Done** | `src/persistence/indexeddb-store.ts`: strokes and checkpoint in one transaction; no localStorage anywhere. |
-| FR-14 | Local gallery and PNG export without hints | M1 **partial** | **Partial** | PNG export done and tested. A gallery of past artworks is M3. |
+| FR-14 | Local gallery and PNG export without hints | M1 **partial** | **Done** | PNG export and Karyaku, the gallery on the picture-choosing screen. Thumbnails and PNG files are painted from committed strokes only (D-63). |
 | FR-15 | Camera / photo picker | M4/M5 | **Deferred** | Out of scope by instruction. |
 | FR-16 | Photo transformation | M4/M5 | **Deferred** | Out of scope by instruction. |
 | FR-17 | Photo preview and approval | M4/M5 | **Deferred** | Out of scope by instruction. |
@@ -149,8 +149,8 @@ AT-16..AT-22 on both and record the results per device.
 ## 6. Follow-up work still open
 
 Noted here rather than treated as done. Items 2 and 7 started with the offline
-slice. The lesson catalogue of about ten templates is done (D-62). The rest
-are unchanged from milestone 1.
+slice. The lesson catalogue of about ten templates is done (D-62). Item 4,
+the local gallery, is done (D-63). The rest are unchanged from milestone 1.
 
 1. **Automatic step completion** (FR-10, AT-15) — the policy field exists and is
    off everywhere.
@@ -159,9 +159,10 @@ are unchanged from milestone 1.
    does not.
 3. **Project backup export/import** (FR-24, AT-20) — the stroke log and
    checkpoint are already a complete, serialisable project.
-4. **Local gallery** (FR-14 gallery half) — the picture-choosing screen
-   (`src/ui/LessonPicker.tsx`) reads `BUNDLED_LESSONS`; a gallery of past
-   artworks is what is missing.
+4. **Local gallery** (FR-14) — done (D-63). Karyaku, on the picture-choosing
+   screen, lists saved sessions from IndexedDB with a thumbnail, the lesson
+   name, and the date. A card can be opened, exported as PNG, or deleted
+   after confirmation. Thumbnails do not include guides.
 5. **Audio instructions** (FR-20).
 6. **Free-creation phase** (FR-12) and "repeat this step" / "start over"
    (PRD section 7 edit behaviours). Start-over exists only on the finish

@@ -819,3 +819,19 @@ The picture list is a grid (`auto-fill`, about 200px) inside a shell that
 scrolls when the list is taller than the screen. A portrait phone uses two
 columns. The drawing screen still locks the shell (`:has(> .pad)`), so this
 scroll does not change the paper, the dock, or the sample card.
+
+### D-63 — Karyaku lists saved drawings on the picture-choosing screen
+
+PNG export already omitted guides. There was no way to see, reopen, or
+delete an earlier drawing except by opening that lesson again, which only
+restored the latest session.
+
+**Choice.** `SessionStore.listSavedArtworks` returns checkpoints that have
+strokes, a later step, redo history, or a finished flag, newest first. An
+opening that was never drawn is not listed. Karyaku sits under the lesson
+grid on the picture-choosing screen. Each card shows a thumbnail painted by
+the same export path as the PNG (committed strokes and clip paths only — no
+guide parameter), the lesson title, and the date. *Buka* restores that
+session. *Simpan PNG* downloads it. *Hapus* asks "Hapus karya ini?" before
+`deleteSession`. The picture-choosing shell scrolls; the drawing screen does
+not, and the dock is unchanged.

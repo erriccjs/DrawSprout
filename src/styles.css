@@ -47,8 +47,9 @@ body {
   padding: 12px;
 }
 
-/* The picture list is taller than the viewport once there are about ten
-   lessons. Scroll the shell; the drawing screen stays locked (D-62). */
+/* The picture-choosing screen holds the ten-lesson grid and Karyaku, and
+   both can be taller than the viewport. Scroll the shell; the drawing
+   screen stays locked (D-62, D-63). */
 .shell:not(:has(> .pad)) {
   overflow: auto;
 }
@@ -145,6 +146,85 @@ body {
 
 .lesson-picker__subtitle {
   color: var(--muted);
+}
+
+.artwork-gallery {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px clamp(20px, 5vw, 64px) clamp(20px, 5vw, 64px);
+}
+
+.artwork-gallery h2 {
+  margin: 8px 0 0;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+}
+
+.artwork-gallery__empty {
+  color: var(--muted);
+}
+
+.artwork-gallery__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.artwork-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper);
+}
+
+.artwork-card__picture {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.artwork-card__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.artwork-card__title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.artwork-card__when {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.artwork-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.artwork-card__actions .button {
+  min-height: var(--tap);
+}
+
+.artwork-card__confirm {
+  display: grid;
+  gap: 8px;
+}
+
+.artwork-card__confirm p {
+  margin: 0;
+  font-weight: 700;
 }
 
 /* --- drawing pad ---------------------------------------------------------- */
@@ -1467,6 +1547,35 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 .shell[data-layout^='phone'] .lesson-picker__offline {
   margin: 4px 0 0;
   font-size: 0.875rem;
+}
+
+.shell[data-layout^='phone'] .artwork-gallery {
+  padding: 8px 2px 16px;
+}
+
+.shell[data-layout='phone-portrait'] .artwork-gallery h2 {
+  font-size: 1.35rem;
+}
+
+.shell[data-layout='phone-portrait'] .artwork-gallery__list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.shell[data-layout='phone-portrait'] .artwork-card {
+  padding: 10px;
+}
+
+.shell[data-layout='phone-portrait'] .artwork-card__title {
+  font-size: 1.05rem;
+}
+
+.shell[data-layout='phone-portrait'] .artwork-card__actions {
+  flex-direction: column;
+}
+
+.shell[data-layout='phone-portrait'] .artwork-card__actions .button {
+  width: 100%;
 }
 
 .shell[data-layout='phone-portrait'] .update-prompt {

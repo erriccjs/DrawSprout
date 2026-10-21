@@ -57,8 +57,16 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function lessonChoice(title: string): HTMLElement {
+  const choice = screen.getAllByRole('button', { name: new RegExp(title) })
+    .find((button) => button.classList.contains('lesson-picker__choice'));
+  if (!choice) throw new Error(`No lesson choice matching ${title}`);
+  return choice;
+}
+
 async function open(title: string) {
-  fireEvent.click(await screen.findByRole('button', { name: new RegExp(title) }));
+  await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+  fireEvent.click(lessonChoice(title));
   await screen.findByRole('heading', { name: new RegExp(title) });
   await act(async () => { await Promise.resolve(); });
 }
@@ -97,7 +105,7 @@ describe('lesson picker', () => {
     render(<App />);
     await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
     for (const lesson of lessonData.BUNDLED_LESSONS) {
-      const choice = screen.getByRole('button', { name: new RegExp(lesson.title) });
+      const choice = lessonChoice(lesson.title);
       expect(choice.querySelector('svg path')).not.toBeNull();
     }
     await open('Bunga');
@@ -184,7 +192,7 @@ describe('lesson picker', () => {
     await returnToPicker();
     fireEvent.click(await screen.findByRole('button', { name: 'Muat versi baru' }));
     expect(screen.getByText('Memuat versi baru…')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Kucing/ }).hasAttribute('disabled')).toBe(true);
+    expect(lessonChoice('Kucing').hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('heading', { name: 'Mau gambar apa hari ini?' })).toBeTruthy();
   });
 
@@ -194,7 +202,8 @@ describe('lesson picker', () => {
     await store.saveProgress({ checkpoint: toCheckpoint(finished, 1, 123), newStrokes: [] });
 
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: /Kucing/ }));
+    await screen.findByRole('heading', { name: 'Karyaku' });
+    fireEvent.click(lessonChoice('Kucing'));
     await screen.findByRole('heading', { name: 'Selesai! Ini karyamu.' });
     fireEvent.click(screen.getByRole('button', { name: 'Pilih gambar lain' }));
     await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
@@ -214,7 +223,8 @@ describe('lesson picker', () => {
     await store.saveProgress({ checkpoint: toCheckpoint(finished, 1, 123), newStrokes: [...finished.strokes] });
 
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: /Kucing/ }));
+    await screen.findByRole('heading', { name: 'Karyaku' });
+    fireEvent.click(lessonChoice('Kucing'));
     await screen.findByRole('heading', { name: 'Selesai! Ini karyamu.' });
     fireEvent.click(screen.getByRole('button', { name: /Gambar lagi/ }));
     expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
@@ -223,6 +233,37 @@ describe('lesson picker', () => {
     const saved = await store.loadSession('finished-cat');
     expect(saved?.checkpoint.currentStepIndex).toBe(finished.currentStepIndex);
     expect(saved?.strokes.map((stroke) => stroke.id)).toEqual(['saved-stroke']);
+  });
+
+  it('opens a saved artwork from Karyaku and deletes it after confirmation', async () => {
+    const cat = lessonData.CAT_LESSON;
+    const drawn = reduceSession(cat, createSession(cat, 'gallery-cat'), {
+      type: 'commit-stroke',
+      stroke: strokeInput(cat.steps[0]!.id, { id: 'gallery-stroke' }),
+    });
+    await store.saveProgress({
+      checkpoint: toCheckpoint(drawn, 1, Date.UTC(2026, 9, 21, 9, 5)),
+      newStrokes: [...drawn.strokes],
+    });
+
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Karyaku' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Kucing Duduk', level: 3 })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Buka Kucing Duduk' }));
+    await screen.findByRole('heading', { name: 'Kucing Duduk', level: 1 });
+    expect(screen.queryByRole('heading', { name: 'Karyaku' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Pilih gambar/ }));
+    await screen.findByRole('heading', { name: 'Karyaku' });
+    fireEvent.click(screen.getByRole('button', { name: 'Hapus Kucing Duduk' }));
+    expect(screen.getByText('Hapus karya ini?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Batal' }));
+    expect(await store.loadSession('gallery-cat')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hapus Kucing Duduk' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hapus' }));
+    expect(await screen.findByText('Belum ada karya tersimpan.')).toBeTruthy();
+    expect(await store.loadSession('gallery-cat')).toBeNull();
   });
 });
 
