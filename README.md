@@ -16,6 +16,7 @@ tablet and on a phone.
 - Product requirements: [`docs/PRD_Aplikasi_Belajar_Menggambar_Anak.md`](docs/PRD_Aplikasi_Belajar_Menggambar_Anak.md)
 - Requirement and acceptance-test mapping: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
 - Technical choices and assumptions: [`docs/DECISIONS.md`](docs/DECISIONS.md)
+- Real-device checklist for the two pilot tablets, written in Indonesian for the parent running the session: [`docs/DEVICE_TEST_CHECKLIST.md`](docs/DEVICE_TEST_CHECKLIST.md). Blank result sheets go in [`docs/device-results/`](docs/device-results/TEMPLATE.md).
 
 ## What works today
 
@@ -121,7 +122,7 @@ tablet and on a phone.
   tablet. `npm run dev` does not install the service worker.
 - No photo-to-lesson transformation, no backend, no accounts, no cloud sync.
 - No automatic "step finished" detection — the child presses *Lanjut*.
-- No gallery, project backup file, or audio.
+- No project backup file or audio.
 - No migration of a drawing saved under an older lesson or storage schema. A
   changed lesson still starts a new session. That is the rest of FR-25.
 

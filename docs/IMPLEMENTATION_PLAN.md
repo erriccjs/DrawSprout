@@ -146,6 +146,16 @@ Suggested next action, from PRD section 20 item 1: choose the two pilot devices,
 record model, OS and browser versions, then run AT-01..AT-07, AT-14 and
 AT-16..AT-22 on both and record the results per device.
 
+The parent-facing checklist for that run is
+[`DEVICE_TEST_CHECKLIST.md`](DEVICE_TEST_CHECKLIST.md) (Indonesian). It covers
+the two combinations in PRD section 21 (iPad + Safari and the Home Screen icon;
+Android tablet + Chrome and the installed PWA), the acceptance tests named
+above, and the recent playtest checks (edge gestures, fullscreen, resume toast,
+mode box, sample card, Karyaku, free drawing, repeat step, offline cold launch).
+Copy [`device-results/TEMPLATE.md`](device-results/TEMPLATE.md) to
+`device-results/<device>-<date>.md` for each device. Filling the checklist does
+not by itself pass the section 21 gate.
+
 ## 6. Follow-up work still open
 
 Noted here rather than treated as done. Items 2 and 7 started with the offline
