@@ -24,7 +24,7 @@ Two cautions carried over from the PRD itself:
 | --- | --- | --- | --- |
 | **M1 — Vertical slice** | Tahap A prototype; section 16 phase 1 | One hand-authored cat lesson, end to end: canvas, pencil/finger modes, assistance modes, tool presets, undo/redo, manual navigation, colouring with optional boundaries, IndexedDB autosave/resume, PNG export | **Done** |
 | M2 — Pilot usability | section 16 phase 2 | Observe 5–8 children on real tablets, fix the main obstacles, close the AT-16..AT-22 device gap | Next |
-| M3 — MVP foundations | section 16 phase 3 | Lesson catalogue (~10 templates), local gallery, service worker and offline packaging, project backup import/export, audio instructions, automatic step completion, full error handling | **In progress** — the service worker, offline packaging, the safe update flow, and free drawing after the last step are in the tree. Catalogue size, gallery, backup, audio, automatic completion, and checkpoint migration are still deferred |
+| M3 — MVP foundations | section 16 phase 3 | Lesson catalogue (~10 templates), local gallery, service worker and offline packaging, project backup import/export, audio instructions, automatic step completion, full error handling | **In progress** — the service worker, offline packaging, the safe update flow, a ten-lesson catalogue, and free drawing after the last step are in the tree. Gallery, backup, audio, automatic completion, and checkpoint migration are still deferred |
 | M4 — Photo spike | section 16 phase 4 | Photo → illustration candidates, geometry extraction, step sequencing, 30-photo rubric evaluation | Deferred |
 | M5 — Beta integration | section 16 phase 5 | Backend, job queue, privacy and retention, parent area, device test matrix | Deferred |
 
@@ -149,8 +149,9 @@ AT-16..AT-22 on both and record the results per device.
 ## 6. Follow-up work still open
 
 Noted here rather than treated as done. Items 2 and 7 started with the offline
-slice. Item 6, free creation and the in-lesson edit controls, is done (D-64).
-The rest are unchanged from milestone 1.
+slice. The lesson catalogue of about ten templates is done (D-62). Item 6,
+free creation and the in-lesson edit controls, is done (D-64). The rest are
+unchanged from milestone 1.
 
 1. **Automatic step completion** (FR-10, AT-15) — the policy field exists and is
    off everywhere.

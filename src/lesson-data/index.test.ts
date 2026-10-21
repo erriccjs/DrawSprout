@@ -6,6 +6,10 @@ import { FISH_LESSON } from './fish-lesson';
 import { SUN_LESSON } from './sun-lesson';
 import { TREE_LESSON } from './tree-lesson';
 import { BASKETBALL_LESSON } from './basketball-lesson';
+import { HOUSE_LESSON } from './house-lesson';
+import { CAR_LESSON } from './car-lesson';
+import { BUTTERFLY_LESSON } from './butterfly-lesson';
+import { STAR_LESSON } from './star-lesson';
 import { assertValidLessons } from './validate';
 
 describe('bundled lessons', () => {
@@ -17,13 +21,22 @@ describe('bundled lessons', () => {
       SUN_LESSON.id,
       TREE_LESSON.id,
       BASKETBALL_LESSON.id,
+      HOUSE_LESSON.id,
+      CAR_LESSON.id,
+      BUTTERFLY_LESSON.id,
+      STAR_LESSON.id,
     ]);
+    expect(BUNDLED_LESSONS).toHaveLength(10);
     expect(getLesson(CAT_LESSON.id).title).toBe(CAT_LESSON.title);
     expect(getLesson(FLOWER_LESSON.id).title).toBe(FLOWER_LESSON.title);
     expect(getLesson(FISH_LESSON.id).title).toBe(FISH_LESSON.title);
     expect(getLesson(SUN_LESSON.id).title).toBe(SUN_LESSON.title);
     expect(getLesson(TREE_LESSON.id).title).toBe(TREE_LESSON.title);
     expect(getLesson(BASKETBALL_LESSON.id).title).toBe('Bola Basket');
+    expect(getLesson(HOUSE_LESSON.id).title).toBe('Rumah');
+    expect(getLesson(CAR_LESSON.id).title).toBe('Mobil');
+    expect(getLesson(BUTTERFLY_LESSON.id).title).toBe('Kupu-kupu');
+    expect(getLesson(STAR_LESSON.id).title).toBe('Bintang');
   });
 
   it('ships only packages the picker can render in full', () => {
@@ -63,6 +76,37 @@ describe('bundled lessons', () => {
       'seam-right',
     ]);
     expect(() => assertValidLessons([BASKETBALL_LESSON])).not.toThrow();
+  });
+
+  it('teaches the new beginner pictures as outline steps, then colour', () => {
+    const added = [HOUSE_LESSON, CAR_LESSON, BUTTERFLY_LESSON, STAR_LESSON];
+    for (const lesson of added) {
+      expect(lesson.coordinateSpace).toEqual({ width: 1000, height: 750 });
+      expect(lesson.targetPreview.paths.length).toBeGreaterThan(0);
+      const firstColor = lesson.steps.findIndex((step) => step.phase === 'color');
+      expect(firstColor).toBeGreaterThan(0);
+      expect(lesson.steps.slice(0, firstColor).every((step) => step.phase !== 'color')).toBe(true);
+      expect(lesson.steps.slice(firstColor).every((step) => step.phase === 'color')).toBe(true);
+      expect(lesson.steps.every((step) => step.completionPolicy.automaticEnabled === false)).toBe(true);
+      expect(lesson.steps.every((step) => step.instruction.trim().length > 0)).toBe(true);
+      const guideIds = lesson.steps.flatMap((step) => step.guidePaths.map((path) => path.id));
+      expect(new Set(guideIds).size).toBe(guideIds.length);
+      for (const step of lesson.steps.filter((item) => item.phase === 'color')) {
+        expect(step.colorRegionIds.length).toBeGreaterThan(0);
+        expect(step.toolPreset.tool).toBe('brush');
+      }
+    }
+    expect(HOUSE_LESSON.steps[0]?.instruction).toMatch(/dinding/i);
+    expect(CAR_LESSON.steps.map((step) => step.id)).toContain('wheels-outline');
+    expect(BUTTERFLY_LESSON.colorRegions.map((region) => region.id)).toEqual([
+      'wing-upper-left',
+      'wing-upper-right',
+      'wing-lower-left',
+      'wing-lower-right',
+      'body',
+    ]);
+    expect(STAR_LESSON.steps.map((step) => step.phase)).toEqual(['outline', 'detail', 'color']);
+    expect(() => assertValidLessons(added)).not.toThrow();
   });
 
   it('refuses a lesson id nothing ships', () => {
