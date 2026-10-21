@@ -210,11 +210,12 @@ send `quality=medium` on OpenAI. *Lebih sederhana* stays on `gpt-image-1.5` at
 Lessons follow the traced outline of each named part, and interior lines stay
 on their own part instead of one box around the whole subject (D-71). A circle
 or oval is added first only when it fits that part; it is a light dashed guide
-and it is left out of the finished ink (D-70, D-72). Each colour step fills
-only that part, on top of the colours already painted, and background colours
-such as grass are not used. White fills as white with the outline still
-visible. The illustration keeps the photo's framing and is flattened onto
-white. OpenAI stays the default image model.
+and it is left out of the finished ink (D-70, D-72). The illustration is one
+flat colouring-book page. Colour steps come from the closed regions of that
+page, largest first, not from the photo background (D-73). White fills as white
+with the outline still visible. Drawing steps stay within about seven, and the
+first step names the subject without adjectives. The illustration keeps the
+photo's framing and is flattened onto white. OpenAI stays the default image model.
 
 ### Evaluation
 
@@ -249,8 +250,8 @@ made. Optional `PHOTO_EVAL_VARIANT` is `default`, `faithful`, or `simple`.
 `--compare` runs OpenAI and Kontext on one contact sheet and stops if either
 provider fails. `flux-1.1-pro` is unsuitable (it returns near-photos) and is
 not part of compare. Kontext uses its own short prompt and retries HTTP 429.
-The idempotency key for this revision ends in `v6`, so a rerun after the
-colour-fill change is a new paid job. `REPLICATE_API_TOKEN` is read only when
+The idempotency key for this revision ends in `v7`, so a rerun after the
+flat-colour change is a new paid job. `REPLICATE_API_TOKEN` is read only when
 `REPLICATE_API_KEY` is unset.
 
 CC0 samples, with credits, are in `scripts/photo-eval/samples/` (`LICENSES.md`).

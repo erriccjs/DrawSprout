@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { findLessonProblems } from '../lesson-data/validate';
 import { compareLessonToInk, renderCumulativeStep, renderLessonPreview, REVIEW_DICE_BELOW } from './compare';
 import { colourHex, indonesianColourName } from './colors';
+import { flatColourRegions } from './flat-colour';
 import { buildPhotoLesson, isGenericInstruction, lessonPieces, OUTLINE_COVERAGE_MIN, shouldRedraw, uniquifyInstructions } from './lesson-build';
 import type { DetectedPart } from './parts';
 import { decodePng, encodePng, type RgbaImage } from './png';
@@ -230,8 +231,9 @@ describe('named traced parts', () => {
     const drawing = built.lesson.steps.filter((step) => step.phase !== 'color');
     const colors = built.lesson.steps.filter((step) => step.phase === 'color');
     expect(built.builder).toBe('parts');
-    expect(drawing.length).toBeGreaterThan(6);
-    expect(built.lesson.steps.length).toBeGreaterThan(8);
+    expect(drawing.length).toBeGreaterThanOrEqual(3);
+    expect(drawing.length).toBeLessThanOrEqual(7);
+    expect(built.reviewReason ?? '').not.toContain('Terlalu banyak langkah menggambar');
     expect(new Set(drawing.map((step) => step.instruction)).size).toBe(drawing.length);
     expect(colors.length).toBeGreaterThanOrEqual(2);
     expect(colors.every((step) => /dengan (merah|biru|oranye)/.test(step.instruction))).toBe(true);
@@ -295,12 +297,12 @@ describe('named traced parts', () => {
     expect(built.reviewReason).toContain('Terlalu sedikit langkah menggambar');
   });
 
-  it('assigns an interior piece by id even when its box misses the ink', () => {
+  it('ignores a piece id when the ink sits outside that part', () => {
     const contours = [square(80, 60, 420), square(160, 140, 70)];
     const pieces = lessonPieces(contours, 1000, 750);
     const eye = pieces[1];
     if (!eye) throw new Error('expected an interior piece');
-    const built = buildPhotoLesson({
+    const missed = buildPhotoLesson({
       id: 'photo-eye',
       title: 'Wajah',
       targetHash: 'abcdef1234567890',
@@ -314,19 +316,34 @@ describe('named traced parts', () => {
         { ...part('mata', false, 'hitam', 10, 10, 40, 40), pieceIds: [eye.id] },
       ],
     });
-    const outline = built.lesson.steps.find((step) => step.id === 'outline-1');
+    const outline = missed.lesson.steps.find((step) => step.id === 'outline-1');
     expect(outline?.guidePaths).toHaveLength(1);
     expect(outline?.instruction).toBe('Gambar garis luar wajah.');
-    expect(built.lesson.steps.some((step) => step.instruction === 'Gambar mata.')).toBe(true);
-    expect(built.unnamedInteriors).toBe(0);
+    expect(missed.lesson.steps.some((step) => step.instruction === 'Gambar mata.')).toBe(false);
+    expect(missed.unnamedInteriors).toBeGreaterThan(0);
+    const placed = buildPhotoLesson({
+      id: 'photo-eye-placed',
+      title: 'Wajah',
+      targetHash: 'abcdef1234567890',
+      contours,
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [
+        { ...part('wajah', false, 'oranye'), ...cover(80, 60, 420, 420), pieceIds: [0] },
+        { ...part('mata', false, 'hitam'), ...cover(160, 140, 70, 70), pieceIds: [eye.id] },
+      ],
+    });
+    expect(placed.lesson.steps.some((step) => step.instruction === 'Gambar mata.')).toBe(true);
+    expect(placed.unnamedInteriors).toBe(0);
   });
 
-  it('names white and dark brown from the subject mask', () => {
-    const cup = painted(40, 30, (x, y) => {
-      const nx = x / 39;
-      const ny = y / 29;
-      if (nx > 0.42 && nx < 0.62 && ny > 0.42 && ny < 0.62) return [72, 42, 24];
-      if (nx > 0.22 && nx < 0.82 && ny > 0.28 && ny < 0.82) return [236, 234, 230];
+  it('names white and dark brown from the flat illustration', () => {
+    const cup = painted(48, 36, (x, y) => {
+      const outline = x >= 6 && x < 42 && y >= 4 && y < 32 && (x < 8 || x >= 40 || y < 6 || y >= 30);
+      if (outline) return [0, 0, 0];
+      if (x >= 16 && x < 32 && y >= 14 && y < 26) return [72, 42, 24];
       return [255, 255, 255];
     });
     const built = buildPhotoLesson({
@@ -344,18 +361,32 @@ describe('named traced parts', () => {
       ],
     });
     const colours = built.lesson.steps.filter((step) => step.phase === 'color').map((step) => step.instruction);
+    const illustrated = new Set(flatColourRegions(cup).map((region) => region.name));
+    expect(illustrated.has('putih')).toBe(true);
+    expect(illustrated.has('cokelat tua')).toBe(true);
     expect(colours.some((text) => text.includes('putih'))).toBe(true);
-    expect(colours.some((text) => text.includes('cokelat'))).toBe(true);
+    expect(colours.some((text) => text.includes('cokelat tua'))).toBe(true);
     expect(colours.join(' ')).not.toMatch(/abu-abu|merah muda/);
+    for (const text of colours) {
+      const word = text.match(/dengan (.+)\.$/)?.[1] ?? '';
+      expect(illustrated.has(word)).toBe(true);
+    }
     expect(built.lesson.steps.some((step) => isGenericInstruction(step.instruction))).toBe(false);
     expect(built.lesson.steps.find((step) => step.id === 'outline-1')?.guidePaths).toHaveLength(1);
     expect(built.lesson.steps.some((step) => step.instruction === 'Gambar kopi.')).toBe(true);
     const white = built.lesson.steps.find((step) => step.instruction.includes('putih'));
     expect(white?.toolPreset.color).toBe('#ffffff');
-    const paintedCup = renderCumulativeStep(built.lesson, built.lesson.steps.length, 200);
-    expect(windowHas(paintedCup, 51, 44, 4, (red, green, blue) => red > 250 && green > 250 && blue > 250)).toBe(true);
-    expect(windowHas(paintedCup, 87, 74, 6, (red, green, blue) => red > green + 20 && red > blue + 20 && green < 90)).toBe(true);
-    expect(nearInk(paintedCup, 93, 37, 8)).toBe(true);
+    const grey = { r: 200, g: 200, b: 200 };
+    const drawingCount = built.lesson.steps.findIndex((step) => step.phase === 'color');
+    let previous = renderCumulativeStep(built.lesson, drawingCount, 180, grey);
+    for (let index = drawingCount; index < built.lesson.steps.length; index += 1) {
+      const next = renderCumulativeStep(built.lesson, index + 1, 180, grey);
+      expect(changedPixels(previous, next)).toBeGreaterThanOrEqual(20);
+      previous = next;
+    }
+    expect(countTone(previous, (red, green, blue) => red > 245 && green > 245 && blue > 245)).toBeGreaterThan(20);
+    expect(countTone(previous, (red, green, blue) => red > 50 && red < 110 && green < 70 && blue < 50)).toBeGreaterThan(10);
+    expect(countTone(previous, (red, green, blue) => red < 80 && green < 80 && blue < 80)).toBeGreaterThan(8);
   });
 
   it('fills each part and keeps the earlier colour', () => {
@@ -386,9 +417,9 @@ describe('named traced parts', () => {
     expect(colours.map((step) => step.instruction).join(' ')).not.toMatch(/hijau|kuning/);
     expect(colours.some((step) => step.instruction.includes('abu-abu'))).toBe(true);
     expect(colours.some((step) => step.instruction.includes('merah'))).toBe(true);
-    const frame = renderCumulativeStep(built.lesson, built.lesson.steps.length, 200);
-    expect(windowHas(frame, 56, 48, 5, (red, green, _blue) => Math.abs(red - green) < 18 && red > 90 && red < 190)).toBe(true);
-    expect(windowHas(frame, 96, 68, 5, (red, green, blue) => red > 150 && green < 80 && blue < 80)).toBe(true);
+    const frame = renderCumulativeStep(built.lesson, built.lesson.steps.length, 180);
+    expect(countTone(frame, (red, green, _blue) => Math.abs(red - green) < 18 && red > 90 && red < 190)).toBeGreaterThan(20);
+    expect(countTone(frame, (red, green, blue) => red > 150 && green < 80 && blue < 80)).toBeGreaterThan(10);
   });
 
   it('does not double garis luar and does not say dua for one part or five petals', () => {
@@ -541,12 +572,11 @@ describe('named traced parts', () => {
         { ...part('kalung', false, 'ungu'), ...cover(20, 20, 40, 40), pieceIds: [] },
       ],
     });
-    expect(foreign.lesson.steps.some((step) => step.instruction.includes('ungu'))).toBe(true);
-    expect(foreign.needsReview).toBe(true);
-    expect(foreign.reviewReason).toContain('Ada warna yang tidak ada pada subjek');
+    expect(foreign.lesson.steps.some((step) => step.instruction.includes('ungu'))).toBe(false);
+    expect(foreign.reviewReason ?? '').not.toContain('tidak ada pada gambar');
   });
 
-  it('flags a single colour step when the subject has two colours', () => {
+  it('keeps both colours when the illustration is split red and blue', () => {
     const split = painted(20, 10, (x) => (x < 10 ? [200, 30, 30] : [30, 40, 200]));
     const built = buildPhotoLesson({
       id: 'photo-split-colour',
@@ -559,9 +589,80 @@ describe('named traced parts', () => {
       palette: ['#cc3333'],
       parts: [{ ...part('badan', false, 'merah'), ...cover(40, 80, 200, 200) }],
     });
-    expect(built.lesson.steps.filter((step) => step.phase === 'color').length).toBe(1);
+    const colours = built.lesson.steps.filter((step) => step.phase === 'color').map((step) => step.instruction);
+    expect(colours).toHaveLength(2);
+    expect(colours.join(' ')).toMatch(/merah/);
+    expect(colours.join(' ')).toMatch(/biru/);
+    expect(built.reviewReason ?? '').not.toContain('Warna subjek lebih dari satu');
+  });
+
+  it('uses the subject noun without adjectives and merges one part', () => {
+    const dog = buildPhotoLesson({
+      id: 'photo-dog-name',
+      title: 'Anjing',
+      targetHash: 'abcdef1234567890',
+      contours: [square(80, 80, 500)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [part('anjing hitam lucu', false, 'hitam')],
+    });
+    expect(dog.lesson.steps.find((step) => step.id === 'outline-1')?.instruction).toBe('Gambar garis luar anjing.');
+    const flower = buildPhotoLesson({
+      id: 'photo-flower-plain',
+      title: 'Bunga',
+      targetHash: 'abcdef1234567890',
+      contours: [square(80, 80, 400)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [part('bunga putih merah', false, 'putih')],
+    });
+    expect(flower.lesson.steps.find((step) => step.id === 'outline-1')?.instruction).toBe('Gambar garis luar bunga.');
+    const wheels = buildPhotoLesson({
+      id: 'photo-wheels',
+      title: 'Mobil',
+      targetHash: 'abcdef1234567890',
+      contours: [square(40, 40, 700), square(80, 400, 80), square(600, 400, 80)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [
+        { ...part('mobil', false, 'abu-abu'), ...cover(40, 40, 700, 500), pieceIds: [0] },
+        { ...part('roda', true, 'hitam'), ...cover(80, 400, 80, 80), pieceIds: [1], count: 2 },
+        { ...part('roda', true, 'hitam'), ...cover(600, 400, 80, 80), pieceIds: [2], count: 2 },
+      ],
+    });
+    const wheelSteps = wheels.lesson.steps.filter((step) => step.instruction.includes('roda'));
+    expect(wheelSteps).toHaveLength(1);
+    expect(wheelSteps[0]?.instruction).toBe('Tambahkan dua roda.');
+    expect(wheelSteps[0]?.guidePaths).toHaveLength(2);
+  });
+
+  it('drops a step that retraces ink already drawn', () => {
+    const built = buildPhotoLesson({
+      id: 'photo-retrace',
+      title: 'Wajah',
+      targetHash: 'abcdef1234567890',
+      contours: [
+        square(80, 60, 420),
+        { closed: false, points: [{ x: 80, y: 60 }, { x: 290, y: 60 }, { x: 500, y: 60 }] },
+      ],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [
+        { ...part('wajah', false, 'oranye'), ...cover(80, 60, 420, 420), pieceIds: [0] },
+        { ...part('kumis', false, 'oranye'), ...cover(80, 40, 420, 80), pieceIds: [1] },
+      ],
+    });
+    expect(built.lesson.steps.some((step) => step.instruction.includes('kumis'))).toBe(false);
     expect(built.needsReview).toBe(true);
-    expect(built.reviewReason).toContain('Warna subjek lebih dari satu');
+    expect(built.reviewReason).toContain('tidak menambah garis');
   });
 });
 
@@ -620,31 +721,23 @@ function part(name: string, pair: boolean, colorName: string, x = 0, y = 0, widt
   return { name, pair, x, y, width, height, points: [], colorName, pieceIds: [], count: 0 };
 }
 
+function changedPixels(left: RgbaImage, right: RgbaImage): number {
+  let count = 0;
+  const length = Math.min(left.data.length, right.data.length);
+  for (let index = 0; index < length; index += 4) {
+    if ((left.data[index] ?? 0) !== (right.data[index] ?? 0)) count += 1;
+    else if ((left.data[index + 1] ?? 0) !== (right.data[index + 1] ?? 0)) count += 1;
+    else if ((left.data[index + 2] ?? 0) !== (right.data[index + 2] ?? 0)) count += 1;
+  }
+  return count;
+}
+
 function countTone(image: RgbaImage, match: (red: number, green: number, blue: number) => boolean): number {
   let count = 0;
   for (let index = 0; index < image.data.length; index += 4) {
     if (match(image.data[index] ?? 0, image.data[index + 1] ?? 0, image.data[index + 2] ?? 0)) count += 1;
   }
   return count;
-}
-
-function windowHas(
-  image: RgbaImage,
-  x: number,
-  y: number,
-  radius: number,
-  match: (red: number, green: number, blue: number) => boolean,
-): boolean {
-  for (let dy = -radius; dy <= radius; dy += 1) {
-    for (let dx = -radius; dx <= radius; dx += 1) {
-      const sx = x + dx;
-      const sy = y + dy;
-      if (sx < 0 || sy < 0 || sx >= image.width || sy >= image.height) continue;
-      const index = (sy * image.width + sx) * 4;
-      if (match(image.data[index] ?? 0, image.data[index + 1] ?? 0, image.data[index + 2] ?? 0)) return true;
-    }
-  }
-  return false;
 }
 
 function cover(x: number, y: number, w: number, h: number): { x: number; y: number; width: number; height: number } {

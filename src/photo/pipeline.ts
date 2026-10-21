@@ -7,6 +7,7 @@
 
 import { compareLessonToInk } from './compare';
 import { dominantColors } from './colors';
+import { readFlatIllustration, type FlatRegion } from './flat-colour';
 import { downscaleLongEdge, flattenOnWhite } from './image-ops';
 import { buildPhotoLesson, lessonPieces, outlineCoverage, sanitizeTitle, shouldRedraw } from './lesson-build';
 import { sumUsage, type ImageEditor, type InstructionResult, type InstructionWriter, type TokenUsage } from './openai';
@@ -51,6 +52,7 @@ interface TracedEdit {
   readonly png: Uint8Array;
   readonly targetHash: string;
   readonly contours: readonly Contour[];
+  readonly flatRegions: readonly FlatRegion[];
   readonly usage: TokenUsage | null;
 }
 
@@ -233,18 +235,22 @@ function lessonFrom(
     sourceHeight: traced.illustration.height,
     photo,
     palette,
+    flatRegions: traced.flatRegions,
     ...(parts && parts.length > 0 ? { parts } : {}),
   });
 }
 
 async function traceEdited(png: Uint8Array): Promise<TracedEdit> {
   const illustration = flattenOnWhite(await decodePng(png));
+  const flat = readFlatIllustration(illustration);
   const encoded = await encodePng(illustration);
+  const traced = traceInk(flat.lineArt);
   return {
     illustration,
     png: encoded,
     targetHash: await sha256Hex(encoded),
-    contours: traceInk(illustration),
+    contours: traced.length > 0 ? traced : traceInk(illustration),
+    flatRegions: flat.regions,
     usage: null,
   };
 }

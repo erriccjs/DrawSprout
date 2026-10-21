@@ -93,7 +93,7 @@ export function rgbDistance(left: Rgb, right: Rgb): number {
   return Math.hypot(left.r - right.r, left.g - right.g, left.b - right.b);
 }
 
-const COLOUR_WORDS = ['merah muda', 'abu-abu', 'merah', 'oranye', 'jingga', 'kuning', 'hijau', 'biru', 'ungu', 'cokelat', 'coklat', 'hitam', 'putih', 'krem', 'pink'] as const;
+const COLOUR_WORDS = ['merah muda', 'abu-abu', 'merah', 'oranye', 'jingga', 'kuning', 'hijau', 'biru', 'ungu', 'cokelat tua', 'cokelat', 'coklat', 'hitam', 'putih', 'krem', 'pink'] as const;
 
 /** A colour word the model may use. Unknown text returns null. */
 export function knownColourName(text: string): string | null {
@@ -257,6 +257,7 @@ const COLOUR_HEX: Readonly<Record<string, string>> = {
   ungu: '#7a4bb5',
   'merah muda': '#e07098',
   cokelat: '#8a5a32',
+  'cokelat tua': '#4a2c16',
   hitam: '#2a2a2a',
   'abu-abu': '#8a8a8a',
   putih: '#ffffff',

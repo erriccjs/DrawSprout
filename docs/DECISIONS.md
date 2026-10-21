@@ -1225,4 +1225,18 @@ word, when a construction guide is in the final drawing, or when "tambahkan
 dua" does not match two lines. A parent can still approve. These flags do not
 ask for another illustration. This is not the section 8 gate.
 
-The eval idempotency key ends in `v6`. The gate is still not claimed.
+The eval idempotency key ended in `v6` for that colour-fill run. D-73 bumps it to `v7`. The gate is still not claimed.
+
+### D-73 — Colours come from one flat illustration
+
+The v6 run (commit 4759f94, OpenAI only) kept the drawing fixes: framing stayed a close-up, the construction circle was gone from the finished ink, collar, tongue, and seat were named, and the doubled "garis luar" and false "dua" were gone. Colour regressed. Four of five lessons rendered no fill pixels (only the car wheels filled). Names were still wrong (blue whiskers, a yellow collar on a red one, blue and green petals on a white flower, grey coffee), and the main body colour was missing. The review gate flagged none of the five. A rubric preview scored colour 1–2. This is not a pass. `claimedPass` stays false.
+
+**Colour.** The image edit now asks for one colouring-book page: bold black outlines, flat fills, no shading, and the photo's true colours. Line art is the dark outlines of that page, then thinned and traced as before. Colour regions are the enclosed areas between those outlines. Small gaps are closed first, then the page background is flooded away, so a region is closed by construction and the background cannot leak in. A bulky near-black body is hollowed into a `hitam` fill with its outline kept. Each region's colour is the Lab-nearest name in the Indonesian palette, including `cokelat tua` for dark coffee. `putih` fills as `#ffffff`, and the outline is drawn after the fill. One step per colour, largest area first, so later fills sit on top. A region is named from the part box that contains a pixel of that region.
+
+**Drawing.** Steps that add no new ink are dropped, and a step that only retraces existing ink is flagged. A piece id is used only when the ink also sits inside that part, so an eye id cannot draw a collar. Pieces of the same part are one step. Drawing steps, including the outline and a construction guide, stay at seven or fewer. Step 1 names the subject without adjectives: "anjing", not "anjing hitam lucu".
+
+**Review.** `needsReview` is also set when a colour step would not fill, when a named colour is not in the illustration, when a step adds no line, or when there are still more than seven drawing steps. A parent can still approve. These flags do not ask for another illustration. This is not the section 8 gate.
+
+**Prompt.** The barcode line now also refuses a QR code, a price sticker, and a row of vertical bars, and tells the model to leave that area blank. The OpenAI prompt still refuses extra vehicles and wheels. The Kontext prompt stays positive and does not name them.
+
+The eval idempotency key ends in `v7`. The gate is still not claimed.

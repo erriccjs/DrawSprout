@@ -122,11 +122,11 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                 {
                   type: 'text',
                   text: [
-                    'Gambar pertama adalah foto. Gambar kedua adalah gambar garis yang dibuat dari foto itu.',
-                    'sameSubject true hanya bila gambar garis adalah benda yang sama dengan foto. Kucing yang digambar menjadi mobil adalah false.',
-                    'subject adalah kata benda bahasa Indonesia untuk benda di foto (kucing, cangkir, bunga).',
-                    'title pendek, 2 sampai 4 kata.',
-                    'parts adalah bagian yang benar-benar terlihat, dari yang terbesar. name adalah kata benda bahasa Indonesia (kepala, badan, telinga, gagang, kelopak), bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
+                    'Gambar pertama adalah foto. Gambar kedua adalah halaman mewarnai: garis hitam tebal dan warna datar.',
+                    'sameSubject true hanya bila gambar itu adalah benda yang sama dengan foto. Kucing yang digambar menjadi mobil adalah false.',
+                    'subject adalah satu kata benda bahasa Indonesia untuk benda di foto (kucing, cangkir, bunga), tanpa kata sifat.',
+                    'title pendek, 2 sampai 4 kata, tanpa kata sifat.',
+                    'parts adalah bagian yang benar-benar terlihat, dari yang terbesar. name adalah satu kata benda saja, tanpa kata sifat dan tanpa warna: "anjing", bukan "anjing hitam lucu"; "bunga", bukan "bunga putih merah". Bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
                     'Jangan memakai "bagian berikutnya", "bentuk utama", "buih", "latar belakang", "wajah anak", "barcode", atau "ventilasi".',
                     'Jangan memasukkan setiap potongan ke dalam satu kotak.',
                     'Sebut bagian yang terlihat: garis luar, telinga, mata, hidung, kumis, kaki, ekor, roda, gagang, kelopak, tengah bunga, kopi, kalung, lidah, kursi.',
@@ -135,7 +135,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                     'pair true bila satu langkah menggambar sepasang simetris (dua telinga, dua mata, dua roda). pair true boleh berisi dua pieceIds.',
                     'count adalah jumlah yang digambar dalam satu langkah: 1 untuk gagang, permukaan kopi, kalung, atau lidah; 2 hanya untuk sepasang yang memang dua (dua telinga, dua mata, dua roda). Kelopak yang banyak bukan 2.',
                     'x, y, width, height adalah kotak dalam ruang 1000 kali 750. points adalah polygon bagian itu dalam ruang yang sama, paling banyak 8 titik. Kotak harus ketat di bagian itu, bukan seluruh gambar.',
-                    'colorName adalah warna bagian itu pada foto: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, hitam, abu-abu, atau putih. Putih untuk benda yang putih, bukan abu-abu.',
+                    'colorName adalah warna bagian itu pada gambar: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, cokelat tua, hitam, abu-abu, atau putih. Putih untuk benda yang putih, bukan abu-abu. Cokelat tua untuk kopi yang gelap.',
                     'Jangan menambah bagian yang tidak ada.',
                     input.relabel === true
                       ? 'Beberapa potongan dalam belum punya nama sendiri. Beri tiap potongan dalam sebuah bagian yang lebih kecil dari garis luar.'

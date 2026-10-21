@@ -44,11 +44,21 @@ export function compareLessonToInk(lesson: LessonPackage, ink: RgbaImage): Rende
 }
 
 /** Lines from the first `count` steps only, so a contact sheet can show the lesson building up. */
-export function renderCumulativeStep(lesson: LessonPackage, count: number, width: number): RgbaImage {
+export function renderCumulativeStep(
+  lesson: LessonPackage,
+  count: number,
+  width: number,
+  base: { r: number; g: number; b: number } = { r: 255, g: 255, b: 255 },
+): RgbaImage {
   const height = Math.max(1, Math.round(width * (LESSON_HEIGHT / LESSON_WIDTH)));
   const steps = lesson.steps.slice(0, Math.max(0, count));
   const data = new Uint8Array(width * height * 4);
-  data.fill(255);
+  for (let index = 0; index < data.length; index += 4) {
+    data[index] = base.r;
+    data[index + 1] = base.g;
+    data[index + 2] = base.b;
+    data[index + 3] = 255;
+  }
   for (const step of steps) {
     if (step.phase !== 'color') continue;
     for (const id of step.colorRegionIds) {

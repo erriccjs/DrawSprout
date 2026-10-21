@@ -4,12 +4,13 @@
  * A circle or oval is added first only when it fits that outline. When the
  * vision model names nothing usable, the lesson falls back to one named
  * outline and drops unnamed scraps instead of printing a generic sentence.
- * See D-70, D-71, and D-72.
+ * See D-70, D-71, D-72, and D-73.
  */
 
 import { assertValidLessons } from '../lesson-data/validate';
 import { LESSON_SCHEMA_VERSION, type ColorRegion, type GuidePath, type LessonPackage, type LessonStep } from '../lesson-data/schema';
-import { backgroundColours, colourHex, coloursInRegion, knownColourName, photoIsBlankPlate, rgbToHex, type ColourCluster, type Rgb } from './colors';
+import { knownColourName } from './colors';
+import { flatColourRegions, type FlatRegion } from './flat-colour';
 import { cleanPartName, type DetectedPart } from './parts';
 import type { RgbaImage } from './png';
 import type { Contour, Point } from './trace';
@@ -22,6 +23,11 @@ export const OUTLINE_COVERAGE_MIN = 0.6;
 export const CONSTRUCTION_IOU_MIN = 0.9;
 /** A box larger than this fraction of the subject cannot claim an interior piece. */
 const HUGE_PART = 0.72;
+/** Outline, construction, and details together. Extra details are merged away. */
+const MAX_DRAWING_STEPS = 7;
+const MASK_W = 160;
+const MASK_H = 120;
+const MIN_NEW_INK = 10;
 const CONTAIN_MIN = 0.45;
 
 export interface BuiltLesson {
@@ -68,6 +74,8 @@ export function buildPhotoLesson(input: {
   /** Used by the traced fallback when a sample has no colour of its own. */
   readonly palette: readonly string[];
   readonly parts?: readonly DetectedPart[];
+  /** Closed colour regions in the same pixel space as `contours`. */
+  readonly flatRegions?: readonly FlatRegion[];
 }): BuiltLesson {
   const mapped = input.contours
     .map((contour) => mapContour(contour, input.sourceWidth, input.sourceHeight))
@@ -144,6 +152,7 @@ function buildFromParts(input: {
   readonly sourceWidth: number;
   readonly sourceHeight: number;
   readonly parts?: readonly DetectedPart[];
+  readonly flatRegions?: readonly FlatRegion[];
 }, mapped: readonly MappedContour[]): BuiltLesson | null {
   const parts = (input.parts ?? []).filter((part) => cleanPartName(part.name) === part.name);
   if (parts.length === 0) return null;
@@ -154,9 +163,9 @@ function buildFromParts(input: {
   const outlinePart = outlineOwner(main, parts);
   const outlineName = outlinePart?.name ?? subjectNoun(input.title);
   if (!outlineName) return null;
-  const spokenOutline = bareName(outlineName) || outlineName;
+  const spokenOutline = plainNoun(bareName(outlineName)) || plainNoun(outlineName) || outlineName;
 
-  const groups = new Map<DetectedPart, MappedContour[]>();
+  const bundles = new Map<string, DetailBundle>();
   let unnamed = 0;
   for (const contour of kept) {
     if (contour.id === main.id) continue;
@@ -165,9 +174,12 @@ function buildFromParts(input: {
       unnamed += 1;
       continue;
     }
-    const list = groups.get(owner) ?? [];
-    list.push(contour);
-    groups.set(owner, list);
+    const name = plainNoun(bareName(owner.name)) || owner.name;
+    const bundle = bundles.get(name) ?? { name, pair: false, count: 0, contours: [] };
+    bundle.pair = bundle.pair || owner.pair;
+    if (owner.count > bundle.count) bundle.count = owner.count;
+    bundle.contours.push(contour);
+    bundles.set(name, bundle);
   }
 
   const steps: LessonStep[] = [];
@@ -182,38 +194,22 @@ function buildFromParts(input: {
   preview.push(...outlineGuides);
   steps.push(lineStep('outline-1', 'outline', outlineInstruction(outlineName, input.title), outlineGuides));
 
-  const details = [...groups.entries()].sort((left, right) => areaOf(right[0]) - areaOf(left[0]));
-  details.forEach(([part, contours], index) => {
+  const fixed = (fit ? 1 : 0) + 1;
+  const pruned = pruneDetails([...bundles.values()], [main], Math.max(0, MAX_DRAWING_STEPS - fixed));
+  pruned.kept.forEach((bundle, index) => {
     const id = `detail-${index + 1}`;
-    const inks = uniqueContours(contours);
+    const inks = uniqueContours(bundle.contours);
     if (inks.length === 0) return;
     const guides = guidesFor(id, inks);
     preview.push(...guides);
-    steps.push(lineStep(id, 'detail', detailInstruction(part, inks), guides));
+    steps.push(lineStep(id, 'detail', detailInstruction(bundle, inks), guides));
   });
 
   const regions: ColorRegion[] = [];
-  colourGroups(parts, outlinePart, groups, main, input.photo, input.sourceWidth, input.sourceHeight, subject).forEach((group, index) => {
-    const id = `color-${index + 1}`;
-    const regionIds: string[] = [];
-    group.paths.forEach((path, pathIndex) => {
-      const regionId = `${id}-${pathIndex + 1}`;
-      regionIds.push(regionId);
-      regions.push({ id: regionId, label: group.names[pathIndex] ?? group.names[0] ?? group.colour, d: path, suggestedColor: group.hex });
-    });
-    if (regionIds.length === 0) return;
-    steps.push({
-      id,
-      phase: 'color',
-      instruction: colourInstruction(group.names, group.colour),
-      guidePaths: [],
-      colorRegionIds: regionIds,
-      toolPreset: { tool: 'brush', color: group.hex, widthViewbox: 28 },
-      completionPolicy: { manualAllowed: true, automaticEnabled: false },
-    });
-  });
-
-  return finish(input, steps, regions, preview, mapped, coverage, 'parts', main, unnamed);
+  const colour = appendFlatColours(steps, regions, input, parts, spokenOutline, subject);
+  const notes = [...colour.notes];
+  if (pruned.invisible) notes.push('Ada langkah yang tidak menambah garis. Cek dulu sebelum dipakai.');
+  return finish(input, steps, regions, preview, mapped, coverage, 'parts', unnamed, notes, colour.names);
 }
 
 function buildTracedFallback(input: {
@@ -223,6 +219,7 @@ function buildTracedFallback(input: {
   readonly photo: RgbaImage;
   readonly sourceWidth: number;
   readonly sourceHeight: number;
+  readonly flatRegions?: readonly FlatRegion[];
 }, mapped: readonly MappedContour[]): BuiltLesson {
   const main = pickMain(mapped);
   const mainBox = boxOf(main.points);
@@ -235,29 +232,10 @@ function buildTracedFallback(input: {
   const regions: ColorRegion[] = [];
   const outline = guidesFor('outline-1', [main]);
   preview.push(...outline);
-  steps.push(lineStep('outline-1', 'outline', outlineInstruction(noun ?? '', input.title), outline));
-  if (noun && !photoIsBlankPlate(input.photo)) {
-    const backdrop = backgroundColours(input.photo);
-    const cluster = coloursInRegion(input.photo, (nx, ny) => {
-      const point = normToLesson(nx, ny, input.sourceWidth, input.sourceHeight);
-      return pointInPolygon(point.x, point.y, main.points);
-    }).find((item) => !backdrop.has(item.name));
-    if (cluster) {
-      const hex = fillHex(cluster.name, cluster.rgb);
-      const regionId = 'color-region-1';
-      regions.push({ id: regionId, label: noun, d: main.path, suggestedColor: hex });
-      steps.push({
-        id: 'color-1',
-        phase: 'color',
-        instruction: `Warnai ${noun} dengan ${cluster.name}.`,
-        guidePaths: [],
-        colorRegionIds: [regionId],
-        toolPreset: { tool: 'brush', color: hex, widthViewbox: 28 },
-        completionPolicy: { manualAllowed: true, automaticEnabled: false },
-      });
-    }
-  }
-  return finish(input, steps, regions, preview, mapped, coverage, 'traced', main, interiors.length);
+  const spoken = plainNoun(noun ?? '') || noun || '';
+  steps.push(lineStep('outline-1', 'outline', outlineInstruction(spoken, input.title), outline));
+  const colour = spoken ? appendFlatColours(steps, regions, input, [], spoken, subject) : { notes: [], names: [] as string[] };
+  return finish(input, steps, regions, preview, mapped, coverage, 'traced', interiors.length, colour.notes, colour.names);
 }
 
 function finish(
@@ -265,9 +243,6 @@ function finish(
     readonly id: string;
     readonly title: string;
     readonly targetHash: string;
-    readonly photo: RgbaImage;
-    readonly sourceWidth: number;
-    readonly sourceHeight: number;
   },
   steps: LessonStep[],
   regions: ColorRegion[],
@@ -275,8 +250,9 @@ function finish(
   mapped: readonly MappedContour[],
   coverage: number,
   builder: 'parts' | 'traced',
-  main: MappedContour,
   unnamedInteriors: number,
+  notes: readonly string[] = [],
+  regionNames: readonly string[] = [],
 ): BuiltLesson {
   const uniqueSteps = uniquify(steps);
   const drawing = uniqueSteps.filter((step) => step.phase !== 'color');
@@ -284,16 +260,20 @@ function finish(
   const reasons: string[] = [];
   if (coverage < OUTLINE_COVERAGE_MIN) reasons.push('Garis luar hanya menutupi sebagian subjek. Cek dulu sebelum dipakai.');
   if (drawing.length < 3) reasons.push('Terlalu sedikit langkah menggambar. Cek dulu sebelum dipakai.');
+  if (drawing.length > MAX_DRAWING_STEPS) reasons.push('Terlalu banyak langkah menggambar. Cek dulu sebelum dipakai.');
   if (uniqueSteps.some((step) => isGenericInstruction(step.instruction))) {
     reasons.push('Ada instruksi yang belum menyebut bagian. Cek dulu sebelum dipakai.');
   }
-  const subjectColours = subjectColourNames(input.photo, main, input.sourceWidth, input.sourceHeight);
-  if (colours.length < 2 && subjectColours.length >= 2) reasons.push('Warna subjek lebih dari satu. Cek dulu sebelum dipakai.');
+  const palette = new Set(regionNames);
+  if (colours.length < 2 && palette.size >= 2) reasons.push('Warna subjek lebih dari satu. Cek dulu sebelum dipakai.');
   if (colours.length > 4) reasons.push('Terlalu banyak langkah warna. Cek dulu sebelum dipakai.');
-  if (subjectColours.length > 0 && colours.some((step) => {
+  if (palette.size > 0 && colours.some((step) => {
     const name = colourWord(step.instruction);
-    return name !== null && !subjectColours.includes(name);
-  })) reasons.push('Ada warna yang tidak ada pada subjek. Cek dulu sebelum dipakai.');
+    return name !== null && !palette.has(name);
+  })) reasons.push('Ada warna yang tidak ada pada gambar. Cek dulu sebelum dipakai.');
+  for (const note of notes) {
+    if (!reasons.includes(note)) reasons.push(note);
+  }
   if (uniqueSteps.some((step) => repeatsWords(step.instruction))) {
     reasons.push('Ada instruksi yang mengulang kata. Cek dulu sebelum dipakai.');
   }
@@ -328,141 +308,244 @@ function finish(
   };
 }
 
-interface ColourGroup {
-  readonly colour: string;
-  readonly hex: string;
-  readonly names: string[];
-  readonly paths: string[];
+interface DetailBundle {
+  name: string;
+  pair: boolean;
+  count: number;
+  contours: MappedContour[];
 }
 
-interface ColourPick {
-  readonly colour: string;
-  readonly rgb: Rgb | null;
-  readonly name: string;
-  readonly paths: readonly string[];
-  readonly area: number;
+interface ColourBucket {
+  colour: string;
+  hex: string;
+  pixels: number;
+  names: string[];
+  paths: string[];
 }
 
-function colourGroups(
-  parts: readonly DetectedPart[],
-  outlinePart: DetectedPart | null,
-  groups: ReadonlyMap<DetectedPart, readonly MappedContour[]>,
-  main: MappedContour,
-  photo: RgbaImage,
-  sourceWidth: number,
-  sourceHeight: number,
-  subject: Box,
-): ColourGroup[] {
-  if (photoIsBlankPlate(photo)) return [];
-  const backdrop = backgroundColours(photo);
-  const targets: DetectedPart[] = [];
-  if (outlinePart) targets.push(outlinePart);
-  for (const part of parts) {
-    if (part === outlinePart) continue;
-    if (partFraction(part, subject) > HUGE_PART) continue;
-    targets.push(part);
-  }
-  const picks: ColourPick[] = [];
-  for (const part of targets) {
-    const outline = part === outlinePart;
-    const owned = outline ? [main] : [...(groups.get(part) ?? [])];
-    const paths = fillPaths(part, owned, outline, main, subject);
-    if (paths.length === 0) continue;
-    const clusters = coloursInRegion(photo, (nx, ny) => insidePart(nx, ny, part, targets, main, sourceWidth, sourceHeight))
-      .filter((cluster) => !backdrop.has(cluster.name));
-    const chosen = chooseColour(clusters, part, backdrop);
-    if (!chosen) continue;
-    const name = bareName(part.name) || part.name;
-    const inkArea = owned.reduce((sum, contour) => sum + boxOf(contour.points).area, 0);
-    picks.push({
-      colour: chosen.colour,
-      rgb: chosen.rgb,
-      name,
-      paths,
-      area: outline ? boxOf(main.points).area : Math.max(areaOf(part), inkArea),
-    });
-  }
-  const subjectArea = Math.max(1, boxOf(main.points).area);
-  const grouped = new Map<string, ColourPick[]>();
-  for (const pick of picks) {
-    const list = grouped.get(pick.colour) ?? [];
-    list.push(pick);
-    grouped.set(pick.colour, list);
-  }
-  let rows = [...grouped.entries()].map(([colour, list]) => ({
-    colour,
-    area: list.reduce((sum, pick) => sum + pick.area, 0),
-    saturated: colour !== 'putih' && colour !== 'abu-abu' && colour !== 'hitam',
-    hex: fillHex(colour, averageRgb(list)),
-    names: uniqueNames(list.map((pick) => pick.name)),
-    paths: uniquePaths(list.flatMap((pick) => pick.paths)),
+const ADJECTIVES = new Set([
+  'hitam', 'putih', 'lucu', 'merah', 'biru', 'kuning', 'hijau', 'ungu', 'cokelat', 'coklat',
+  'oranye', 'jingga', 'abu-abu', 'besar', 'kecil', 'tua', 'muda', 'imut', 'cantik', 'manis',
+  'gelap', 'terang', 'gemas', 'bagus',
+]);
+
+function plainNoun(name: string): string {
+  return name.split(' ').filter((word) => word.length > 0 && !ADJECTIVES.has(word)).join(' ');
+}
+
+function loadRegions(input: {
+  readonly photo: RgbaImage;
+  readonly sourceWidth: number;
+  readonly sourceHeight: number;
+  readonly flatRegions?: readonly FlatRegion[];
+}): FlatRegion[] {
+  if (input.flatRegions) return [...input.flatRegions];
+  const extracted = flatColourRegions(input.photo);
+  const sx = input.sourceWidth / Math.max(1, input.photo.width);
+  const sy = input.sourceHeight / Math.max(1, input.photo.height);
+  if (Math.abs(sx - 1) < 1e-3 && Math.abs(sy - 1) < 1e-3) return extracted;
+  return extracted.map((region) => ({
+    ...region,
+    cx: region.cx * sx,
+    cy: region.cy * sy,
+    points: region.points.map((point) => ({ x: point.x * sx, y: point.y * sy })),
   }));
-  if (rows.length > 4) {
-    rows = rows.filter((row) => row.area / subjectArea >= 0.08 || row.saturated);
-  }
-  return rows
-    .sort((left, right) => right.area - left.area)
-    .map((row) => ({ colour: row.colour, hex: row.hex, names: row.names, paths: row.paths }));
 }
 
-function chooseColour(
-  clusters: readonly ColourCluster[],
-  part: DetectedPart,
-  backdrop: ReadonlySet<string>,
-): { colour: string; rgb: Rgb | null } | null {
-  const top = clusters[0];
-  const marked = clusters.find((cluster) => cluster.share >= 0.12 && !neutralColour(cluster.name));
-  if (marked && top && neutralColour(top.name)) return { colour: marked.name, rgb: marked.rgb };
-  if (top && top.share >= 0.2) return { colour: top.name, rgb: top.rgb };
-  const named = knownColourName(part.colorName);
-  if (named && !backdrop.has(named)) return { colour: named, rgb: null };
-  if (top) return { colour: top.name, rgb: top.rgb };
-  return null;
-}
-
-function neutralColour(name: string): boolean {
-  return name === 'putih' || name === 'abu-abu' || name === 'hitam';
-}
-
-function fillPaths(
-  part: DetectedPart,
-  owned: readonly MappedContour[],
-  outline: boolean,
-  main: MappedContour,
+function appendFlatColours(
+  steps: LessonStep[],
+  regions: ColorRegion[],
+  input: {
+    readonly photo: RgbaImage;
+    readonly sourceWidth: number;
+    readonly sourceHeight: number;
+    readonly flatRegions?: readonly FlatRegion[];
+  },
+  parts: readonly DetectedPart[],
+  spoken: string,
   subject: Box,
-): string[] {
-  const closed = owned.filter((contour) => contour.closed);
-  const fromInk = (closed.length > 0 ? closed : owned).map((contour) => contour.path);
-  if (fromInk.length > 0) return fromInk;
-  if (outline) return [main.path];
-  if (partFraction(part, subject) > 0.45) return [];
-  return [part.points.length >= 3 ? smoothPath(part.points, true) : rectPath(part)];
-}
-
-function fillHex(colour: string, rgb: Rgb | null): string {
-  if (colour === 'putih') return '#ffffff';
-  return rgb ? rgbToHex(rgb) : colourHex(colour);
-}
-
-function averageRgb(picks: readonly ColourPick[]): Rgb | null {
-  const colours = picks.flatMap((pick) => (pick.rgb ? [pick.rgb] : []));
-  return colours.length > 0 ? average(colours) : null;
-}
-
-function uniqueNames(names: readonly string[]): string[] {
-  const out: string[] = [];
-  for (const name of names) {
-    if (!out.includes(name)) out.push(name);
+): { notes: string[]; names: string[] } {
+  const loaded = loadRegions(input);
+  const notes: string[] = [];
+  let empty = false;
+  const buckets = new Map<string, ColourBucket>();
+  for (const region of loaded) {
+    const mapped = mapContour({ points: region.points, closed: true }, input.sourceWidth, input.sourceHeight);
+    if (mapped.points.length < 3) continue;
+    const area = boxOf(mapped.points).area;
+    if (area < 400) continue;
+    if (fillSamples(mapped.points) < 4) {
+      empty = true;
+      continue;
+    }
+    const bucket = buckets.get(region.name) ?? { colour: region.name, hex: region.hex, pixels: 0, names: [], paths: [] };
+    bucket.pixels += region.pixels;
+    bucket.paths.push(mapped.path);
+    const label = nameAt(region.cx, region.cy, input, parts, subject, spoken);
+    if (label && !bucket.names.includes(label)) bucket.names.push(label);
+    buckets.set(region.name, bucket);
   }
-  return out;
+  if (empty) notes.push('Ada langkah warna yang tidak mengisi. Cek dulu sebelum dipakai.');
+  const rows = [...buckets.values()].sort((left, right) => right.pixels - left.pixels);
+  rows.forEach((bucket, index) => {
+    const id = `color-${index + 1}`;
+    const regionIds = bucket.paths.map((path, pathIndex) => {
+      const regionId = `${id}-r${pathIndex + 1}`;
+      regions.push({
+        id: regionId,
+        label: bucket.names[0] ?? spoken,
+        d: path,
+        suggestedColor: bucket.hex,
+      });
+      return regionId;
+    });
+    if (regionIds.length === 0) return;
+    steps.push({
+      id,
+      phase: 'color',
+      instruction: colourInstruction(bucket.names.length > 0 ? bucket.names : [spoken], bucket.colour),
+      guidePaths: [],
+      colorRegionIds: regionIds,
+      toolPreset: { tool: 'brush', color: bucket.hex, widthViewbox: 36 },
+      completionPolicy: { manualAllowed: true, automaticEnabled: false },
+    });
+  });
+  return { notes, names: loaded.map((region) => region.name) };
 }
 
-function uniquePaths(paths: readonly string[]): string[] {
-  const out: string[] = [];
-  for (const path of paths) {
-    if (!out.includes(path)) out.push(path);
+function nameAt(
+  x: number,
+  y: number,
+  input: { readonly sourceWidth: number; readonly sourceHeight: number },
+  parts: readonly DetectedPart[],
+  subject: Box,
+  spoken: string,
+): string {
+  const point = sourceToLesson(x, y, input.sourceWidth, input.sourceHeight);
+  let best: DetectedPart | null = null;
+  let bestArea = Number.POSITIVE_INFINITY;
+  for (const part of parts) {
+    if (partFraction(part, subject) > HUGE_PART) continue;
+    if (!containsPoint(part, point)) continue;
+    const area = areaOf(part);
+    if (area < bestArea) {
+      best = part;
+      bestArea = area;
+    }
   }
-  return out;
+  const named = best ? plainNoun(bareName(best.name)) : '';
+  return named || spoken;
+}
+
+function fillSamples(points: readonly Point[]): number {
+  const box = boxOf(points);
+  const cols = 36;
+  const rows = 27;
+  const width = Math.max(1, box.maxX - box.minX);
+  const height = Math.max(1, box.maxY - box.minY);
+  let inside = 0;
+  for (let y = 0; y < rows; y += 1) {
+    for (let x = 0; x < cols; x += 1) {
+      const px = box.minX + ((x + 0.5) / cols) * width;
+      const py = box.minY + ((y + 0.5) / rows) * height;
+      if (pointInPolygon(px, py, points)) inside += 1;
+    }
+  }
+  return inside;
+}
+
+function sourceToLesson(x: number, y: number, sourceWidth: number, sourceHeight: number): Point {
+  const place = sourcePlacement(sourceWidth, sourceHeight);
+  return { x: place.offsetX + x * place.scale, y: place.offsetY + y * place.scale };
+}
+
+function pruneDetails(
+  bundles: readonly DetailBundle[],
+  outline: readonly MappedContour[],
+  room: number,
+): { kept: DetailBundle[]; invisible: boolean } {
+  const ranked = [...bundles].sort((left, right) => ownInk(right.contours) - ownInk(left.contours));
+  const mask = new Uint8Array(MASK_W * MASK_H);
+  stampContours(mask, outline);
+  const kept: DetailBundle[] = [];
+  let invisible = false;
+  for (const bundle of ranked) {
+    if (kept.length >= room) break;
+    const own = ownInk(bundle.contours);
+    const fresh = freshInk(mask, bundle.contours);
+    if (fresh < MIN_NEW_INK) {
+      if (own >= MIN_NEW_INK) invisible = true;
+      continue;
+    }
+    stampContours(mask, bundle.contours);
+    kept.push(bundle);
+  }
+  return { kept, invisible };
+}
+
+function ownInk(contours: readonly MappedContour[]): number {
+  const mask = new Uint8Array(MASK_W * MASK_H);
+  stampContours(mask, contours);
+  let count = 0;
+  for (const value of mask) if (value) count += 1;
+  return count;
+}
+
+function freshInk(existing: Uint8Array, contours: readonly MappedContour[]): number {
+  const scratch = existing.slice();
+  stampContours(scratch, contours);
+  let fresh = 0;
+  for (let index = 0; index < scratch.length; index += 1) {
+    if (scratch[index] && !existing[index]) fresh += 1;
+  }
+  return fresh;
+}
+
+function stampContours(mask: Uint8Array, contours: readonly MappedContour[]): void {
+  for (const contour of contours) {
+    const points = contour.points;
+    for (let index = 1; index < points.length; index += 1) {
+      const start = points[index - 1];
+      const end = points[index];
+      if (start && end) stampSegment(mask, start, end);
+    }
+    if (!contour.closed || points.length < 2) continue;
+    const start = points[points.length - 1];
+    const end = points[0];
+    if (start && end) stampSegment(mask, start, end);
+  }
+}
+
+function stampSegment(mask: Uint8Array, start: Point, end: Point): void {
+  const from = maskPoint(start);
+  const to = maskPoint(end);
+  let x = from.x;
+  let y = from.y;
+  const dx = Math.abs(to.x - from.x);
+  const dy = Math.abs(to.y - from.y);
+  const sx = from.x < to.x ? 1 : -1;
+  const sy = from.y < to.y ? 1 : -1;
+  let err = dx - dy;
+  for (;;) {
+    if (x >= 0 && y >= 0 && x < MASK_W && y < MASK_H) mask[y * MASK_W + x] = 1;
+    if (x === to.x && y === to.y) break;
+    const doubled = err * 2;
+    if (doubled > -dy) {
+      err -= dy;
+      x += sx;
+    }
+    if (doubled < dx) {
+      err += dx;
+      y += sy;
+    }
+  }
+}
+
+function maskPoint(point: Point): { x: number; y: number } {
+  return {
+    x: Math.round((point.x * (MASK_W - 1)) / LESSON_WIDTH),
+    y: Math.round((point.y * (MASK_H - 1)) / LESSON_HEIGHT),
+  };
 }
 
 function bareName(name: string): string {
@@ -472,21 +555,21 @@ function bareName(name: string): string {
 }
 
 function outlineInstruction(name: string, title: string): string {
-  const cleaned = bareName(name) || subjectNoun(title) || '';
+  const cleaned = plainNoun(bareName(name)) || plainNoun(subjectNoun(title) ?? '') || '';
   if (!cleaned) return 'Gambar garis luar.';
   return `Gambar garis luar ${cleaned}.`;
 }
 
-function detailInstruction(part: DetectedPart, inks: readonly MappedContour[]): string {
-  const name = bareName(part.name) || part.name;
-  return isPairStep(part, inks) ? `Tambahkan dua ${name}.` : `Gambar ${name}.`;
+function detailInstruction(bundle: DetailBundle, inks: readonly MappedContour[]): string {
+  return bundleIsPair(bundle, inks) ? `Tambahkan dua ${bundle.name}.` : `Gambar ${bundle.name}.`;
 }
 
-function isPairStep(part: DetectedPart, inks: readonly MappedContour[]): boolean {
-  if (/\bdua\b/.test(part.name)) return false;
-  if (part.count === 2 && inks.length === 2) return true;
-  if (part.count > 0 && part.count !== 2) return false;
-  return part.pair && inks.length === 2 && part.pieceIds.length !== 1 && part.pieceIds.length <= 2;
+function bundleIsPair(bundle: DetailBundle, inks: readonly MappedContour[]): boolean {
+  if (inks.length !== 2) return false;
+  if (/\bdua\b/.test(bundle.name)) return false;
+  if (bundle.count === 2) return true;
+  if (bundle.count > 0 && bundle.count !== 2) return false;
+  return bundle.pair;
 }
 
 function constructionInstruction(kind: 'circle' | 'ellipse', name: string): string {
@@ -505,7 +588,7 @@ function colourInstruction(names: readonly string[], colour: string): string {
   return `Warnai ${first}, ${second}, dan ${third} dengan ${colour}.`;
 }
 
-const GENERIC_COLOUR = /^(merah muda|abu-abu|merah|oranye|kuning|hijau|biru|ungu|cokelat|hitam|putih)$/;
+const GENERIC_COLOUR = /^(merah muda|abu-abu|cokelat tua|merah|oranye|kuning|hijau|biru|ungu|cokelat|hitam|putih)$/;
 
 /** A sentence that does not name a part. Numbered copies of one still match. */
 export function isGenericInstruction(text: string): boolean {
@@ -587,7 +670,7 @@ function outlineOwner(contour: MappedContour, parts: readonly DetectedPart[]): D
 }
 
 function interiorOwner(contour: MappedContour, parts: readonly DetectedPart[], subject: Box): DetectedPart | null {
-  const listed = parts.filter((part) => part.pieceIds.includes(contour.id) && partFraction(part, subject) <= HUGE_PART);
+  const listed = parts.filter((part) => part.pieceIds.includes(contour.id) && partFraction(part, subject) <= HUGE_PART && containment(contour, part) >= CONTAIN_MIN);
   if (listed.length > 0) return listed.reduce((best, part) => (areaOf(part) < areaOf(best) ? part : best));
   let best: DetectedPart | null = null;
   let bestArea = Number.POSITIVE_INFINITY;
@@ -605,20 +688,6 @@ function interiorOwner(contour: MappedContour, parts: readonly DetectedPart[], s
 
 function partFraction(part: DetectedPart, subject: Box): number {
   return areaOf(part) / Math.max(1, subject.area);
-}
-
-function subjectColourNames(
-  photo: RgbaImage,
-  silhouette: MappedContour,
-  sourceWidth: number,
-  sourceHeight: number,
-): string[] {
-  if (photoIsBlankPlate(photo)) return [];
-  const backdrop = backgroundColours(photo);
-  return coloursInRegion(photo, (nx, ny) => {
-    const point = normToLesson(nx, ny, sourceWidth, sourceHeight);
-    return pointInPolygon(point.x, point.y, silhouette.points);
-  }).map((cluster) => cluster.name).filter((name) => !backdrop.has(name));
 }
 
 function colourWord(instruction: string): string | null {
@@ -641,35 +710,9 @@ function repeatsWords(text: string): boolean {
   return false;
 }
 
-function insidePart(
-  nx: number,
-  ny: number,
-  part: DetectedPart,
-  targets: readonly DetectedPart[],
-  silhouette: MappedContour,
-  sourceWidth: number,
-  sourceHeight: number,
-): boolean {
-  const point = normToLesson(nx, ny, sourceWidth, sourceHeight);
-  if (!pointInPolygon(point.x, point.y, silhouette.points)) return false;
-  if (!containsPoint(part, point)) return false;
-  for (const other of targets) {
-    if (other === part || areaOf(other) >= areaOf(part)) continue;
-    if (containsPoint(other, point)) return false;
-  }
-  return true;
-}
-
 function containsPoint(part: DetectedPart, point: Point): boolean {
   const polygon = part.points.length >= 3 ? part.points : rectPoints(part);
   return pointInPolygon(point.x, point.y, polygon);
-}
-
-function normToLesson(nx: number, ny: number, sourceWidth: number, sourceHeight: number): Point {
-  const place = sourcePlacement(sourceWidth, sourceHeight);
-  const sx = nx * (sourceWidth <= 1 ? 0 : sourceWidth - 1);
-  const sy = ny * (sourceHeight <= 1 ? 0 : sourceHeight - 1);
-  return { x: place.offsetX + sx * place.scale, y: place.offsetY + sy * place.scale };
 }
 
 function sourcePlacement(sourceWidth: number, sourceHeight: number): { scale: number; offsetX: number; offsetY: number } {
@@ -698,11 +741,6 @@ function rectPoints(part: DetectedPart): Point[] {
     { x: part.x + part.width, y: part.y + part.height },
     { x: part.x, y: part.y + part.height },
   ];
-}
-
-function rectPath(part: DetectedPart): string {
-  const points = rectPoints(part);
-  return smoothPath(points, true);
 }
 
 function areaOf(part: DetectedPart): number {
@@ -1016,15 +1054,6 @@ function polylineLength(points: readonly Point[]): number {
     length += Math.hypot(current.x - previous.x, current.y - previous.y);
   }
   return length;
-}
-
-function average(items: readonly Rgb[]): Rgb {
-  const count = Math.max(1, items.length);
-  return {
-    r: items.reduce((sum, item) => sum + item.r, 0) / count,
-    g: items.reduce((sum, item) => sum + item.g, 0) / count,
-    b: items.reduce((sum, item) => sum + item.b, 0) / count,
-  };
 }
 
 function round(value: number): number {

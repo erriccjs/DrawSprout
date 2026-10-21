@@ -41,7 +41,10 @@ describe('OpenAI client', () => {
     const promptText = typeof prompt === 'string' ? prompt : '';
     expect(promptText).toContain('Do not add limbs');
     expect(promptText).toContain('closed outer silhouette');
+    expect(promptText).toContain('flat solid fills');
     expect(promptText).toContain('barcode');
+    expect(promptText).toContain('vertical black bars');
+    expect(promptText).toContain('QR code');
     expect(promptText).toContain('close-up');
     expect(form.get('background')).toBe('opaque');
     expect(JSON.stringify([...form.entries()])).not.toContain('sk-test-not-real');
@@ -84,6 +87,8 @@ describe('OpenAI client', () => {
     expect(text).toContain('kalung');
     expect(text).toContain('lidah');
     expect(text).toContain('kursi');
+    expect(text).toContain('anjing');
+    expect(text).toContain('cokelat tua');
     expect(text).toContain('0. x=10');
     expect(content.filter((part) => part.type === 'image_url' && part.image_url?.url.startsWith('data:image/png;base64,')).length).toBe(2);
   });
