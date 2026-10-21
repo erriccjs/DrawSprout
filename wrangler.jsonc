@@ -1,11 +1,12 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "drawsprout",
-  // Assets only. No `main`: the Vite build is uploaded as it stands, including
-  // dist/sw.js written after the bundle. A Worker script would bring back the
-  // Cloudflare Vite plugin path that skipped that file.
+  // The Worker script handles /api/* only. Static files, including dist/sw.js,
+  // stay on the assets layer. Do not add the Cloudflare Vite plugin: it packages
+  // assets before drawsproutOffline() writes sw.js, so /sw.js becomes HTML.
   // The date already on the deployed Worker. Node.js compatibility is the
   // default on or after 2026-08-04, so no compatibility_flags are set.
+  "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-19",
   "observability": {
     "enabled": true,
@@ -15,9 +16,13 @@
   },
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     // A missing file is index.html. A path that matches a file, including
     // /sw.js, is that file. See https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    // Only /api is handled by the script. Everything else, including /sw.js,
+    // is served as a static asset.
+    "run_worker_first": ["/api/*"]
   },
   // Workers Builds runs `wrangler preview` for a branch build. That command
   // refuses to start without this block. An empty object is enough, and

@@ -864,3 +864,24 @@ is unchanged: bumping it would refuse every saved drawing, and migration is
 still deferred. The undo record for *Ulangi langkah ini* is session-only,
 same as *Hapus semua*. A free-drawing session is an ordinary saved drawing:
 Karyaku lists it and *Buka* restores `freeCreation` with the free strokes.
+
+### D-65 — A photo picks a hand-authored category lesson
+
+Generating a lesson from a photo (the OpenAI image edits in PR #23) did not
+reach the drawing quality the owner wants. That pull request stays open as a
+reference. It is not the way forward.
+
+**Choice.** Lessons are vectors in the existing schema (version stays 1).
+The first six — cat, dog, flower, cup, toy car, and fish — are drawn by
+hand. A larger list of category names is planned and not drawn yet. One
+cheap vision call (`gpt-4.1-mini`, `OPENAI_API_KEY` on the Worker) returns a
+category, a confidence, colours for the named parts, and a facing. At or
+above 0.55, and only for a lesson that exists, the app recolours that
+lesson and mirrors it when the photo faces the other way, then opens the
+ordinary drawing screen. Otherwise the child sees "Belum bisa digambar.
+Coba salah satu ini." There is no image generation on this path, and the
+30-photo rubric is not claimed.
+
+The example card draws the new line in red, earlier lines dark, and a
+dashed construction guide only on the step that introduces it. Bundled
+lessons use that same card.

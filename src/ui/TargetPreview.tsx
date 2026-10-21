@@ -12,6 +12,7 @@
  */
 
 import type { ColorRegion, CoordinateSpace, GuidePath, LessonStep } from '../lesson-data/schema';
+import { previewStrokeWidth, PREVIEW_INK, stepPreview } from '../lesson-data/step-preview';
 import { previewViewBox } from './preview-frame';
 
 interface TargetPreviewProps {
@@ -24,16 +25,11 @@ interface TargetPreviewProps {
 }
 
 export function TargetPreview({ space, paths, title, step, steps, colorRegions }: TargetPreviewProps) {
-  const highlighted = new Set(step.guidePaths.map((path) => path.id));
-  const activeRegions = new Set(step.colorRegionIds);
-  const stepIndex = steps.indexOf(step);
-  const completedColors = steps.slice(0, stepIndex + 1).filter((item) => item.phase === 'color');
-  const futureRegions = new Set(
-    steps.slice(stepIndex + 1).flatMap((item) => item.colorRegionIds),
-  );
+  const preview = stepPreview({ steps, colorRegions }, steps.indexOf(step));
   const viewBox = previewViewBox(space, [
     ...paths.map((path) => path.d),
     ...colorRegions.map((region) => region.d),
+    ...preview.strokes.map((stroke) => stroke.d),
   ]);
   return (
     <svg
@@ -42,37 +38,31 @@ export function TargetPreview({ space, paths, title, step, steps, colorRegions }
       role="img"
       aria-label={`Contoh hasil akhir: ${title}`}
     >
-      {step.phase === 'color' && (
-        <>
-          {completedColors.flatMap((item) =>
-            colorRegions
-              .filter((region) => item.colorRegionIds.includes(region.id))
-              .map((region) => (
-                <path key={`${item.id}-${region.id}`} d={region.d} fill={item.toolPreset.color} />
-              )),
-          )}
-          {colorRegions
-            .filter((region) => futureRegions.has(region.id))
-            .map((region) => <path key={`future-${region.id}`} d={region.d} fill="var(--paper)" />)}
-        </>
-      )}
-      {paths.map((path) => (
+      {preview.fills.map((fill) => (
+        <path key={fill.id} d={fill.d} fill={fill.fill === 'paper' ? 'var(--paper)' : fill.fill} />
+      ))}
+      {preview.strokes.map((stroke) => (
         <path
-          key={path.id}
-          d={path.d}
+          key={`${stroke.kind}-${stroke.id}`}
+          d={stroke.d}
           fill="none"
-          stroke={highlighted.has(path.id) ? '#4b6bfb' : '#8a9099'}
-          strokeWidth={highlighted.has(path.id) ? 10 : 5}
+          stroke={PREVIEW_INK[stroke.kind]}
+          strokeWidth={previewStrokeWidth(stroke.kind)}
+          strokeDasharray={stroke.kind === 'construction' ? '12 14' : undefined}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       ))}
-      {step.phase === 'color' &&
-        colorRegions
-          .filter((region) => activeRegions.has(region.id))
-          .map((region) => (
-            <path key={`active-${region.id}`} d={region.d} fill="none" stroke="#4b6bfb" strokeWidth={7} />
-          ))}
+      {preview.activeOutlines.map((stroke) => (
+        <path
+          key={stroke.id}
+          d={stroke.d}
+          fill="none"
+          stroke={PREVIEW_INK.new}
+          strokeWidth={7}
+          strokeLinejoin="round"
+        />
+      ))}
     </svg>
   );
 }

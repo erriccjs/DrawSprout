@@ -283,6 +283,8 @@ own (PRD section 11).
 src/
   lesson-data/    Versioned lesson packages and their validator. Plain data:
                   no DOM, no engine, no storage.
+  categories/     Hand-authored category lessons, the photo match, and the
+                  recolour/mirror step. See docs/CATEGORY_LESSONS.md.
   lesson-engine/  Session reducer and selectors: navigation, state machine,
                   undo/redo, tool presets. Pure; no DOM, no canvas, no storage.
   renderer/       Canvas layers, coordinate mapping, stroke painting, PNG
@@ -298,8 +300,10 @@ src/
   test/           Fixtures and environment shims.
 ```
 
-Adding a lesson is a data change in `src/lesson-data/` plus an entry in
-`BUNDLED_LESSONS`.
+Adding a lesson to the picture list is a data change in `src/lesson-data/`
+plus an entry in `BUNDLED_LESSONS`. A photo category is a separate package
+under `src/categories/`; how to add one is in
+[`docs/CATEGORY_LESSONS.md`](docs/CATEGORY_LESSONS.md).
 
 ## A note on language
 

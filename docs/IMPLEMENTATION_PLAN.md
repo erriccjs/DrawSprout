@@ -25,7 +25,7 @@ Two cautions carried over from the PRD itself:
 | **M1 — Vertical slice** | Tahap A prototype; section 16 phase 1 | One hand-authored cat lesson, end to end: canvas, pencil/finger modes, assistance modes, tool presets, undo/redo, manual navigation, colouring with optional boundaries, IndexedDB autosave/resume, PNG export | **Done** |
 | M2 — Pilot usability | section 16 phase 2 | Observe 5–8 children on real tablets, fix the main obstacles, close the AT-16..AT-22 device gap | Next |
 | M3 — MVP foundations | section 16 phase 3 | Lesson catalogue (~10 templates), local gallery, service worker and offline packaging, project backup import/export, audio instructions, automatic step completion, full error handling | **In progress** — the service worker, offline packaging, the safe update flow, a ten-lesson catalogue, the local gallery, and free drawing after the last step are in the tree. Backup, audio, automatic completion, and checkpoint migration are still deferred |
-| M4 — Photo spike | section 16 phase 4 | Photo → illustration candidates, geometry extraction, step sequencing, 30-photo rubric evaluation | Deferred |
+| M4 — Photo lessons | section 16 phase 4 | A photo picks a hand-authored category lesson (D-65). Image generation from the photo is not the path. The 30-photo rubric is not claimed | **In progress** — six vector lessons, `/api/photo-match`, and the shared step preview. The rest of the catalogue is named and not drawn |
 | M5 — Beta integration | section 16 phase 5 | Backend, job queue, privacy and retention, parent area, device test matrix | Deferred |
 
 A generalised authoring pipeline and a hardening pass are M2+ work listed here
@@ -54,9 +54,9 @@ real tablet.
 | FR-12 | Free creation after the lesson | M3 | **Done** | After the last step, *Gambar bebas* keeps the strokes and hides the canvas guide. Pen, brush, eraser, and colours stay available (D-64). |
 | FR-13 | IndexedDB autosave and resume | M1 | **Done** | `src/persistence/indexeddb-store.ts`: strokes and checkpoint in one transaction; no localStorage anywhere. |
 | FR-14 | Local gallery and PNG export without hints | M1 **partial** | **Done** | PNG export and Karyaku, the gallery on the picture-choosing screen. Thumbnails and PNG files are painted from committed strokes only (D-63). |
-| FR-15 | Camera / photo picker | M4/M5 | **Deferred** | Out of scope by instruction. |
-| FR-16 | Photo transformation | M4/M5 | **Deferred** | Out of scope by instruction. |
-| FR-17 | Photo preview and approval | M4/M5 | **Deferred** | Out of scope by instruction. |
+| FR-15 | Camera / photo picker | M4/M5 | **Partial** | The picture-choosing screen can send a photo to `/api/photo-match` (D-65). |
+| FR-16 | Photo transformation | M4/M5 | **Partial** | The photo selects a hand-authored lesson and recolours it. No image is generated. |
+| FR-17 | Photo preview and approval | M4/M5 | **Partial** | A match opens the drawing screen. A miss shows the lessons that exist. There is no generated picture to approve. |
 | FR-18 | AI job lifecycle | M5 | **Deferred** | Out of scope by instruction. |
 | FR-19 | Privacy and parent controls | M5 | **Deferred** | No photos, no accounts and no network calls exist in M1, so there is nothing yet to control. |
 | FR-20 | Audio instructions | M3 | **Deferred** | Text and icons only. |
@@ -77,8 +77,8 @@ real tablet.
 | AT-05 | Close the tab after a checkpoint, resume | **Verified (automated)** | `src/persistence/round-trip.test.ts` restores step, assistance, tools and committed strokes through a real IndexedDB transaction (`fake-indexeddb`). A genuine tab close on a tablet is still untested. |
 | AT-06 | Zoom / rotate / resize keeps geometry aligned | **Verified (automated)**, device behaviour open | `coordinates.test.ts` maps the same touch to the same lesson point at two very different box sizes; `artwork-surface.test.ts` replays on resize. Real orientation change on a tablet is untested. |
 | AT-07 | Undo, redo, then a new stroke | **Verified (automated)** | `history.test.ts` "invalidates the redo chain once a new stroke is drawn". |
-| AT-08 | Photo keeps distinctive features | **Deferred** | No photo pipeline (M4). |
-| AT-09 | All steps of a photo lesson render | **Deferred** | No photo pipeline (M4). |
+| AT-08 | Photo keeps distinctive features | **Not claimed** | A match recolours a fixed lesson and may mirror it (D-65). The 30-photo rubric is not claimed. |
+| AT-09 | All steps of a photo lesson render | **Partial** | Category lessons use the same step preview as bundled lessons. The 30-photo rubric is not claimed. |
 | AT-10 | Job/approval retry is idempotent | **Deferred** | No backend (M5). |
 | AT-11 | Network drops after download | **Partial, not a device result** | The precache is what would serve drawing, resume, and export after the shell is cached. A headless Chrome simulation opened one lesson with the network off (section 7). A network drop on the pilot tablets has not been tested. There is no photo-lesson AI status to show. |
 | AT-12 | Cross-tenant asset access denied | **Deferred** | No backend (M5). |

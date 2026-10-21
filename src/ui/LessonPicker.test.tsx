@@ -11,6 +11,7 @@ function renderPicker() {
   render(
     <LessonPicker
       onSelect={() => {}}
+      onPhoto={() => {}}
       notice={null}
       offlineReady={false}
       updatePhase="hidden"
@@ -23,8 +24,8 @@ function renderPicker() {
 describe('lesson picker', () => {
   it('lists every bundled lesson, including the ten-picture catalogue', () => {
     renderPicker();
-    const choices = screen.getAllByRole('button');
-    expect(choices).toHaveLength(BUNDLED_LESSONS.length);
+    expect(screen.getAllByRole('button').length).toBe(BUNDLED_LESSONS.length + 1);
+    expect(screen.getByRole('button', { name: 'Gambar dari foto' })).toBeTruthy();
     expect(BUNDLED_LESSONS).toHaveLength(10);
     for (const title of ['Kucing Duduk', 'Rumah', 'Mobil', 'Kupu-kupu', 'Bintang']) {
       expect(screen.getByRole('button', { name: new RegExp(title) })).toBeTruthy();

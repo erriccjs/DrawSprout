@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ArtworkSurface } from './renderer/artwork-surface';
-import { getLesson } from './lesson-data';
+import { getPlayableLesson } from './categories/library';
 import type { LessonPackage } from './lesson-data/schema';
 import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
 import type { SessionPreferences, SessionState, ToolPreferences } from './lesson-engine/types';
@@ -13,6 +13,7 @@ import { DrawingPad } from './ui/DrawingPad';
 import { requestDocumentFullscreen } from './ui/fullscreen';
 import { RESUME_NOTICE } from './ui/resume-notice';
 import { LessonPicker } from './ui/LessonPicker';
+import { PhotoMatch } from './ui/PhotoMatch';
 import { TabletNotice } from './ui/TabletNotice';
 import { newId } from './ui/ids';
 import { dismissTabletNotice, isTabletNoticeDismissed } from './ui/tablet-notice';
@@ -57,6 +58,7 @@ export function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [saveInFlight, setSaveInFlight] = useState(false);
   const [tabletNoticeDismissed, setTabletNoticeDismissed] = useState(isTabletNoticeDismissed);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const showTabletNotice = layout !== 'tablet' && !tabletNoticeDismissed;
 
   const dismissTabletHint = () => {
@@ -94,18 +96,24 @@ export function App() {
   }
 
   const selectLesson = (lessonId: string) => {
-    // This runs inside the picker's click. Fullscreen has to be asked for
-    // here, not on the first stroke: the resize would smear that line (D-57).
+    startLesson(getPlayableLesson(lessonId), true);
+  };
+
+  const startLesson = (lesson: LessonPackage, resume: boolean) => {
+    // This runs inside the click that opens the drawing screen. Fullscreen has
+    // to be asked for here, not on the first stroke: the resize would smear
+    // that line (D-57). A photo match calls this from the button that accepts
+    // the lesson, which is still that gesture.
     requestDocumentFullscreen();
+    setPhotoOpen(false);
     setUpdateDismissed(false);
     const selection = ++selectionRef.current;
-    const handoff = handoffRef.current?.state.lessonId === lessonId ? handoffRef.current : null;
+    const handoff = resume && handoffRef.current?.state.lessonId === lesson.id ? handoffRef.current : null;
     touchedRef.current = handoff !== null;
     controlsRef.current = { preferences: {}, tools: {} };
     setExitNotice(null);
-    const lesson = getLesson(lessonId);
     const initialState = handoff?.state ?? createSession(lesson, newId(), DEFAULT_PREFERENCES);
-    setOpenLesson({ lesson, initialState, notice: null, restorePending: handoff === null, preferencesPending: true,
+    setOpenLesson({ lesson, initialState, notice: null, restorePending: resume && handoff === null, preferencesPending: true,
       pendingSave: handoff?.saved ?? null, revision: 0 });
 
     void bootstrap.store.loadPreferences().then((preferences) => {
@@ -131,9 +139,9 @@ export function App() {
       }
     });
 
-    if (handoff) return;
+    if (!resume || handoff) return;
 
-    void bootstrap.store.loadLatestSessionForLesson(lessonId).then((restored) => {
+    void bootstrap.store.loadLatestSessionForLesson(lesson.id).then((restored) => {
       if (selectionRef.current !== selection) return;
       let state: SessionState | null = null;
       let notice: string | null = null;
@@ -194,7 +202,7 @@ export function App() {
       }
       let lesson: LessonPackage;
       try {
-        lesson = getLesson(restored.checkpoint.lessonId);
+        lesson = getPlayableLesson(restored.checkpoint.lessonId);
       } catch {
         setExitNotice('Pelajaran untuk karya ini sudah tidak ada.');
         return;
@@ -292,10 +300,16 @@ export function App() {
             });
           }}
         />
+      ) : photoOpen ? (
+        <PhotoMatch
+          onCancel={() => setPhotoOpen(false)}
+          onOpenLesson={startLesson}
+        />
       ) : (
         <>
           <LessonPicker
             onSelect={selectLesson}
+            onPhoto={() => setPhotoOpen(true)}
             notice={exitNotice}
             offlineReady={offlineReady}
             updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}

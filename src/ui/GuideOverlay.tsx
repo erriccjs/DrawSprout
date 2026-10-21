@@ -49,7 +49,7 @@ export function GuideOverlay({ space, paths, visible, widthCss, heightCss }: Gui
               key={path.id}
               d={path.d}
               fill="none"
-              stroke="#4b6bfb"
+              stroke={path.role === 'construction' ? '#b5b5b5' : '#e23b3b'}
               strokeWidth={style.width}
               strokeDasharray={style.dash}
               strokeLinecap="round"

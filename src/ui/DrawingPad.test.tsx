@@ -789,24 +789,16 @@ describe('assistance modes', () => {
 });
 
 describe('navigation and colouring', () => {
-  it('keeps the outline example unchanged on a line step', () => {
+  it('shows this step in red and hides the lines that come later', () => {
     setup();
     const paths = previewPaths();
-    expect(paths).toHaveLength(CAT_LESSON.targetPreview.paths.length);
-    expect(paths.map((path) => path.getAttribute('d'))).toEqual(
-      CAT_LESSON.targetPreview.paths.map((path) => path.d),
-    );
+    const head = CAT_LESSON.steps[0]!.guidePaths[0]!;
+    expect(paths.map((path) => path.getAttribute('d'))).toEqual([head.d]);
     expect(paths.map((path) => [
       path.getAttribute('fill'),
       path.getAttribute('stroke'),
       path.getAttribute('stroke-width'),
-    ])).toEqual(
-      CAT_LESSON.targetPreview.paths.map((path) => [
-        'none',
-        path.id === 'head' ? '#4b6bfb' : '#8a9099',
-        path.id === 'head' ? '10' : '5',
-      ]),
-    );
+    ])).toEqual([['none', '#e23b3b', '10']]);
   });
 
   it('emphasises fur while leaving the later ear and nose regions blank on color-fur', () => {
@@ -830,13 +822,13 @@ describe('navigation and colouring', () => {
     );
     expect(
       previewPaths()
-        .filter((path) => path.getAttribute('stroke') === '#4b6bfb')
+        .filter((path) => path.getAttribute('stroke') === '#e23b3b')
         .map((path) => path.getAttribute('d')),
     ).toEqual(filled.map((path) => path.getAttribute('d')));
     expect(
       previewPaths()
-        .filter((path) => path.getAttribute('fill') === 'none' && path.getAttribute('stroke') !== '#4b6bfb')
-        .every((path) => path.getAttribute('stroke') === '#8a9099'),
+        .filter((path) => path.getAttribute('fill') === 'none' && path.getAttribute('stroke') !== '#e23b3b')
+        .every((path) => path.getAttribute('stroke') === '#2c2c2c'),
     ).toBe(true);
   });
 
@@ -862,7 +854,7 @@ describe('navigation and colouring', () => {
     );
     expect(
       previewPaths()
-        .filter((path) => path.getAttribute('stroke') === '#4b6bfb')
+        .filter((path) => path.getAttribute('stroke') === '#e23b3b')
         .map((path) => path.getAttribute('d')),
     ).toEqual(filled.map((path) => path.getAttribute('d')));
     expect(previewPaths().filter((path) => path.getAttribute('fill') === 'var(--paper)')).toHaveLength(0);
