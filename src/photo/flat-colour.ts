@@ -45,15 +45,15 @@ const SWATCHES: readonly { readonly name: string; readonly hex: string; readonly
 
 const LAB = SWATCHES.map((swatch) => ({ ...swatch, lab: toLab(swatch.rgb) }));
 
-/** Nearest Indonesian colour in Lab. Dark brown stays dark; mid grey is the only abu-abu. */
+/** Nearest Indonesian colour in Lab. Light grey stays grey; only near-paper white is putih. */
 export function paletteName(rgb: Rgb): string {
   const lum = luminance(rgb);
   const sat = saturation(rgb);
-  if (sat < 0.14 && lum >= 225) return 'putih';
+  if (sat < 0.14 && lum >= 232) return 'putih';
   if (lum < 48 && sat < 0.22) return 'hitam';
   if (lum < 110 && rgb.g > rgb.b && rgb.r > rgb.b + 8 && rgb.r < rgb.g * 2.2 && sat >= 0.1) return lum < 72 ? 'cokelat tua' : 'cokelat';
   if (lum < 85 && sat < 0.18) return 'hitam';
-  if (sat < 0.16 && lum >= 100 && lum < 200) return 'abu-abu';
+  if (sat < 0.16 && lum >= 88 && lum < 232) return 'abu-abu';
   if (redNotOrange(rgb, sat)) return 'merah';
   const sample = toLab(rgb);
   let best = LAB[0] ?? { name: 'abu-abu', hex: '#8d8d8d' };
@@ -107,7 +107,7 @@ export function regionsColouredBy(lineArt: RgbaImage, coloured: RgbaImage): { re
   const barrier = erodeMask(dilateMask(line, width, height, radius), width, height, radius);
   if (!barrier.some((value) => value === 1)) return { regions: [], mixed: false };
   const inside = interiorMask(barrier, width, height);
-  return colourComponents(aligned, inside, width, height);
+  return colourComponents(aligned, inside, line, width, height);
 }
 
 /** Shift and scale the colour page so its dark lines land on the line drawing. */
@@ -250,7 +250,7 @@ function interiorMask(barrier: Uint8Array, width: number, height: number): Uint8
   return inside;
 }
 
-function colourComponents(coloured: RgbaImage, mask: Uint8Array, width: number, height: number): { regions: FlatRegion[]; mixed: boolean } {
+function colourComponents(coloured: RgbaImage, mask: Uint8Array, line: Uint8Array, width: number, height: number): { regions: FlatRegion[]; mixed: boolean } {
   const ids = new Int32Array(mask.length);
   const stack = new Int32Array(mask.length);
   const stats: Array<{ id: number; pixels: number; minX: number; minY: number; maxX: number; maxY: number }> = [];
@@ -288,27 +288,167 @@ function colourComponents(coloured: RgbaImage, mask: Uint8Array, width: number, 
     stats.push({ id: next, pixels, minX, minY, maxX, maxY });
   }
   const minimum = Math.max(20, Math.round(width * height * 0.00015));
-  const kept = stats.filter((stat) => stat.pixels >= minimum).sort((left, right) => right.pixels - left.pixels).slice(0, 12);
-  const regions: FlatRegion[] = [];
+  const ranked = stats.filter((stat) => stat.pixels >= minimum).sort((left, right) => right.pixels - left.pixels).slice(0, 24);
+  const colourOf = new Map<number, { name: string; hex: string; mixed: boolean }>();
   let mixed = false;
-  for (const stat of kept) {
+  for (const stat of ranked) {
     const sampled = sampleRegion(coloured, ids, stat.id, width, height);
     if (!sampled || sampled.name === 'putih') continue;
     if (sampled.mixed) mixed = true;
-    const points = shapeOf(ids, stat.id, width, stat.minX, stat.minY, stat.maxX, stat.maxY);
+    colourOf.set(stat.id, sampled);
+  }
+  const parent = new Int32Array(next + 1);
+  for (let id = 0; id <= next; id += 1) parent[id] = id;
+  const bridge = Math.min(width, height) >= 800 ? 6 : 4;
+  linkSameColour(ids, colourOf, parent, width, height, bridge);
+  const merged = new Int32Array(ids.length);
+  for (let index = 0; index < ids.length; index += 1) {
+    const id = ids[index] ?? 0;
+    if (!id || !colourOf.has(id)) continue;
+    merged[index] = findRoot(parent, id);
+  }
+  const grouped = new Map<number, { pixels: number; minX: number; minY: number; maxX: number; maxY: number; sources: number }>();
+  for (const stat of ranked) {
+    if (!colourOf.has(stat.id)) continue;
+    const root = findRoot(parent, stat.id);
+    const row = grouped.get(root) ?? { pixels: 0, minX: width, minY: height, maxX: 0, maxY: 0, sources: 0 };
+    row.pixels += stat.pixels;
+    row.sources += 1;
+    if (stat.minX < row.minX) row.minX = stat.minX;
+    if (stat.minY < row.minY) row.minY = stat.minY;
+    if (stat.maxX > row.maxX) row.maxX = stat.maxX;
+    if (stat.maxY > row.maxY) row.maxY = stat.maxY;
+    grouped.set(root, row);
+  }
+  let regions: FlatRegion[] = [];
+  for (const [root, row] of grouped) {
+    const sampled = colourOf.get(root) ?? [...colourOf.entries()].find(([id]) => findRoot(parent, id) === root)?.[1];
+    if (!sampled) continue;
+    const points = shapeOf(merged, root, width, row.minX, row.minY, row.maxX, row.maxY, row.sources > 1 ? bridge : 0);
     if (!points || points.length < 4) continue;
-    const spot = memberPoint(ids, stat.id, width);
+    const spot = memberPoint(merged, root, width);
     regions.push({
       name: sampled.name,
       hex: sampled.hex,
       points,
-      pixels: stat.pixels,
+      pixels: row.pixels,
       cx: spot.x,
       cy: spot.y,
       mixed: sampled.mixed,
     });
   }
+  regions.sort((left, right) => right.pixels - left.pixels);
+  const interior = mask.reduce((count, value) => count + value, 0);
+  const largest = regions[0]?.pixels ?? 0;
+  if (largest > 0 && largest < interior * 0.34) {
+    const body = coarseBody(coloured, line, width, height);
+    if (body && body.pixels > largest * 1.5) {
+      regions = [body, ...regions.filter((region) => region.name !== body.name)];
+    }
+  }
+  regions = dropTinyRegions(regions, width * height);
   return { regions, mixed };
+}
+
+/** Join areas of one colour that interior lines sliced apart. A different colour stays apart. */
+function linkSameColour(
+  ids: Int32Array,
+  colourOf: ReadonlyMap<number, { name: string }>,
+  parent: Int32Array,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const id = ids[y * width + x] ?? 0;
+      const colour = id ? colourOf.get(id)?.name : undefined;
+      if (!id || !colour) continue;
+      for (let step = 1; step <= radius; step += 1) {
+        if (x + step < width) {
+          const other = ids[y * width + x + step] ?? 0;
+          if (other && other !== id && colourOf.get(other)?.name === colour) unite(parent, id, other);
+        }
+        if (y + step < height) {
+          const other = ids[(y + step) * width + x] ?? 0;
+          if (other && other !== id && colourOf.get(other)?.name === colour) unite(parent, id, other);
+        }
+      }
+    }
+  }
+}
+
+function findRoot(parent: Int32Array, id: number): number {
+  let cursor = id;
+  while ((parent[cursor] ?? cursor) !== cursor) cursor = parent[cursor] ?? cursor;
+  let again = id;
+  while (again !== cursor) {
+    const next = parent[again] ?? cursor;
+    parent[again] = cursor;
+    again = next;
+  }
+  return cursor;
+}
+
+function unite(parent: Int32Array, left: number, right: number): void {
+  const rootLeft = findRoot(parent, left);
+  const rootRight = findRoot(parent, right);
+  if (rootLeft !== rootRight) parent[rootRight] = rootLeft;
+}
+
+function dropTinyRegions(regions: readonly FlatRegion[], imageArea: number): FlatRegion[] {
+  const largest = regions.reduce((max, region) => Math.max(max, region.pixels), 0);
+  const floor = Math.max(24, imageArea * 0.004);
+  return regions.filter((region) => region.pixels >= largest * 0.02 || region.pixels >= floor);
+}
+
+/** One fill for the area inside the outer lines, when thin interior lines have sliced it into slivers. */
+function coarseBody(image: RgbaImage, line: Uint8Array, width: number, height: number): FlatRegion | null {
+  const radius = Math.max(2, Math.round(Math.min(width, height) * 0.012));
+  const inside = interiorMask(dilateMask(line, width, height, radius), width, height);
+  let count = 0;
+  for (const value of inside) if (value) count += 1;
+  if (count < 40) return null;
+  const eroded = erodeMask(inside, width, height, Math.min(radius, 3));
+  const members: number[] = [];
+  for (let index = 0; index < eroded.length; index += 1) if (eroded[index]) members.push(index);
+  const colours = paintColours(image, members.length >= 12 ? members : indexList(inside));
+  if (colours.length < 12) return null;
+  const counts = new Map<string, number>();
+  for (const rgb of colours) {
+    const name = paletteName(rgb);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((left, right) => right[1] - left[1]);
+  if ((ranked[1]?.[1] ?? 0) / colours.length >= 0.38) return null;
+  const median = medianRgb(colours);
+  const name = paletteName(median);
+  if (name === 'putih') return null;
+  const ids = new Int32Array(inside.length);
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  for (let index = 0; index < inside.length; index += 1) {
+    if (!inside[index]) continue;
+    ids[index] = 1;
+    const x = index % width;
+    const y = (index - x) / width;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  const points = shapeOf(ids, 1, width, minX, minY, maxX, maxY, 0);
+  if (!points || points.length < 4) return null;
+  const spot = memberPoint(ids, 1, width);
+  return { name, hex: snapKid(median), points, pixels: count, cx: spot.x, cy: spot.y };
+}
+
+function indexList(mask: Uint8Array): number[] {
+  const members: number[] = [];
+  for (let index = 0; index < mask.length; index += 1) if (mask[index]) members.push(index);
+  return members;
 }
 
 function sampleRegion(image: RgbaImage, ids: Int32Array, id: number, width: number, height: number): { name: string; hex: string; mixed: boolean } | null {
@@ -319,11 +459,7 @@ function sampleRegion(image: RgbaImage, ids: Int32Array, id: number, width: numb
     members = [];
     for (let index = 0; index < ids.length; index += 1) if (ids[index] === id) members.push(index);
   }
-  const colours: Rgb[] = [];
-  for (const index of members) {
-    const rgb = pixelAt(image.data, index);
-    if (rgb) colours.push(rgb);
-  }
+  const colours = paintColours(image, members);
   if (colours.length < 8) return null;
   const median = medianRgb(colours);
   const counts = new Map<string, number>();
@@ -335,6 +471,19 @@ function sampleRegion(image: RgbaImage, ids: Int32Array, id: number, width: numb
   const second = ranked[1]?.[1] ?? 0;
   const name = paletteName(median);
   return { name, hex: name === 'putih' ? '#ffffff' : snapKid(median), mixed: second / colours.length >= 0.38 };
+}
+
+/** Prefer paint over the black line at the edge of a thin sliver. A truly black area still uses every pixel. */
+function paintColours(image: RgbaImage, members: readonly number[]): Rgb[] {
+  const all: Rgb[] = [];
+  const paint: Rgb[] = [];
+  for (const index of members) {
+    const rgb = pixelAt(image.data, index);
+    if (!rgb) continue;
+    all.push(rgb);
+    if (luminance(rgb) >= 36) paint.push(rgb);
+  }
+  return paint.length >= 8 ? paint : all;
 }
 
 function erodedMembers(ids: Int32Array, id: number, width: number, height: number, radius: number): number[] {
@@ -565,6 +714,7 @@ function shapeOf(
   minY: number,
   maxX: number,
   maxY: number,
+  grow = 0,
 ): Point[] | null {
   const pad = 2;
   const cropW = maxX - minX + 1 + pad * 2;
@@ -584,10 +734,27 @@ function shapeOf(
       data[index + 3] = 255;
     }
   }
+  if (grow > 0) growCrop(data, cropW, cropH, grow);
   const traced = traceInk({ width: cropW, height: cropH, data });
   const outer = traced.find((contour) => contour.silhouette) ?? traced[0];
   if (!outer || outer.points.length < 4) return null;
   return outer.points.map((point) => ({ x: point.x + minX - pad, y: point.y + minY - pad }));
+}
+
+function growCrop(data: Uint8Array, width: number, height: number, radius: number): void {
+  const mask = new Uint8Array(width * height);
+  for (let index = 0; index < mask.length; index += 1) {
+    if ((data[index * 4] ?? 255) < 40) mask[index] = 1;
+  }
+  const grown = dilateMask(mask, width, height, radius);
+  for (let index = 0; index < grown.length; index += 1) {
+    if (!grown[index]) continue;
+    const offset = index * 4;
+    data[offset] = 0;
+    data[offset + 1] = 0;
+    data[offset + 2] = 0;
+    data[offset + 3] = 255;
+  }
 }
 
 function hollowSolids(line: Uint8Array, width: number, height: number): void {

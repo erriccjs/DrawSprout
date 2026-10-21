@@ -46,6 +46,8 @@ describe('OpenAI client', () => {
     expect(promptText).toContain('vertical black bars');
     expect(promptText).toContain('QR code');
     expect(promptText).toContain('close-up');
+    expect(promptText).toContain('Do not zoom in');
+    expect(promptText).toContain('Do not zoom out');
     expect(form.get('background')).toBe('opaque');
     expect(JSON.stringify([...form.entries()])).not.toContain('sk-test-not-real');
   });
@@ -145,6 +147,7 @@ describe('OpenAI client', () => {
     expect(promptText).toContain('barcode');
     expect(promptText).toContain('Grey stays grey');
     expect(promptText).toContain('Red stays red');
+    expect(promptText).toContain('Do not zoom in');
     expect(form.getAll('image[]')).toHaveLength(2);
     expect(form.get('image')).toBeNull();
     expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('idempotency-key')).toBe('colour-key');

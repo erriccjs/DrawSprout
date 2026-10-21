@@ -1267,4 +1267,20 @@ The v8 run (commit 49a1732) was the best so far. The toy car was the first sampl
 
 **Review.** All five v8 lessons were flagged, including the good car, and the reason was not in the output. `reviewReasons` is written into `metrics.json` and the contact-sheet HTML. A lesson is not sent back just because the illustration has extra ink the steps do not draw, or because a duplicate stroke was dropped. A lesson like the car, with several visible drawing steps and colours that match their parts, is not flagged. A blank or mismatched drawing still is. These flags do not ask for another illustration. This is not the section 8 gate.
 
-The eval idempotency key ends in `v9`. The gate is still not claimed.
+The eval idempotency key ended in `v9`. D-76 bumps it to `v10`. The gate is still not claimed.
+
+### D-76 — Enclosing parts, whole regions, and the photo's framing
+
+The v9 run (commit 420b5ef, OpenAI default, five samples) was a regression against v8. No sample was 4 or better on every rubric dimension. The cat's interior lines, the dark coffee, and the red collar stayed, and call B at `quality=low` was about $0.09 a photo. Colour names attached to the wrong part (every cat colour was `kumis`, the tongue was `hidung`, leaves were `kelopak`). The grey face and the grey car body were missing. The same region was painted twice, and tiny junk colours appeared. The flower still had no petal steps. Step 1 said "garis luar kumis" or a garbled title. The standing dog was cropped to the head. The cup and saucer were still one outline. The review gate did not flag the flower or the car. This is not a pass. `claimedPass` stays false.
+
+**Names.** A colour region is named by the smallest part that contains it: at least half of the region's area lies inside that part. A wide whisker box does not name the face, and a huge face box is not skipped. Step 1 uses the subject's plain noun from the title ("mobil", not "mobil anak klasik" and not "kumis"). A part whose ink is not inside its box is dropped.
+
+**Regions.** Light grey is `abu-abu`, not paper white. Areas of one colour that interior lines sliced apart are joined, and a large body fill is added when those slices would hide it. A tiny region is dropped. Dark brown and black that cover the same coffee are one colour. Same-colour regions are one step.
+
+**Lines.** A thin stroke stays even when a thick outline is reduced to its centre, so a petal line is not erased. The part of a stroke that runs inside the outline is kept when the rest only copies the outline. A cup and saucer drawn as one silhouette become two outline steps.
+
+**Framing.** Both image prompts keep the photo's crop in both directions: do not zoom in, and do not zoom out. A full body stays a full body. A close-up stays a close-up.
+
+**Review.** `needsReview` is also set when the same part name has two colours (two wheels, one grey and one black), when the largest coloured area is small next to the subject, or when an instruction repeats "garis luar" or adds "yang lain". These flags do not ask for another illustration. A lesson like the car, with a large body colour and matching part colours, is not flagged.
+
+The eval idempotency key ends in `v10`. The gate is still not claimed.

@@ -17,9 +17,9 @@ const SHARED = [
   'One main subject only. Black line art on a plain white background.',
   'No shading, no colour, and no fill. Lines only.',
   'Draw one closed outer silhouette around the whole subject first, then the interior lines, including open ones: eyes, nose, whiskers, ears, collar, tongue, petals, leaves, wheels, seat, handle.',
-  'A cup and its saucer are two closed outlines, not one shape. A flower keeps the lines between the petals.',
+  'A cup and its saucer are two closed outlines, one above the other, that do not share a line. A flower keeps every line between the petals, from the centre out to the edge.',
   'Keep the pose, the direction the subject faces, the silhouette, the proportions, and the count of visible parts of that subject.',
-  'Keep the same framing and crop as the photo. A close-up stays a close-up. Do not zoom out to show the whole body if the photo only shows the head.',
+  'Keep the same framing and crop as the photo. Do not zoom in. Do not zoom out. A full body stays a full body. A close-up stays a close-up.',
   'Keep distinctive features that identify it: markings, ears, wheels, handle, petals, leaves.',
   'Leave out the background and anything that is not the subject: people, hands, legs, leashes, furniture, ground, sky, and scenery.',
   'Do not draw letters, numbers, barcodes, logos, racing numbers, or writing, unless the writing itself is the only subject.',
@@ -56,6 +56,7 @@ export function colourPrompt(): string {
     'Only fill. Keep every line exactly where it is.',
     'Do not redraw, move, scale, rotate, or replace any line. Do not add a line, letter, number, barcode, or sticker.',
     'Fill each enclosed area with one flat solid colour that matches that part in the photo.',
+    'Keep the same framing and crop as the photo. Do not zoom in. Do not zoom out.',
     'No shading, no gradients, no texture.',
     'Grey stays grey, not beige and not orange. Red stays red, not orange. Black stays black. Dark brown stays dark brown. White stays white.',
     'Leave the paper outside the subject white.',
@@ -79,7 +80,7 @@ export function replicatePrompt(reinforceSilhouette = false, reinforceSubject = 
     'Black line drawing of this one subject for a young child.',
     'One closed outer silhouette and interior outlines that close each part.',
     'Plain opaque white background. No colour, no shading, no text.',
-    "Keep the photo's framing and crop.",
+    "Keep the photo's framing and crop. Do not zoom in or zoom out.",
   ];
   if (reinforceSilhouette) lines.push('Draw the full subject as one continuous closed outer silhouette.');
   if (reinforceSubject) lines.push('The drawing must be the same object as the photo.');

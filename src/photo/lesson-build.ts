@@ -4,7 +4,7 @@
  * A circle or oval is added first only when it fits that outline. When the
  * vision model names nothing usable, the lesson falls back to one named
  * outline and drops unnamed scraps instead of printing a generic sentence.
- * See D-70, D-71, D-72, and D-73.
+ * See D-70, D-71, D-72, D-73, and D-76.
  */
 
 import { assertValidLessons } from '../lesson-data/validate';
@@ -21,8 +21,10 @@ export const LESSON_HEIGHT = 750;
 export const OUTLINE_COVERAGE_MIN = 0.6;
 /** Filled overlap required before a circle or oval may introduce a part. */
 export const CONSTRUCTION_IOU_MIN = 0.9;
-/** A box larger than this fraction of the subject cannot claim an interior piece. */
-const HUGE_PART = 0.72;
+/** A box larger than the subject itself cannot name an interior line. A petal box the size of the flower still can. */
+const WIDE_PART = 1.08;
+/** Share of a region that must sit inside a part before that part can name it. */
+const ENCLOSE = 0.55;
 /** Outline, construction, and details together. Extra details are merged away. */
 const MAX_DRAWING_STEPS = 7;
 const MASK_W = 160;
@@ -163,8 +165,9 @@ function buildFromParts(input: {
   const kept = mapped.filter((contour) => contour.id === main.id || !isSpeck(contour, boxOf(main.points)));
   const outlinePart = outlineOwner(main, parts);
   const outlineName = outlinePart?.name ?? subjectNoun(input.title);
-  if (!outlineName) return null;
-  const spokenOutline = plainNoun(bareName(outlineName)) || plainNoun(outlineName) || outlineName;
+  if (!outlineName && !headNoun(input.title)) return null;
+  const titleNoun = headNoun(input.title) || plainNoun(bareName(outlineName ?? '')) || outlineName || '';
+  const spokenOutline = titleNoun;
 
   const bundles = new Map<string, DetailBundle>();
   const separate: MappedContour[] = [];
@@ -175,12 +178,16 @@ function buildFromParts(input: {
       separate.push(contour);
       continue;
     }
-    const owner = partAt(contour, parts, subject);
+    const owner = enclosingPart(contour, parts, subject, true);
     if (!owner) {
       unnamed += 1;
       continue;
     }
     const name = plainNoun(bareName(owner.name)) || owner.name;
+    if (!name) {
+      unnamed += 1;
+      continue;
+    }
     const bundle = bundles.get(name) ?? { name, pair: false, count: 0, contours: [] };
     bundle.pair = bundle.pair || owner.pair;
     if (owner.count > bundle.count) bundle.count = owner.count;
@@ -196,20 +203,25 @@ function buildFromParts(input: {
     const guide: GuidePath = { id: `${id}-1`, d: fit.d, role: 'construction' };
     steps.push(lineStep(id, 'outline', constructionInstruction(fit.kind, spokenOutline), [guide]));
   }
-  const outlineGuides = guidesFor('outline-1', [main]);
-  preview.push(...outlineGuides);
-  steps.push(lineStep('outline-1', 'outline', outlineInstruction(outlineName, input.title), outlineGuides));
-  separate.forEach((contour, index) => {
-    const owner = partAt(contour, parts, subject);
-    const name = plainNoun(bareName(owner?.name ?? '')) || spokenOutline;
-    const id = `outline-${index + 2}`;
-    const guides = guidesFor(id, [contour]);
+  const split = splitCupSaucer(main, parts);
+  const pieces = split ?? [main];
+  const separateRoom = Math.max(0, MAX_DRAWING_STEPS - (fit ? 1 : 0) - pieces.length);
+  const extra = [...separate].sort((left, right) => boxOf(right.points).area - boxOf(left.points).area).slice(0, separateRoom);
+  const outlines = [...pieces, ...extra].map((contour) => ({
+    contour,
+    name: plainNoun(bareName(enclosingPart(contour, parts, subject, false)?.name ?? '')) || titleNoun,
+  }));
+  outlines.sort((left, right) => Number(right.name === titleNoun) - Number(left.name === titleNoun));
+  outlines.forEach((item, index) => {
+    const id = `outline-${index + 1}`;
+    const guides = guidesFor(id, [item.contour]);
     preview.push(...guides);
-    steps.push(lineStep(id, 'outline', outlineInstruction(name, input.title), guides));
+    const label = index === 0 ? titleNoun : item.name;
+    steps.push(lineStep(id, 'outline', outlineInstruction(label, input.title), guides));
   });
 
-  const fixed = (fit ? 1 : 0) + 1 + separate.length;
-  const pruned = pruneDetails([...bundles.values()], [main], Math.max(0, MAX_DRAWING_STEPS - fixed));
+  const fixed = (fit ? 1 : 0) + outlines.length;
+  const pruned = pruneDetails([...bundles.values()], outlines.map((item) => item.contour), Math.max(0, MAX_DRAWING_STEPS - fixed));
   pruned.kept.forEach((bundle, index) => {
     const id = `detail-${index + 1}`;
     const inks = uniqueContours(bundle.contours);
@@ -298,6 +310,9 @@ function finish(
   if (uniqueSteps.some((step) => /\btambahkan dua\b/.test(normalizeInstruction(step.instruction)) && step.guidePaths.length !== 2)) {
     reasons.push('Jumlah bagian tidak sesuai instruksi. Cek dulu sebelum dipakai.');
   }
+  if (uniqueSteps.some((step) => /garis\s*luar\s+garis|garisluar|\byang lain\b|lagi \(\d+\)/.test(normalizeInstruction(step.instruction)))) {
+    reasons.push('Ada nama bagian yang tidak jelas. Cek dulu sebelum dipakai.');
+  }
   const needsReview = reasons.length > 0;
   const lesson: LessonPackage = {
     id: input.id,
@@ -384,9 +399,8 @@ function appendFlatColours(
   const notes: string[] = [];
   let empty = false;
   let mixed = false;
-  const buckets = new Map<string, ColourBucket>();
-  for (const region of loaded) {
-    if (region.name === 'putih') continue;
+  const prepared: Array<{ label: string; colour: string; hex: string; pixels: number; path: string; area: number }> = [];
+  for (const region of keepColourRegions(loaded)) {
     if (region.mixed) mixed = true;
     const mapped = mapContour({ points: region.points, closed: true }, input.sourceWidth, input.sourceHeight);
     if (mapped.points.length < 3) continue;
@@ -396,13 +410,36 @@ function appendFlatColours(
       empty = true;
       continue;
     }
-    const label = nameAt(region.cx, region.cy, input, parts, subject, spoken);
-    const key = `${label}|${region.name}`;
-    const bucket = buckets.get(key) ?? { colour: region.name, hex: region.hex, pixels: 0, names: [], paths: [] };
+    prepared.push({
+      label: nameRegion(mapped.points, parts, spoken),
+      colour: region.name,
+      hex: region.hex,
+      pixels: region.pixels,
+      path: mapped.path,
+      area,
+    });
+  }
+  const coloured = collapseDoublePaint(prepared);
+  const partColours = new Map<string, Set<string>>();
+  let maxArea = 0;
+  const buckets = new Map<string, ColourBucket>();
+  for (const region of coloured) {
+    if (region.area > maxArea) maxArea = region.area;
+    const seen = partColours.get(region.label) ?? new Set<string>();
+    seen.add(region.colour);
+    partColours.set(region.label, seen);
+    const bucket = buckets.get(region.colour) ?? { colour: region.colour, hex: region.hex, pixels: 0, names: [], paths: [] };
+    if (region.pixels >= bucket.pixels) bucket.hex = region.hex;
     bucket.pixels += region.pixels;
-    bucket.paths.push(mapped.path);
-    if (label && !bucket.names.includes(label)) bucket.names.push(label);
-    buckets.set(key, bucket);
+    bucket.paths.push(region.path);
+    if (region.label && !bucket.names.includes(region.label)) bucket.names.push(region.label);
+    buckets.set(region.colour, bucket);
+  }
+  if ([...partColours.values()].some((colours) => colours.size > 1)) {
+    notes.push('Ada bagian sejenis dengan warna berbeda. Cek dulu sebelum dipakai.');
+  }
+  if (subject.area > 1000 && maxArea < subject.area * 0.3) {
+    notes.push('Bagian besar subjek belum diwarnai. Cek dulu sebelum dipakai.');
   }
   if (empty) notes.push('Ada langkah warna yang tidak mengisi. Cek dulu sebelum dipakai.');
   if (mixed) notes.push('Ada bagian dengan lebih dari satu warna. Cek dulu sebelum dipakai.');
@@ -433,20 +470,60 @@ function appendFlatColours(
   return { notes, names: loaded.map((region) => region.name) };
 }
 
-function nameAt(
-  x: number,
-  y: number,
-  input: { readonly sourceWidth: number; readonly sourceHeight: number },
-  parts: readonly DetectedPart[],
-  subject: Box,
-  spoken: string,
-): string {
-  const point = sourceToLesson(x, y, input.sourceWidth, input.sourceHeight);
+const COFFEE_COLOURS = new Set(['hitam', 'cokelat tua', 'cokelat']);
+
+function keepColourRegions(regions: readonly FlatRegion[]): FlatRegion[] {
+  const sorted = regions.filter((region) => region.name !== 'putih').sort((left, right) => right.pixels - left.pixels);
+  const largest = sorted[0]?.pixels ?? 0;
+  const kept: FlatRegion[] = [];
+  for (const region of sorted) {
+    if (largest > 0 && region.pixels < largest * 0.02 && region.pixels < 500) continue;
+    const covered = kept.some((other) => coffeePair(region.name, other.name) && polygonShare(region.points, other.points) >= 0.6);
+    if (covered) continue;
+    kept.push(region);
+  }
+  return kept;
+}
+
+function coffeePair(left: string, right: string): boolean {
+  return COFFEE_COLOURS.has(left) && COFFEE_COLOURS.has(right) && left !== right;
+}
+
+function polygonShare(inner: readonly Point[], outer: readonly Point[]): number {
+  const samples = insideSamples(inner);
+  if (samples.length === 0) return 0;
+  let hits = 0;
+  for (const point of samples) if (pointInPolygon(point.x, point.y, outer)) hits += 1;
+  return hits / samples.length;
+}
+
+function collapseDoublePaint(regions: Array<{ label: string; colour: string; hex: string; pixels: number; path: string; area: number }>): typeof regions {
+  const byLabel = new Map<string, typeof regions>();
+  for (const region of regions) {
+    const list = byLabel.get(region.label) ?? [];
+    list.push(region);
+    byLabel.set(region.label, list);
+  }
+  const kept: typeof regions = [];
+  for (const list of byLabel.values()) {
+    const colours = new Set(list.map((region) => region.colour));
+    const onlyCoffee = [...colours].every((colour) => COFFEE_COLOURS.has(colour));
+    if (colours.size > 1 && onlyCoffee) {
+      const winner = [...list].sort((left, right) => right.pixels - left.pixels)[0];
+      if (winner) kept.push(...list.filter((region) => region.colour === winner.colour));
+      continue;
+    }
+    kept.push(...list);
+  }
+  return kept;
+}
+
+/** Smallest part that actually contains the region. A wide whisker box does not name the face. */
+function nameRegion(points: readonly Point[], parts: readonly DetectedPart[], spoken: string): string {
   let best: DetectedPart | null = null;
   let bestArea = Number.POSITIVE_INFINITY;
   for (const part of parts) {
-    if (partFraction(part, subject) > HUGE_PART) continue;
-    if (!containsPoint(part, point)) continue;
+    if (regionShare(points, part) < ENCLOSE) continue;
     const area = areaOf(part);
     if (area < bestArea) {
       best = part;
@@ -455,6 +532,30 @@ function nameAt(
   }
   const named = best ? plainNoun(bareName(best.name)) : '';
   return named || spoken;
+}
+
+function regionShare(points: readonly Point[], part: DetectedPart): number {
+  const samples = insideSamples(points);
+  if (samples.length === 0) return 0;
+  let hits = 0;
+  for (const point of samples) if (containsPoint(part, point)) hits += 1;
+  return hits / samples.length;
+}
+
+function insideSamples(points: readonly Point[]): Point[] {
+  const box = boxOf(points);
+  const cols = 8;
+  const rows = 8;
+  const width = Math.max(1, box.maxX - box.minX);
+  const height = Math.max(1, box.maxY - box.minY);
+  const samples: Point[] = [];
+  for (let y = 0; y < rows; y += 1) {
+    for (let x = 0; x < cols; x += 1) {
+      const point = { x: box.minX + ((x + 0.5) / cols) * width, y: box.minY + ((y + 0.5) / rows) * height };
+      if (pointInPolygon(point.x, point.y, points)) samples.push(point);
+    }
+  }
+  return samples.length > 0 ? samples : [...points];
 }
 
 function fillSamples(points: readonly Point[]): number {
@@ -474,11 +575,6 @@ function fillSamples(points: readonly Point[]): number {
   return inside;
 }
 
-function sourceToLesson(x: number, y: number, sourceWidth: number, sourceHeight: number): Point {
-  const place = sourcePlacement(sourceWidth, sourceHeight);
-  return { x: place.offsetX + x * place.scale, y: place.offsetY + y * place.scale };
-}
-
 function pruneDetails(
   bundles: readonly DetailBundle[],
   outline: readonly MappedContour[],
@@ -493,8 +589,9 @@ function pruneDetails(
     if (kept.length >= room) break;
     const own = ownInk(bundle.contours);
     const fresh = freshInk(mask, bundle.contours);
-    if (fresh < MIN_NEW_INK) {
-      if (own >= MIN_NEW_INK) invisible = true;
+    const mostlyThere = own > 0 && fresh / own < 0.3;
+    if (fresh < MIN_NEW_INK || mostlyThere) {
+      if (own >= MIN_NEW_INK && fresh < MIN_NEW_INK) invisible = true;
       continue;
     }
     stampContours(mask, bundle.contours);
@@ -651,13 +748,11 @@ function maskPoint(point: Point): { x: number; y: number } {
 }
 
 function bareName(name: string): string {
-  let text = name.trim();
-  while (text.startsWith('garis luar')) text = text.slice('garis luar'.length).trim();
-  return text;
+  return name.trim().replace(/garis\s*luar/gi, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function outlineInstruction(name: string, title: string): string {
-  const cleaned = plainNoun(bareName(name)) || plainNoun(subjectNoun(title) ?? '') || '';
+  const cleaned = plainNoun(bareName(name)) || headNoun(title);
   if (!cleaned) return 'Gambar garis luar.';
   return `Gambar garis luar ${cleaned}.`;
 }
@@ -755,6 +850,16 @@ function subjectNoun(title: string): string | null {
   return cleanPartName(cleaned);
 }
 
+const MODIFIERS = new Set([...ADJECTIVES, 'anak', 'klasik', 'mainan', 'lain', 'yang']);
+
+/** First plain noun of the title: "mobil", not "mobil anak klasik". */
+function headNoun(title: string): string {
+  const base = subjectNoun(title);
+  if (!base) return '';
+  const words = plainNoun(bareName(base)).split(' ').filter((word) => word.length > 0 && !MODIFIERS.has(word));
+  return words[0] ?? '';
+}
+
 function outlineOwner(contour: MappedContour, parts: readonly DetectedPart[]): DetectedPart | null {
   const listed = parts.filter((part) => part.pieceIds.includes(contour.id));
   if (listed.length > 0) return listed.reduce((best, part) => (areaOf(part) > areaOf(best) ? part : best));
@@ -771,15 +876,20 @@ function outlineOwner(contour: MappedContour, parts: readonly DetectedPart[]): D
   return best;
 }
 
-function partAt(contour: MappedContour, parts: readonly DetectedPart[], subject: Box): DetectedPart | null {
-  const box = boxOf(contour.points);
-  const point = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
+/** Smallest part that contains the ink. Wide boxes are skipped for interior lines. */
+function enclosingPart(
+  contour: MappedContour,
+  parts: readonly DetectedPart[],
+  subject: Box,
+  skipWide: boolean,
+): DetectedPart | null {
   let best: DetectedPart | null = null;
   let bestArea = Number.POSITIVE_INFINITY;
   for (const part of parts) {
-    if (partFraction(part, subject) > HUGE_PART) continue;
-    if (!containsPoint(part, point)) continue;
-    if (!boxesOverlap(box, part)) continue;
+    const fraction = partFraction(part, subject);
+    if (fraction > 0.97) continue;
+    if (skipWide && fraction > WIDE_PART) continue;
+    if (containment(contour, part) < ENCLOSE) continue;
     const area = areaOf(part);
     if (area < bestArea) {
       best = part;
@@ -789,8 +899,47 @@ function partAt(contour: MappedContour, parts: readonly DetectedPart[], subject:
   return best;
 }
 
-function boxesOverlap(ink: Box, part: DetectedPart): boolean {
-  return ink.minX <= part.x + part.width && ink.maxX >= part.x && ink.minY <= part.y + part.height && ink.maxY >= part.y;
+/** One connected cup-and-saucer silhouette becomes two outline steps. */
+function splitCupSaucer(main: MappedContour, parts: readonly DetectedPart[]): MappedContour[] | null {
+  const cup = parts.find((part) => plainNoun(bareName(part.name)) === 'cangkir');
+  const saucer = parts.find((part) => plainNoun(bareName(part.name)) === 'piring');
+  if (!cup || !saucer) return null;
+  if (containment(main, cup) < 0.08 || containment(main, saucer) < 0.08) return null;
+  const cupY = cup.y + cup.height / 2;
+  const saucerY = saucer.y + saucer.height / 2;
+  const height = Math.max(1, boxOf(main.points).maxY - boxOf(main.points).minY);
+  if (Math.abs(cupY - saucerY) < Math.max(36, height * 0.12)) return null;
+  const mid = (cupY + saucerY) / 2;
+  const upper = main.points.filter((point) => point.y <= mid);
+  const lower = main.points.filter((point) => point.y >= mid);
+  const cupPoints = cupY < saucerY ? upper : lower;
+  const saucerPoints = cupY < saucerY ? lower : upper;
+  const cupContour = closeContour(cupPoints, main.id);
+  const saucerContour = closeContour(saucerPoints, main.id + 1000);
+  if (!cupContour || !saucerContour) return null;
+  return [cupContour, saucerContour];
+}
+
+function closeContour(points: readonly Point[], id: number): MappedContour | null {
+  const unique = dedupePoints(points);
+  if (unique.length < 4) return null;
+  const ring = [...unique];
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (first && last && (first.x !== last.x || first.y !== last.y)) ring.push(first);
+  return {
+    points: ring,
+    closed: true,
+    area: Math.abs(shoelace(ring)),
+    length: polylineLength(ring),
+    cx: ring.reduce((sum, point) => sum + point.x, 0) / ring.length,
+    cy: ring.reduce((sum, point) => sum + point.y, 0) / ring.length,
+    nx: 0,
+    ny: 0,
+    silhouette: false,
+    path: smoothPath(ring, true),
+    id,
+  };
 }
 
 function isSeparateObject(contour: MappedContour, main: MappedContour): boolean {

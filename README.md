@@ -215,10 +215,11 @@ a black line drawing, then a flat colouring of that drawing. The colour pass
 uses `quality=low`. Drawing steps come from the line drawing, including open
 interior lines, and a cup and saucer stay separate outlines. Colour steps come
 from the enclosed areas of those lines, sampled on the aligned colour image
-(D-74, D-75). A white area is not a colour step, because the paper is already
-white. The fill is the sampled colour, snapped flat. Drawing steps stay within
+(D-74, D-75, D-76). A white area is not a colour step, because the paper is already
+white. The fill is the sampled colour, snapped flat, and a region is named by
+the part that contains it. Drawing steps stay within
 about seven, and the first step names the subject without adjectives. The
-illustration keeps the photo's framing and is flattened onto white. OpenAI
+illustration keeps the photo's framing in both directions and is flattened onto white. OpenAI
 stays the default image model.
 
 ### Evaluation
@@ -256,7 +257,7 @@ after the first pair. The harness writes `illustrations/<photo>-line.png` and
 one contact sheet and stops if either provider fails. `flux-1.1-pro` is
 unsuitable (it returns near-photos) and is not part of compare. Kontext uses
 its own short prompt and retries HTTP 429. The idempotency key for this
-revision ends in `v9`, so a rerun after the interior-line and colour-sample
+revision ends in `v10`, so a rerun after the enclosing-part and framing
 change is a new paid job. Each row in `metrics.json` includes `reviewReasons`.
 `REPLICATE_API_TOKEN` is read only when `REPLICATE_API_KEY` is unset.
 

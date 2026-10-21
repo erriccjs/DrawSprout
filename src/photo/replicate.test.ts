@@ -53,6 +53,8 @@ describe('Replicate editor', () => {
     expect(body.input.prompt).toContain('white background');
     expect(body.input.prompt).toContain('No colour');
     expect(body.input.prompt).toContain('framing');
+    expect(body.input.prompt).toContain('Do not zoom in');
+    expect(body.input.prompt).toContain('zoom out');
     expect(body.input.prompt).not.toMatch(/vehicle|wheel|\bcar\b|toy/i);
     expect(init.body).not.toContain('r8-secret');
   });

@@ -489,12 +489,18 @@ describe('named traced parts', () => {
       id: 'photo-repeat',
       title: 'Kucing',
       targetHash: 'abcdef1234567890',
-      contours: [square(80, 80, 500)],
+      contours: [
+        square(80, 80, 500),
+        { closed: false, points: [{ x: 200, y: 250 }, { x: 320, y: 270 }, { x: 440, y: 250 }] },
+      ],
       sourceWidth: 1000,
       sourceHeight: 750,
       photo,
       palette: ['#cc3333'],
-      parts: [part('kepala kepala', false, 'oranye')],
+      parts: [
+        { ...part('kepala', false, 'oranye'), ...cover(80, 80, 500, 500) },
+        { ...part('mata mata', false, 'oranye'), ...cover(180, 220, 280, 80) },
+      ],
     });
     expect(repeated.needsReview).toBe(true);
     expect(repeated.reviewReason).toContain('Ada instruksi yang mengulang kata');
@@ -756,6 +762,116 @@ describe('named traced parts', () => {
     expect(built.needsReview).toBe(false);
     expect(built.reviewReasons).toEqual([]);
   });
+
+  it('names a fill by the part that encloses it and keeps step 1 as the subject', () => {
+    const photo = painted(24, 18, () => [180, 180, 180]);
+    const built = buildPhotoLesson({
+      id: 'photo-enclose',
+      title: 'Kucing',
+      targetHash: 'abcdef1234567890',
+      contours: [square(80, 60, 520), { closed: false, points: [{ x: 200, y: 280 }, { x: 360, y: 300 }, { x: 480, y: 280 }] }],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      flatRegions: [
+        { name: 'abu-abu', hex: '#b4b4b4', points: square(80, 60, 520).points, pixels: 9000, cx: 340, cy: 320 },
+        { name: 'kuning', hex: '#e2c04a', points: square(220, 270, 50).points, pixels: 400, cx: 245, cy: 295 },
+      ],
+      parts: [
+        { ...part('wajah', false, 'kuning'), ...cover(80, 60, 520, 520) },
+        { ...part('kumis', false, 'kuning'), ...cover(180, 250, 320, 70) },
+      ],
+    });
+    const colours = built.lesson.steps.filter((step) => step.phase === 'color').map((step) => step.instruction);
+    expect(colours.some((text) => text.includes('wajah') && text.includes('abu-abu'))).toBe(true);
+    expect(colours.join(' ')).not.toMatch(/Warnai kumis dengan abu-abu/);
+    expect(built.lesson.steps.find((step) => step.id === 'outline-1')?.instruction).toBe('Gambar garis luar kucing.');
+    expect(built.lesson.steps.some((step) => step.instruction === 'Gambar kumis.')).toBe(true);
+    const titled = buildPhotoLesson({
+      id: 'photo-title-noun',
+      title: 'Mobil anak klasik',
+      targetHash: 'abcdef1234567890',
+      contours: [square(80, 80, 500)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      parts: [{ ...part('garisluar', false, 'abu-abu'), ...cover(80, 80, 500, 500) }],
+    });
+    expect(titled.lesson.steps.find((step) => step.id === 'outline-1')?.instruction).toBe('Gambar garis luar mobil.');
+    expect(titled.reviewReason ?? '').not.toContain('yang lain');
+  });
+
+  it('splits one cup-and-saucer outline into two steps', () => {
+    const points: Point[] = [];
+    for (let y = 40; y <= 640; y += 16) points.push({ x: 220, y });
+    for (let x = 220; x <= 780; x += 16) points.push({ x, y: 640 });
+    for (let y = 640; y >= 40; y -= 16) points.push({ x: 780, y });
+    for (let x = 780; x >= 220; x -= 16) points.push({ x, y: 40 });
+    const cup = buildPhotoLesson({
+      id: 'photo-one-outline',
+      title: 'Cangkir',
+      targetHash: 'abcdef1234567890',
+      contours: [{ closed: true, points }],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#ffffff'],
+      parts: [
+        { ...part('cangkir', false, 'putih'), ...cover(240, 40, 360, 280) },
+        { ...part('piring', false, 'putih'), ...cover(180, 400, 640, 240) },
+      ],
+    });
+    const outlines = cup.lesson.steps.filter((step) => step.instruction.startsWith('Gambar garis luar')).map((step) => step.instruction);
+    expect(outlines).toContain('Gambar garis luar cangkir.');
+    expect(outlines).toContain('Gambar garis luar piring.');
+    expect(outlines[0]).toBe('Gambar garis luar cangkir.');
+  });
+
+  it('flags two wheels of different colours, a large uncoloured body, and a garbled name', () => {
+    const photo = painted(24, 18, () => [140, 140, 140]);
+    const wheels = buildPhotoLesson({
+      id: 'photo-wheels-clash',
+      title: 'Mobil',
+      targetHash: 'abcdef1234567890',
+      contours: [square(80, 160, 640), square(40, 40, 80), square(800, 40, 80)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      flatRegions: [
+        { name: 'abu-abu', hex: '#808080', points: square(40, 40, 80).points, pixels: 2500, cx: 80, cy: 80 },
+        { name: 'hitam', hex: '#202020', points: square(800, 40, 80).points, pixels: 2500, cx: 840, cy: 80 },
+      ],
+      parts: [
+        { ...part('mobil', false, 'abu-abu'), ...cover(80, 160, 640, 480) },
+        { ...part('roda', true, 'hitam'), ...cover(40, 40, 80, 80), count: 2 },
+        { ...part('roda', true, 'hitam'), ...cover(800, 40, 80, 80), count: 2 },
+      ],
+    });
+    expect(wheels.reviewReason).toContain('warna berbeda');
+    expect(wheels.reviewReason).toContain('belum diwarnai');
+    const garbled = buildPhotoLesson({
+      id: 'photo-garbled',
+      title: 'Kucing',
+      targetHash: 'abcdef1234567890',
+      contours: [
+        square(80, 60, 420),
+        { closed: false, points: [{ x: 180, y: 250 }, { x: 300, y: 270 }, { x: 420, y: 250 }] },
+      ],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      parts: [
+        { ...part('wajah', false, 'abu-abu'), ...cover(80, 60, 420, 420) },
+        { ...part('garisluar', false, 'abu-abu'), ...cover(160, 220, 280, 80) },
+      ],
+    });
+    expect(garbled.lesson.steps.some((step) => step.instruction.toLowerCase().includes('garisluar'))).toBe(true);
+    expect(garbled.reviewReason).toContain('tidak jelas');
+  });
 });
 
 describe('colour names', () => {
@@ -806,6 +922,25 @@ describe('traced ink cleanup', () => {
       return (left > 12 && left < 16) || (right > 12 && right < 16);
     }));
     expect(apart.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps petal lines that run through the flower', () => {
+    const art = picture(140, 140, (x, y) => {
+      const dx = x - 70;
+      const dy = y - 70;
+      const distance = Math.hypot(dx, dy);
+      if (distance > 48 && distance < 52) return true;
+      return [0, 1, 2, 3, 4].some((index) => {
+        const angle = (index / 5) * Math.PI * 2;
+        const rx = Math.cos(angle);
+        const ry = Math.sin(angle);
+        const along = dx * rx + dy * ry;
+        const cross = Math.abs(dx * ry - dy * rx);
+        return along > 16 && along < 48 && cross < 1.15;
+      });
+    });
+    const traced = traceInk(art);
+    expect(traced.filter((contour) => !contour.silhouette).length).toBeGreaterThanOrEqual(3);
   });
 });
 

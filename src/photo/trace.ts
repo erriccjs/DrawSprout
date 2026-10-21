@@ -34,18 +34,38 @@ export function traceInk(image: RgbaImage, threshold = INK_LUMINANCE): Contour[]
   const epsilon = Math.max(1.25, Math.min(width, height) * 0.004);
   const filled = filledSubject(cleaned, width, height);
   const detailMask = shouldThin(cleaned, width, height) ? thinStrokes(cleaned, width, height) : cleaned;
-  const details = collapseNested(contoursFrom(detailMask, width, height, epsilon, filled)
+  const details = collapseNested(contoursFrom(detailMask, width, height, epsilon)
     .filter((contour) => !bothSidesShorterThan(contour.points, Math.max(4, Math.min(width, height) * 0.012))));
   const outerLoop = largestLoop(marchingSquares(filled, width, height));
   if (!outerLoop) return dedupeContours(mergeNearParallel(details, width, height));
-  const outer = finishLoop(outerLoop, epsilon, null, width, height);
+  const outer = finishLoop(outerLoop, epsilon);
   if (outer.length < 4) return dedupeContours(mergeNearParallel(details, width, height));
   const silhouette: Contour = { points: outer, closed: true, silhouette: true };
   const gap = Math.max(3, Math.min(width, height) * 0.02);
-  return dedupeContours(mergeNearParallel([
-    silhouette,
-    ...details.filter((contour) => !nearParallel(contour, silhouette, gap)),
-  ], width, height));
+  const interior = details.flatMap((contour) => separateInterior(contour, silhouette, gap));
+  return dedupeContours(mergeNearParallel([silhouette, ...interior], width, height));
+}
+
+/** A stroke that only copies the outline is dropped. The part that runs inside, such as a petal line, stays. */
+function separateInterior(contour: Contour, silhouette: Contour, gap: number): Contour[] {
+  const limit = Math.max(gap, 6);
+  let far = 0;
+  for (const point of contour.points) {
+    if (nearestSegment(point, silhouette.points) > limit) far += 1;
+  }
+  if (far >= contour.points.length * 0.65) return [contour];
+  const runs: Point[][] = [];
+  let current: Point[] = [];
+  const flush = () => {
+    if (current.length >= 4) runs.push(current);
+    current = [];
+  };
+  for (const point of contour.points) {
+    if (nearestSegment(point, silhouette.points) > limit) current.push(point);
+    else flush();
+  }
+  flush();
+  return runs.map((points) => ({ points, closed: false }));
 }
 
 /** Two strokes of one line. A shorter copy close to a kept line is dropped. The silhouette stays. */
@@ -549,16 +569,37 @@ function shouldThin(mask: Uint8Array, width: number, height: number): boolean {
   return pixels / box < 0.62;
 }
 
-/** Centre line of a thick stroke. A solid fill is not passed here. */
+/**
+ * Centre line of a thick stroke. A thin stroke, such as a petal line, is kept
+ * whole: the medial axis only exists where the ink is at least two pixels thick.
+ */
 function thinStrokes(mask: Uint8Array, width: number, height: number): Uint8Array {
-  const ridge = medialAxis(mask, width, height);
+  const dist = distanceToEdge(mask, width, height);
+  const ridge = medialPeaks(dist, width, height);
   let pixels = 0;
   for (const value of ridge) if (value) pixels += 1;
   if (pixels < 16) return mask;
-  return dilate(ridge, width, height, 1);
+  const out = dilate(ridge, width, height, 1);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (!mask[index] || out[index] || (dist[index] ?? 0) !== 1) continue;
+      let besideThick = false;
+      for (let dy = -1; dy <= 1 && !besideThick; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const sx = x + dx;
+          const sy = y + dy;
+          if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
+          if ((dist[sy * width + sx] ?? 0) >= 2) besideThick = true;
+        }
+      }
+      if (!besideThick) out[index] = 1;
+    }
+  }
+  return out;
 }
 
-function medialAxis(mask: Uint8Array, width: number, height: number): Uint8Array {
+function distanceToEdge(mask: Uint8Array, width: number, height: number): Int16Array {
   const dist = new Int16Array(mask.length);
   const queue = new Int32Array(mask.length);
   let tail = 0;
@@ -602,7 +643,11 @@ function medialAxis(mask: Uint8Array, width: number, height: number): Uint8Array
       }
     }
   }
-  const out = new Uint8Array(mask.length);
+  return dist;
+}
+
+function medialPeaks(dist: Int16Array, width: number, height: number): Uint8Array {
+  const out = new Uint8Array(dist.length);
   for (let y = 1; y < height - 1; y += 1) {
     for (let x = 1; x < width - 1; x += 1) {
       const index = y * width + x;
@@ -708,10 +753,11 @@ function dilate(mask: Uint8Array, width: number, _height: number, radius: number
   return out;
 }
 
-function contoursFrom(mask: Uint8Array, width: number, height: number, epsilon: number, filled: Uint8Array): Contour[] {
+function contoursFrom(mask: Uint8Array, width: number, height: number, epsilon: number): Contour[] {
   return marchingSquares(mask, width, height)
     .map((loop) => {
-      const points = dropChords(finishLoop(loop, epsilon, null, width, height), filled, width, height);
+      // Keep a long interior stroke. A petal line runs through the flower; it is not a shortcut to delete.
+      const points = finishLoop(loop, epsilon);
       const closed = points.length > 3 && samePoint(points[0]!, points[points.length - 1]!);
       return { points, closed };
     })
@@ -732,7 +778,7 @@ function largestLoop(loops: Point[][]): Point[] | null {
   return best;
 }
 
-function finishLoop(points: readonly Point[], epsilon: number, filled: Uint8Array | null, width: number, height: number): Point[] {
+function finishLoop(points: readonly Point[], epsilon: number): Point[] {
   let simplified = simplify(points, epsilon);
   let nextEpsilon = epsilon;
   while (simplified.length > MAX_POINTS && nextEpsilon < 48) {
@@ -740,7 +786,7 @@ function finishLoop(points: readonly Point[], epsilon: number, filled: Uint8Arra
     simplified = simplify(points, nextEpsilon);
   }
   if (simplified.length > MAX_POINTS) simplified = resampleClosed(points, MAX_POINTS - 1);
-  return filled ? dropChords(simplified, filled, width, height) : simplified;
+  return simplified;
 }
 
 function resampleClosed(points: readonly Point[], count: number): Point[] {
@@ -767,34 +813,6 @@ function resampleClosed(points: readonly Point[], count: number): Point[] {
   const head = out[0];
   if (head) out.push(head);
   return out;
-}
-
-function dropChords(points: Point[], filled: Uint8Array, width: number, height: number): Point[] {
-  if (points.length < 4) return points;
-  const box = bounds(points);
-  const diagonal = Math.hypot(box.width, box.height);
-  const kept: Point[] = [points[0]!];
-  for (let index = 1; index < points.length; index += 1) {
-    const from = points[index - 1]!;
-    const to = points[index]!;
-    const length = Math.hypot(to.x - from.x, to.y - from.y);
-    if (length > diagonal * 0.28 && deepInside(filled, width, height, (from.x + to.x) / 2, (from.y + to.y) / 2)) continue;
-    kept.push(to);
-  }
-  return kept.length >= 4 ? kept : points;
-}
-
-function deepInside(filled: Uint8Array, width: number, height: number, x: number, y: number): boolean {
-  const cx = Math.round(x);
-  const cy = Math.round(y);
-  for (let dy = -3; dy <= 3; dy += 1) {
-    for (let dx = -3; dx <= 3; dx += 1) {
-      const sx = cx + dx;
-      const sy = cy + dy;
-      if (sx < 0 || sy < 0 || sx >= width || sy >= height || !filled[sy * width + sx]) return false;
-    }
-  }
-  return true;
 }
 
 function dedupeContours(contours: Contour[]): Contour[] {
