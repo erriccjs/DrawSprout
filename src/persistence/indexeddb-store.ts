@@ -9,9 +9,12 @@
 
 import type { SessionPreferences, Stroke } from '../lesson-engine/types';
 import {
+  isGalleryArtwork,
   StorageFullError,
+  toSavedArtworkSummary,
   type RestoredSession,
   type SaveProgressInput,
+  type SavedArtworkSummary,
   type SessionCheckpoint,
   type SessionStore,
 } from './types';
@@ -136,6 +139,17 @@ export class IndexedDbSessionStore implements SessionStore {
       return latest?.sessionId ?? null;
     });
     return sessionId === null ? null : await this.loadSession(sessionId);
+  }
+
+  async listSavedArtworks(): Promise<readonly SavedArtworkSummary[]> {
+    const db = await this.dbPromise;
+    const checkpoints = await runTransaction(db, [CHECKPOINTS], 'readonly', async (tx) =>
+      request<SessionCheckpoint[]>(tx.objectStore(CHECKPOINTS).getAll()),
+    );
+    return checkpoints
+      .filter(isGalleryArtwork)
+      .sort((a, b) => b.updatedAt - a.updatedAt || (a.sessionId < b.sessionId ? 1 : -1))
+      .map(toSavedArtworkSummary);
   }
 
   async deleteSession(sessionId: string): Promise<void> {

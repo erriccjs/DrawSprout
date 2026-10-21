@@ -24,6 +24,9 @@ tablet and on a phone.
   reopens that picture's latest saved drawing; leaving a drawing returns to the
   screen without waiting on storage. Changing a tool or mode while the drawing
   opens keeps the saved strokes, and an empty session cannot replace them.
+  Karyaku, on the same screen, lists saved drawings (thumbnail without guides,
+  lesson name, date). Open one to continue or view it, save a PNG, or delete
+  it after a confirmation.
 - Canvas drawing with Pointer Events, pen / brush / eraser, undo and redo.
   On the last step, *Gambar bebas* (in the help sheet, and on the finish
   screen) continues with no canvas guide. Pen, brush, eraser, and colours

@@ -8,11 +8,14 @@
  */
 
 import type { SessionPreferences, Stroke } from '../lesson-engine/types';
-import type {
-  RestoredSession,
-  SaveProgressInput,
-  SessionCheckpoint,
-  SessionStore,
+import {
+  isGalleryArtwork,
+  toSavedArtworkSummary,
+  type RestoredSession,
+  type SaveProgressInput,
+  type SavedArtworkSummary,
+  type SessionCheckpoint,
+  type SessionStore,
 } from './types';
 
 export class MemorySessionStore implements SessionStore {
@@ -68,6 +71,14 @@ export class MemorySessionStore implements SessionStore {
     this.checkpoints.delete(sessionId);
     this.strokes.delete(sessionId);
     return Promise.resolve();
+  }
+
+  listSavedArtworks(): Promise<readonly SavedArtworkSummary[]> {
+    const saved = [...this.checkpoints.values()]
+      .filter(isGalleryArtwork)
+      .sort((a, b) => b.updatedAt - a.updatedAt || (a.sessionId < b.sessionId ? 1 : -1))
+      .map(toSavedArtworkSummary);
+    return Promise.resolve(saved);
   }
 
   loadPreferences(): Promise<SessionPreferences | null> {

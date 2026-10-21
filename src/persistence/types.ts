@@ -53,6 +53,38 @@ export interface RestoredSession {
   readonly strokes: readonly Stroke[];
 }
 
+/** What the gallery needs without reading the stroke log. */
+export interface SavedArtworkSummary {
+  readonly sessionId: string;
+  readonly lessonId: string;
+  readonly updatedAt: number;
+  readonly finished: boolean;
+  readonly currentStepIndex: number;
+}
+
+/**
+ * A checkpoint a child would recognise as their own picture.
+ * Opening a lesson and leaving before any mark does not count.
+ */
+export function isGalleryArtwork(checkpoint: SessionCheckpoint): boolean {
+  return (
+    checkpoint.finished ||
+    checkpoint.currentStepIndex > 0 ||
+    checkpoint.committedStrokeIds.length > 0 ||
+    checkpoint.redoStrokeIds.length > 0
+  );
+}
+
+export function toSavedArtworkSummary(checkpoint: SessionCheckpoint): SavedArtworkSummary {
+  return {
+    sessionId: checkpoint.sessionId,
+    lessonId: checkpoint.lessonId,
+    updatedAt: checkpoint.updatedAt,
+    finished: checkpoint.finished,
+    currentStepIndex: checkpoint.currentStepIndex,
+  };
+}
+
 export interface SaveProgressInput {
   readonly checkpoint: SessionCheckpoint;
   /** Strokes not yet written to the log. */
@@ -73,6 +105,11 @@ export interface SessionStore {
   /** Most recently updated session belonging to one lesson. */
   loadLatestSessionForLesson(lessonId: string): Promise<RestoredSession | null>;
   deleteSession(sessionId: string): Promise<void>;
+  /**
+   * Saved artworks for the picture-choosing screen, newest first.
+   * An untouched session (no strokes, still on step 1, not finished) is omitted.
+   */
+  listSavedArtworks(): Promise<readonly SavedArtworkSummary[]>;
   loadPreferences(): Promise<SessionPreferences | null>;
   savePreferences(preferences: SessionPreferences): Promise<void>;
   close(): void;
