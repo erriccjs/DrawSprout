@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { findLessonProblems } from '../lesson-data/validate';
-import { compareLessonToInk, renderLessonPreview, REVIEW_DICE_BELOW } from './compare';
-import { buildPhotoLesson, LOW_SUBJECT_COVERAGE, MAX_PATHS_PER_STEP, shouldRedraw } from './lesson-build';
+import { compareLessonToInk, renderCumulativeStep, renderLessonPreview, REVIEW_DICE_BELOW } from './compare';
+import { buildPhotoLesson, OUTLINE_COVERAGE_MIN, shouldRedraw } from './lesson-build';
+import type { DetectedPart } from './parts';
 import { decodePng, encodePng, type RgbaImage } from './png';
 import { traceInk, type Contour, type Point } from './trace';
 
@@ -42,7 +43,7 @@ function painted(
 describe('vectoriser to lesson', () => {
   const art = picture(64, 48, (x, y) => x >= 8 && x < 56 && y >= 8 && y < 40);
 
-  it('traces a rectangle into one primitive the validator accepts', () => {
+  it('traces a rectangle into the real outline when no parts are named', () => {
     const contours = traceInk(art);
     expect(contours.length).toBeGreaterThan(0);
     expect(contours.some((contour) => contour.closed && contour.points.length >= 4)).toBe(true);
@@ -58,16 +59,17 @@ describe('vectoriser to lesson', () => {
       palette: ['#222222'],
     });
     expect(findLessonProblems(built.lesson)).toEqual([]);
+    expect(built.builder).toBe('traced');
     expect(built.lesson.coordinateSpace).toEqual({ width: 1000, height: 750 });
     expect(built.lesson.subtitle).toBe('Dari foto');
     expect(built.lesson.contentVersion).toBe('photo-abcdef123456');
     const first = built.lesson.steps[0];
-    expect(first?.instruction).toMatch(/Gambar (persegi panjang|oval|lingkaran) besar untuk bentuk utamanya\./);
-    expect(first?.guidePaths[0]?.d).toMatch(/\bA\b/);
-    expect(first?.guidePaths[0]?.d).not.toMatch(/(?: L ){8,}/);
+    expect(first?.instruction).toBe('Gambar bentuk yang paling besar.');
+    expect(first?.guidePaths[0]?.d).toMatch(/\b[LC]\b/);
     expect(first?.guidePaths[0]?.role).toBe('final-outline');
+    expect(built.lesson.steps.some((step) => /bagian berikutnya|bentuk utamanya/.test(step.instruction))).toBe(false);
     const colour = built.lesson.steps.find((step) => step.phase === 'color');
-    expect(colour?.instruction).toMatch(/^Warnai /);
+    expect(colour?.instruction).toMatch(/^Warnai dengan /);
     expect(colour?.instruction).not.toMatch(/latar/);
   });
 
@@ -101,66 +103,83 @@ describe('vectoriser to lesson', () => {
   });
 });
 
-describe('shape steps', () => {
-  const photo = painted(8, 8, () => [180, 40, 40]);
+describe('named traced parts', () => {
+  const photo = painted(8, 8, () => [220, 90, 20]);
 
-  it('draws a clean circle and rasters the arc, not a diameter', () => {
+  it('keeps the real outline and adds a circle only as construction', () => {
     const built = buildPhotoLesson({
       id: 'photo-circle',
-      title: 'Bola',
+      title: 'Kepala',
       targetHash: 'abcdef1234567890',
       contours: [circle(500, 375, 180)],
       sourceWidth: 1000,
       sourceHeight: 750,
       photo,
       palette: ['#cc3333'],
+      parts: [part('kepala', false, 'oranye')],
     });
-    const first = built.lesson.steps[0];
-    expect(first?.instruction).toBe('Gambar lingkaran besar untuk bentuk utamanya.');
-    expect(first?.guidePaths[0]?.d).toMatch(/\bA\b/);
+    expect(built.builder).toBe('parts');
+    const drawing = built.lesson.steps.filter((step) => step.phase !== 'color');
+    expect(drawing[0]?.instruction).toBe('Gambar lingkaran sebagai bentuk dasar untuk kepala.');
+    expect(drawing[0]?.guidePaths[0]?.role).toBe('construction');
+    expect(drawing[0]?.guidePaths[0]?.d).toMatch(/\bA\b/);
+    expect(drawing[1]?.instruction).toBe('Gambar garis luar kepala.');
+    expect(drawing[1]?.guidePaths[0]?.role).toBe('final-outline');
+    expect(drawing[1]?.guidePaths[0]?.d).toMatch(/\bC\b/);
+    const colour = built.lesson.steps.find((step) => step.phase === 'color');
+    expect(colour?.instruction).toBe('Warnai kepala dengan oranye.');
+    expect(colour?.toolPreset.color).toMatch(/^#[0-9a-f]{6}$/i);
+    const filled = renderCumulativeStep(built.lesson, built.lesson.steps.length, 80);
+    expect(hasOrange(filled)).toBe(true);
     const image = renderLessonPreview(built.lesson, 200);
-    expect(nearInk(image, 100, 40, 6)).toBe(true);
-    expect(nearInk(image, 100, 75, 3)).toBe(false);
+    expect(nearInk(image, 100, 40, 8)).toBe(true);
+    expect(nearInk(image, 100, 100, 3)).toBe(false);
   });
 
-  it('puts a symmetric pair of triangles in one step', () => {
+  it('does not replace a triangle with a primitive', () => {
     const built = buildPhotoLesson({
-      id: 'photo-ears',
+      id: 'photo-ear',
       title: 'Telinga',
       targetHash: 'abcdef1234567890',
-      contours: [triangle(80, 40, 90, 80), triangle(700, 40, 90, 80)],
+      contours: [triangle(200, 80, 220, 180)],
       sourceWidth: 1000,
       sourceHeight: 750,
       photo,
       palette: ['#cc3333'],
+      parts: [part('telinga', false, 'oranye')],
     });
     const drawing = built.lesson.steps.filter((step) => step.phase !== 'color');
     expect(drawing).toHaveLength(1);
-    expect(drawing[0]?.guidePaths).toHaveLength(2);
-    expect(drawing[0]?.instruction).toBe('Tambahkan dua segitiga untuk bentuk utamanya.');
-    expect(drawing[0]?.guidePaths.every((guide) => guide.d.startsWith('M ') && guide.d.includes(' Z'))).toBe(true);
+    expect(drawing[0]?.instruction).toBe('Gambar garis luar telinga.');
+    expect(drawing[0]?.guidePaths[0]?.role).toBe('final-outline');
+    expect(drawing[0]?.guidePaths[0]?.d).toMatch(/\bL\b/);
+    expect(drawing[0]?.guidePaths[0]?.d).not.toMatch(/\bA\b/);
   });
 
-  it('names a snapped part and drops a proposal that misses the ink', () => {
+  it('draws a symmetric pair in one step and names the colour', () => {
     const built = buildPhotoLesson({
-      id: 'photo-named',
-      title: 'Kepala',
+      id: 'photo-ears',
+      title: 'Kucing',
       targetHash: 'abcdef1234567890',
-      contours: [square(10, 10, 700)],
+      contours: [circle(500, 360, 150), triangle(120, 40, 90, 80), triangle(760, 40, 90, 80)],
       sourceWidth: 1000,
       sourceHeight: 750,
       photo,
       palette: ['#cc3333'],
-      proposals: [
-        { primitive: 'circle', name: 'Kepala', pair: false, x: 0, y: 0, width: 900, height: 800, rotation: 0 },
-        { primitive: 'triangle', name: 'ekor', pair: false, x: 2000, y: 2000, width: 40, height: 40, rotation: 0 },
+      parts: [
+        { ...part('kepala', false, 'oranye'), ...cover(300, 180, 400, 360) },
+        { ...part('telinga', true, 'oranye'), ...cover(80, 20, 820, 140) },
       ],
     });
-    expect(built.lesson.steps[0]?.instruction).toBe('Gambar lingkaran besar untuk kepala.');
-    expect(built.lesson.steps[0]?.instruction).not.toMatch(/ekor/);
+    const ears = built.lesson.steps.find((step) => step.instruction.includes('telinga'));
+    expect(ears?.guidePaths).toHaveLength(2);
+    expect(ears?.instruction).toBe('Tambahkan dua telinga.');
+    const colour = built.lesson.steps.find((step) => step.phase === 'color');
+    expect(colour?.instruction).toMatch(/Warnai .+ dengan oranye\./);
+    expect(built.lesson.steps.some((step) => /bagian berikutnya|bentuk utamanya|persegi/.test(step.instruction))).toBe(false);
   });
 
-  it('rejects a banned part name and never colours a white background', () => {
+  it('drops a banned or generic name and falls back to the traced outline', () => {
     const built = buildPhotoLesson({
       id: 'photo-words',
       title: 'Kotak',
@@ -170,21 +189,24 @@ describe('shape steps', () => {
       sourceHeight: 750,
       photo: picture(8, 8, () => false),
       palette: ['#336699'],
-      proposals: [
-        { primitive: 'rounded-rect', name: 'wajah anak', pair: false, x: 0, y: 0, width: 900, height: 800, rotation: 0 },
-      ],
+      parts: [part('bagian berikutnya', false, 'biru'), part('wajah anak', false, 'biru')],
     });
-    expect(built.lesson.steps[0]?.instruction).toMatch(/bentuk utamanya/);
-    expect(built.lesson.steps[0]?.instruction).not.toMatch(/wajah anak/);
+    expect(built.builder).toBe('traced');
+    expect(built.lesson.steps[0]?.instruction).toBe('Gambar bentuk yang paling besar.');
+    expect(built.lesson.steps.some((step) => /bagian berikutnya|wajah anak/.test(step.instruction))).toBe(false);
     expect(built.lesson.steps.some((step) => step.phase === 'color')).toBe(false);
   });
 
-  it('keeps every real part, including more than eight steps when the colours differ', () => {
-    const contours = [square(10, 10, 700)];
-    for (let index = 0; index < 12; index += 1) {
+  it('keeps every named part when there are more than eight', () => {
+    const contours = [square(10, 10, 280)];
+    const parts = [{ ...part('badan', false, 'merah'), ...cover(10, 10, 280, 280) }];
+    for (let index = 0; index < 8; index += 1) {
       const column = index % 4;
       const row = Math.floor(index / 4);
-      contours.push(square(40 + column * 160, 40 + row * 180, 70));
+      const x = 40 + column * 220;
+      const y = 360 + row * 180;
+      contours.push(square(x, y, 70));
+      parts.push({ ...part(`kaki ${index + 1}`, false, row === 0 ? 'merah' : 'biru'), ...cover(x, y, 70, 70) });
     }
     const built = buildPhotoLesson({
       id: 'photo-many',
@@ -193,58 +215,63 @@ describe('shape steps', () => {
       contours,
       sourceWidth: 1000,
       sourceHeight: 750,
-      photo: painted(20, 10, (x) => (x < 10 ? [200, 40, 40] : [40, 80, 200])),
+      photo: painted(20, 10, (_x, y) => (y < 5 ? [200, 40, 40] : [40, 80, 200])),
       palette: ['#cc3333', '#2850c8'],
+      parts,
     });
     const drawing = built.lesson.steps.filter((step) => step.phase !== 'color');
     const colors = built.lesson.steps.filter((step) => step.phase === 'color');
+    expect(built.builder).toBe('parts');
     expect(drawing.length).toBeGreaterThan(6);
     expect(built.lesson.steps.length).toBeGreaterThan(8);
-    expect(drawing[0]?.guidePaths).toHaveLength(1);
-    expect(drawing.every((step) => step.guidePaths.length <= MAX_PATHS_PER_STEP)).toBe(true);
     expect(new Set(drawing.map((step) => step.instruction)).size).toBe(drawing.length);
     expect(colors.length).toBeGreaterThanOrEqual(2);
-    expect(colors.every((step) => step.instruction.startsWith('Warnai '))).toBe(true);
+    expect(colors.every((step) => /dengan (merah|biru|oranye)/.test(step.instruction))).toBe(true);
+    expect(built.lesson.steps.some((step) => /bagian berikutnya/.test(step.instruction))).toBe(false);
   });
 
-  it('uses one colour step for near-identical colours and drops a tiny different speck of colour', () => {
-    const built = buildPhotoLesson({
-      id: 'photo-colours',
-      title: 'Warna',
-      targetHash: 'abcdef1234567890',
-      contours: [square(40, 40, 220), square(620, 40, 220), square(420, 680, 24)],
-      sourceWidth: 1000,
-      sourceHeight: 750,
-      photo: painted(10, 10, (x, y) => {
-        if (y > 7) return [20, 170, 60];
-        return x < 5 ? [204, 32, 32] : [208, 40, 40];
-      }),
-      palette: ['#cc2020'],
-    });
-    const colors = built.lesson.steps.filter((step) => step.phase === 'color');
-    expect(colors).toHaveLength(1);
-    expect(colors[0]?.colorRegionIds.length).toBe(2);
-    expect(colors[0]?.instruction).not.toMatch(/latar|ventilasi|barcode/);
-  });
-
-  it('reports a small largest piece when two separated parts together cover the subject', () => {
+  it('asks for another drawing when the closed outline covers little of the subject', () => {
     const built = buildPhotoLesson({
       id: 'photo-split',
       title: 'Terpisah',
       targetHash: 'abcdef1234567890',
-      contours: [square(0, 0, 80), square(800, 0, 80)],
+      contours: [
+        square(20, 20, 70),
+        { closed: false, points: [{ x: 0, y: 400 }, { x: 500, y: 420 }, { x: 980, y: 400 }] },
+      ],
       sourceWidth: 1000,
       sourceHeight: 750,
       photo,
       palette: ['#cc3333'],
     });
-    expect(built.coverage).toBeLessThan(LOW_SUBJECT_COVERAGE);
-    expect(built.subjectFit).toBeGreaterThan(0.8);
-    expect(built.needsReview).toBe(false);
-    expect(shouldRedraw(built.subjectFit)).toBe(false);
-    expect(shouldRedraw(0.2)).toBe(true);
+    expect(built.coverage).toBeLessThan(OUTLINE_COVERAGE_MIN);
+    expect(built.needsReview).toBe(true);
+    expect(shouldRedraw(built.coverage)).toBe(true);
+    expect(shouldRedraw(0.9)).toBe(false);
+    expect(built.lesson.steps[0]?.guidePaths[0]?.d).not.toMatch(/\bA\b/);
   });
 });
+
+function part(name: string, pair: boolean, colorName: string, x = 0, y = 0, width = 1000, height = 750): DetectedPart {
+  return { name, pair, x, y, width, height, points: [], colorName };
+}
+
+function cover(x: number, y: number, w: number, h: number): { x: number; y: number; width: number; height: number } {
+  const scale = Math.min(904 / 1000, 654 / 750);
+  const ox = (1000 - 1000 * scale) / 2;
+  const oy = (750 - 750 * scale) / 2;
+  return { x: ox + x * scale - 16, y: oy + y * scale - 16, width: w * scale + 32, height: h * scale + 32 };
+}
+
+function hasOrange(image: RgbaImage): boolean {
+  for (let index = 0; index < image.data.length; index += 4) {
+    const red = image.data[index] ?? 0;
+    const green = image.data[index + 1] ?? 0;
+    const blue = image.data[index + 2] ?? 0;
+    if (red > 140 && red > green + 40 && red > blue + 40 && green > 40) return true;
+  }
+  return false;
+}
 
 function nearInk(image: RgbaImage, x: number, y: number, radius: number): boolean {
   for (let dy = -radius; dy <= radius; dy += 1) {

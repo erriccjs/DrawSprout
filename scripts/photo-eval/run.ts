@@ -6,6 +6,8 @@
  *   REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --provider replicate --model <id>
  *   npm run photo-eval -- <photo-directory> --compare
  *
+ * `--compare` runs OpenAI and flux-kontext-pro. flux-1.1-pro is unsuitable.
+ *
  * `PHOTO_EVAL_OUT` sets the same output directory. The default is
  * ./photo-eval-out/. The contact sheet shows the photo, the illustration,
  * and a cumulative render of each lesson step.
@@ -38,7 +40,7 @@ import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../
 import { composeContactSheet } from '../../src/photo/sheet';
 
 /** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
-const EVAL_KEY_REVISION = 'v3';
+const EVAL_KEY_REVISION = 'v4';
 
 interface Args {
   readonly score?: string;
@@ -122,6 +124,7 @@ async function main(): Promise<void> {
       metrics.push({ file: name, provider: job.label, ok: false, error: message });
       htmlRows.push(`<section><h2>${escapeHtml(label)}</h2><p>${escapeHtml(message)}</p></section>`);
       console.error(`${label}: ${message}`);
+      if (args.compare) process.exit(1);
       continue;
     }
     try {
@@ -195,6 +198,7 @@ async function main(): Promise<void> {
       metrics.push({ file: name, provider: job.label, ok: false, ms: Date.now() - started, error: message });
       htmlRows.push(`<section><h2>${escapeHtml(label)}</h2><p>${escapeHtml(message)}</p></section>`);
       console.error(`${label}: ${message}`);
+      if (args.compare) process.exit(1);
     }
     }
   }
@@ -266,11 +270,11 @@ function resolveJobs(args: Args): Job[] {
     return [
       { provider: 'openai', label: 'openai' },
       { provider: 'replicate', model: 'black-forest-labs/flux-kontext-pro', label: 'replicate/flux-kontext-pro' },
-      { provider: 'replicate', model: 'black-forest-labs/flux-1.1-pro', label: 'replicate/flux-1.1-pro' },
     ];
   }
   const provider = args.provider ?? imageProvider(process.env.IMAGE_PROVIDER);
   const model = args.model ?? (provider === 'replicate' ? process.env.REPLICATE_IMAGE_MODEL : process.env.OPENAI_IMAGE_MODEL);
+  if (model?.includes('flux-1.1-pro')) console.error('flux-1.1-pro is unsuitable: it returns near-photos.');
   const label = provider === 'replicate' ? `replicate/${model || DEFAULT_REPLICATE_MODEL}` : 'openai';
   return [{ provider, ...(model ? { model } : {}), label }];
 }

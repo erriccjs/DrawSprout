@@ -38,7 +38,7 @@ function ghost(): RgbaImage {
 }
 
 describe('photo pipeline wiring', () => {
-  it('sends shape targets and the illustration, and drops a mismatched part name', async () => {
+  it('asks whether the drawing is the same subject and drops a banned part name', async () => {
     const art = await encodePng(frame());
     const captured: { request: InstructionRequest | null } = { request: null };
     const images: ImageEditor = {
@@ -52,9 +52,10 @@ describe('photo pipeline wiring', () => {
       write(input) {
         captured.request = input;
         return Promise.resolve({
+          sameSubject: true,
           subject: 'Kotak',
           title: 'Wajah anak',
-          parts: [{ primitive: 'circle', name: 'wajah anak', pair: false, x: 0, y: 0, width: 4, height: 4, rotation: 0 }],
+          parts: [{ name: 'wajah anak', pair: false, x: 0, y: 0, width: 40, height: 40, points: [], colorName: 'hitam' }],
           usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
         });
       },
@@ -71,13 +72,12 @@ describe('photo pipeline wiring', () => {
     expect(result.model).toBe('gpt-image-1.5');
     expect(result.quality).toBe('low');
     expect(result.lesson.title).toBe('Kotak');
-    expect(result.lesson.steps[0]?.instruction).toMatch(/bentuk utamanya/);
+    expect(result.lesson.steps[0]?.instruction).toBe('Gambar bentuk yang paling besar.');
     expect(result.lesson.steps[0]?.instruction).not.toMatch(/wajah/);
     expect(result.textUsage).toEqual({ inputTokens: 11, outputTokens: 7, totalTokens: 18 });
     const request = captured.request;
     if (request === null) throw new Error('instruction writer was not called');
-    expect(request.targets.length).toBeGreaterThan(0);
-    expect(request.targets[0]?.primitive).toMatch(/circle|ellipse|rounded-rect|triangle|line/);
+    expect(request.photoPng[0]).toBe(137);
     expect(request.illustrationPng[0]).toBe(137);
   });
 

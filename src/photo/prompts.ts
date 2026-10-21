@@ -27,7 +27,7 @@ const SHARED = [
   'Opaque white background. No transparency.',
 ].join(' ');
 
-export function imagePrompt(variant: PhotoVariant, reinforceSilhouette = false): string {
+export function imagePrompt(variant: PhotoVariant, reinforceSilhouette = false, reinforceSubject = false): string {
   const base = variant === 'simple'
     ? [
       SHARED,
@@ -38,8 +38,27 @@ export function imagePrompt(variant: PhotoVariant, reinforceSilhouette = false):
     : variant === 'faithful'
       ? `${SHARED} Stay close to the photo of this one subject. Do not drop a feature that identifies it. The outer silhouette must be one closed shape.`
       : SHARED;
-  if (!reinforceSilhouette) return base;
-  return `${base} The previous drawing was only a fragment. Draw the FULL subject: one continuous closed outer silhouette around all of it, on an opaque white background, with no labels and no row of short parallel lines.`;
+  const extra: string[] = [];
+  if (reinforceSilhouette) {
+    extra.push('The previous drawing was only a fragment. Draw the FULL subject: one continuous closed outer silhouette around all of it, on an opaque white background, with no labels and no row of short parallel lines.');
+  }
+  if (reinforceSubject) extra.push('The drawing must be the same object as the photo. Do not turn it into something else.');
+  return extra.length === 0 ? base : `${base} ${extra.join(' ')}`;
+}
+
+/**
+ * Replicate Kontext prompt. Positive only: naming vehicles in a negative
+ * list made flux-kontext-pro draw cars (D-70). OpenAI keeps `imagePrompt`.
+ */
+export function replicatePrompt(reinforceSilhouette = false, reinforceSubject = false): string {
+  const lines = [
+    'Black line drawing of this one subject for a young child.',
+    'One closed outer silhouette and a few interior lines.',
+    'Plain opaque white background. No colour, no shading, no text.',
+  ];
+  if (reinforceSilhouette) lines.push('Draw the full subject as one continuous closed outer silhouette.');
+  if (reinforceSubject) lines.push('The drawing must be the same object as the photo.');
+  return lines.join(' ');
 }
 
 /** Simple stays on the default line-art model at low quality. Mini is opt-in for the other variants. */

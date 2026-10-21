@@ -104,7 +104,7 @@ describe('POST /api/photo-lesson', () => {
     expect(mock.calls[0]?.key).toBe('same-key-01');
     const body = await first.json() as { lesson: { steps: { instruction: string }[] }; targetHash: string };
     expect(body.targetHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(body.lesson.steps[0]?.instruction).toMatch(/lingkaran|oval|persegi panjang|segitiga|garis/);
+    expect(body.lesson.steps[0]?.instruction).toMatch(/Gambar bentuk yang paling besar|Gambar garis luar|bentuk dasar/);
 
     const third = await handlePhotoLessonRequest(post(art, 'same-key-01'), { OPENAI_API_KEY: 'test-key' }, shared);
     expect(third.status).toBe(200);

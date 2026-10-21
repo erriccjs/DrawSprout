@@ -50,7 +50,8 @@ describe('Replicate editor', () => {
     expect(body.input.output_format).toBe('png');
     expect(body.input.aspect_ratio).toBe('match_input_image');
     expect(body.input.input_image.startsWith('data:image/png;base64,')).toBe(true);
-    expect(body.input.prompt).toContain('Opaque white');
+    expect(body.input.prompt).toContain('opaque white');
+    expect(body.input.prompt).not.toMatch(/vehicle|wheel|\bcar\b|toy/i);
     expect(init.body).not.toContain('r8-secret');
   });
 
@@ -113,6 +114,42 @@ describe('Replicate editor', () => {
       signal: controller.signal,
     })).rejects.toThrow(/cancelled/);
     expect(fetchMock.mock.calls.some((call) => requestUrl(call[0]).endsWith('/predictions/pred-4/cancel'))).toBe(true);
+  });
+
+  it('retries a 429 before accepting the prediction', async () => {
+    let posts = 0;
+    const fetchMock = vi.fn<typeof fetch>((input, init) => {
+      const url = requestUrl(input);
+      if (url.endsWith('/out.png')) return Promise.resolve(new Response(png));
+      if (init?.method === 'POST') {
+        posts += 1;
+        if (posts === 1) {
+          return Promise.resolve(new Response(JSON.stringify({ detail: 'throttled' }), {
+            status: 429,
+            headers: { 'retry-after': '0.05' },
+          }));
+        }
+        return Promise.resolve(new Response(JSON.stringify({
+          id: 'pred-5',
+          status: 'succeeded',
+          output: 'https://replicate.delivery/pbxt/out.png',
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await replicateEditor('r8-secret').edit({
+      png,
+      variant: 'default',
+      model: 'black-forest-labs/flux-kontext-pro',
+      quality: 'medium',
+      width: 100,
+      height: 100,
+      idempotencyKey: 'rep-key-5',
+      signal: AbortSignal.timeout(5_000),
+    });
+    expect(result.png[0]).toBe(137);
+    expect(posts).toBe(2);
   });
 
   it('refuses an output URL that is not replicate.delivery', async () => {

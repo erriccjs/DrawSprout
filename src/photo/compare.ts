@@ -19,8 +19,9 @@ export interface RenderComparison {
 }
 
 export function compareLessonToInk(lesson: LessonPackage, ink: RgbaImage): RenderComparison {
-  const drawn = rasterizeLesson(lesson, ink.width, ink.height);
-  const target = inkMask(ink);
+  const radius = Math.max(1, Math.round(Math.min(ink.width, ink.height) * 0.012));
+  const drawn = dilate(rasterizeLesson(lesson, ink.width, ink.height), ink.width, ink.height, radius);
+  const target = dilate(subjectMask(ink), ink.width, ink.height, radius);
   let intersection = 0;
   let drawnCount = 0;
   let targetCount = 0;
@@ -44,12 +45,28 @@ export function compareLessonToInk(lesson: LessonPackage, ink: RgbaImage): Rende
 
 /** Lines from the first `count` steps only, so a contact sheet can show the lesson building up. */
 export function renderCumulativeStep(lesson: LessonPackage, count: number, width: number): RgbaImage {
+  const height = Math.max(1, Math.round(width * (LESSON_HEIGHT / LESSON_WIDTH)));
   const steps = lesson.steps.slice(0, Math.max(0, count));
-  const regionIds = new Set(steps.flatMap((step) => step.colorRegionIds));
-  const regions = lesson.colorRegions
-    .filter((region) => regionIds.has(region.id))
-    .map((region) => ({ id: region.id, d: region.d, role: 'final-outline' as const }));
-  return renderLessonPreview({ ...lesson, steps, targetPreview: { paths: regions } }, width);
+  const data = new Uint8Array(width * height * 4);
+  data.fill(255);
+  for (const step of steps) {
+    if (step.phase !== 'color') continue;
+    for (const id of step.colorRegionIds) {
+      const region = lesson.colorRegions.find((item) => item.id === id);
+      if (!region) continue;
+      fillPath(data, width, height, region.d, region.suggestedColor);
+    }
+  }
+  const lines = rasterizeLesson({ ...lesson, steps: steps.filter((step) => step.phase !== 'color'), targetPreview: { paths: [] } }, width, height);
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i] !== 1) continue;
+    const offset = i * 4;
+    data[offset] = 30;
+    data[offset + 1] = 30;
+    data[offset + 2] = 30;
+    data[offset + 3] = 255;
+  }
+  return { width, height, data };
 }
 
 export function renderLessonPreview(lesson: LessonPackage, width: number): RgbaImage {
@@ -65,6 +82,115 @@ export function renderLessonPreview(lesson: LessonPackage, width: number): RgbaI
     data[o + 3] = 255;
   }
   return { width, height, data };
+}
+
+function subjectMask(image: RgbaImage): Uint8Array {
+  const ink = inkMask(image);
+  let count = 0;
+  let minX = image.width;
+  let minY = image.height;
+  let maxX = 0;
+  let maxY = 0;
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      if (ink[y * image.width + x] !== 1) continue;
+      count += 1;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+  const box = Math.max(1, (maxX - minX + 1) * (maxY - minY + 1));
+  if (count === 0 || count / box < 0.45) return ink;
+  return boundary(ink, image.width, image.height);
+}
+
+function boundary(mask: Uint8Array, width: number, height: number): Uint8Array {
+  const out = new Uint8Array(mask.length);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (mask[y * width + x] !== 1) continue;
+      const left = x > 0 ? mask[y * width + x - 1] : 0;
+      const right = x + 1 < width ? mask[y * width + x + 1] : 0;
+      const up = y > 0 ? mask[(y - 1) * width + x] : 0;
+      const down = y + 1 < height ? mask[(y + 1) * width + x] : 0;
+      if (!left || !right || !up || !down) out[y * width + x] = 1;
+    }
+  }
+  return out;
+}
+
+function dilate(mask: Uint8Array, width: number, height: number, radius: number): Uint8Array {
+  if (radius <= 0) return mask;
+  const out = new Uint8Array(mask.length);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (mask[y * width + x] !== 1) continue;
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          if (dx * dx + dy * dy > radius * radius) continue;
+          const sx = x + dx;
+          const sy = y + dy;
+          if (sx >= 0 && sy >= 0 && sx < width && sy < height) out[sy * width + sx] = 1;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function fillPath(data: Uint8Array, width: number, height: number, d: string, color: string): void {
+  const rgb = hexRgb(color);
+  const points = parsePath(d).map((point) => ({
+    x: scale(point.x, LESSON_WIDTH, width),
+    y: scale(point.y, LESSON_HEIGHT, height),
+  }));
+  if (points.length < 3) return;
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  const x0 = Math.max(0, Math.floor(minX));
+  const y0 = Math.max(0, Math.floor(minY));
+  const x1 = Math.min(width - 1, Math.ceil(maxX));
+  const y1 = Math.min(height - 1, Math.ceil(maxY));
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) {
+      if (!pointInPolygon(x + 0.5, y + 0.5, points)) continue;
+      const offset = (y * width + x) * 4;
+      data[offset] = rgb.r;
+      data[offset + 1] = rgb.g;
+      data[offset + 2] = rgb.b;
+      data[offset + 3] = 255;
+    }
+  }
+}
+
+function pointInPolygon(x: number, y: number, points: readonly { x: number; y: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
+    const a = points[i];
+    const b = points[j];
+    if (!a || !b) continue;
+    const intersect = ((a.y > y) !== (b.y > y)) && (x < ((b.x - a.x) * (y - a.y)) / ((b.y - a.y) || 1e-9) + a.x);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function hexRgb(color: string): { r: number; g: number; b: number } {
+  return {
+    r: Number.parseInt(color.slice(1, 3), 16) || 0,
+    g: Number.parseInt(color.slice(3, 5), 16) || 0,
+    b: Number.parseInt(color.slice(5, 7), 16) || 0,
+  };
 }
 
 function inkMask(image: RgbaImage): Uint8Array {

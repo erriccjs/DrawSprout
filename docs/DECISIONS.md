@@ -1060,7 +1060,7 @@ more illustration with a stronger full-subject prompt and keeps the attempt
 that covers more of the ink. The idempotency key of that second call ends in
 `-silhouette`. Token usage is summed. This is not the section 8 gate.
 
-**Harness.** The eval idempotency key ends in `v3`.
+**Harness.** The eval idempotency key ended in `v3` for that shape-step run. D-70 replaces the primitive geometry and bumps the key to `v4`.
 
 ### D-69 — Replicate as a second image provider
 
@@ -1073,11 +1073,11 @@ keeps working. The parent-facing error names `REPLICATE_API_KEY`.
 
 The default model is `black-forest-labs/flux-kontext-pro`: an edit with
 `input_image`, `output_format=png`, and `aspect_ratio=match_input_image`.
-`black-forest-labs/flux-1.1-pro` is also supported, as text-to-image with
-`image_prompt` for guidance; it is expected to be less faithful and is there
-for comparison. `--model owner/name` may name another model; unknown ids that
-are not `flux-1.1-pro` use the Kontext input fields. The same line-art prompt
-is used, including the opaque-white rule, and the PNG is still flattened.
+`black-forest-labs/flux-1.1-pro` accepts `image_prompt`, but the v3 compare
+showed near-photos, so D-70 marks it unsuitable and leaves it out of
+`--compare`. `--model owner/name` may name another model; unknown ids that
+are not `flux-1.1-pro` use the Kontext input fields. D-70 gives Kontext its
+own short prompt. The PNG is still flattened onto white.
 
 The client sends `Prefer: wait=60` and `Idempotency-Key`, then polls
 `GET /v1/predictions/{id}`. Abort and the 110s deadline cancel the prediction.
@@ -1087,5 +1087,50 @@ $0.04. A model that is not in that table is unpriced. `REPLICATE_IMAGE_USD`
 overrides the harness figure the way `OPENAI_IMAGE_USD` does for OpenAI.
 Text names still use OpenAI when `OPENAI_API_KEY` is set; without it the
 shape templates stand. The harness flags are `--provider`, `--model`, and
-`--compare` (OpenAI, Kontext, and flux-1.1-pro on one contact sheet). The
-gate is still not claimed.
+`--compare`. D-70 changes the Kontext prompt, drops flux-1.1-pro from
+compare, and serialises Replicate calls. The gate is still not claimed.
+
+### D-70 — Traced outlines, with a shape only when it fits
+
+The v3 compare (commit 7cf5349) showed OpenAI `gpt-image-1.5` illustrations
+were the best so far: one subject, opaque white. That path stays the default.
+The lessons were worse than the traced builder in a19f6f9. A flower became a
+rounded rectangle and circles, a cup a rectangle and an oval, a dog two ovals,
+and a cat's first step a short line whose 3% coverage was not rejected. Steps
+said "bagian berikutnya", and colour steps did not name a colour.
+`flux-kontext-pro` turned several subjects into cars. The shared prompt names
+vehicles in its negative list; Kontext followed those words. `flux-1.1-pro`
+returned near-photos and is unsuitable. Replicate also throttled at 6
+requests per minute with a burst of 1.
+
+**Outlines.** The vision model looks at the photo and the illustration and
+returns named parts in Indonesian, largest first, each with a box or polygon
+and a colour name. It also says whether the drawing is the same subject as
+the photo. Traced lines are assigned to those parts by overlap. A drawing
+step is one named part, or a symmetric pair, and its guide is that part's
+real lines, smoothed so a curve is not a jagged polyline. There is no step
+cap. A part with a banned or generic name ("bagian berikutnya", "bentuk
+utama", "buih", "wajah anak") is dropped. If no named part overlaps the ink,
+the lesson uses the a19f6f9 traced builder: largest closed contour first,
+then the remaining lines.
+
+**Construction.** A circle or oval may be the first step, role `construction`,
+only when its filled overlap with the main outline is at least 0.8. The next
+step is still that outline. A poor fit is skipped. A primitive never replaces
+the part.
+
+**Gates.** The largest closed contour has to cover about 60% of the subject
+box. Below that, or when a dilated Dice of the rendered lesson against the
+illustration is under the spike threshold, or when the vision model says the
+drawing is a different object, the pipeline asks for one new illustration and
+keeps the attempt that covers more. A parent can still approve. This is not
+the section 8 gate.
+
+**Colour.** One step per distinct colour. The sentence names the parts and
+the colour ("Warnai kepala dengan oranye"). The brush colour is that colour.
+The contact sheet fills those regions.
+
+**Replicate.** Kontext gets a short positive prompt that does not mention
+vehicles. Calls are serialised, and HTTP 429 waits and retries. A failed
+provider stops `--compare`. Compare is OpenAI plus Kontext only. The eval
+idempotency key ends in `v4`.

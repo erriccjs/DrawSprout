@@ -93,6 +93,64 @@ export function rgbDistance(left: Rgb, right: Rgb): number {
   return Math.hypot(left.r - right.r, left.g - right.g, left.b - right.b);
 }
 
+const COLOUR_WORDS = ['merah muda', 'abu-abu', 'merah', 'oranye', 'jingga', 'kuning', 'hijau', 'biru', 'ungu', 'cokelat', 'coklat', 'hitam', 'putih', 'krem', 'pink'] as const;
+
+/** A colour word the model may use. Unknown text returns null. */
+export function knownColourName(text: string): string | null {
+  const lower = text.toLowerCase();
+  for (const name of COLOUR_WORDS) {
+    if (!lower.includes(name)) continue;
+    if (name === 'jingga' || name === 'krem') return 'oranye';
+    if (name === 'coklat') return 'cokelat';
+    if (name === 'pink') return 'merah muda';
+    return name;
+  }
+  return null;
+}
+
+/** Indonesian name for a sampled colour, so a step can say "dengan oranye". */
+export function indonesianColourName(rgb: Rgb): string {
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const lum = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+  const sat = max === 0 ? 0 : (max - min) / max;
+  if (lum < 45) return 'hitam';
+  if (sat < 0.18) return lum > 200 ? 'putih' : 'abu-abu';
+  const delta = max - min || 1;
+  const sector = max === r ? ((g - b) / delta) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+  let hue = sector * 60;
+  if (hue < 0) hue += 360;
+  if (lum < 85 && hue >= 10 && hue < 50) return 'cokelat';
+  if (hue < 15 || hue >= 345) return 'merah';
+  if (hue < 45) return 'oranye';
+  if (hue < 70) return 'kuning';
+  if (hue < 170) return 'hijau';
+  if (hue < 255) return 'biru';
+  if (hue < 320) return 'ungu';
+  return 'merah muda';
+}
+
+const COLOUR_HEX: Readonly<Record<string, string>> = {
+  merah: '#d23b3b',
+  oranye: '#e07020',
+  kuning: '#e2c04a',
+  hijau: '#3aaa55',
+  biru: '#3a6fd0',
+  ungu: '#7a4bb5',
+  'merah muda': '#e07098',
+  cokelat: '#8a5a32',
+  hitam: '#2a2a2a',
+  'abu-abu': '#8a8a8a',
+  putih: '#f2f2f2',
+};
+
+export function colourHex(name: string): string {
+  return COLOUR_HEX[name] ?? '#e07020';
+}
+
 export function nearestColor(color: string, palette: readonly string[]): string {
   const rgb = parseHex(color);
   let best = palette[0] ?? '#e8552d';

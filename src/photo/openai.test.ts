@@ -48,21 +48,22 @@ describe('OpenAI client', () => {
 
   it('asks the text model with the illustration, the step labels, and chat token counts', async () => {
     const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ subject: 'Kucing', title: 'Kucing', parts: [{ primitive: 'circle', name: 'kepala', pair: false, x: 1, y: 2, width: 3, height: 4, rotation: 0 }] }) } }],
+      choices: [{ message: { content: JSON.stringify({ sameSubject: true, subject: 'Kucing', title: 'Kucing', parts: [{ name: 'kepala', pair: false, x: 10, y: 20, width: 30, height: 40, colorName: 'oranye', points: [] }] }) } }],
       usage: { prompt_tokens: 20, completion_tokens: 9, total_tokens: 29 },
     }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     const written = await openAiClients('sk-test-not-real').instructions.write({
       model: 'gpt-4.1-mini',
-      targets: [{ id: 'part-1', primitive: 'circle', pair: false, x: 1, y: 2, width: 3, height: 4 }],
+      photoPng: png,
       illustrationPng: png,
       signal: AbortSignal.timeout(1000),
       idempotencyKey: 'idem-key-1',
     });
+    expect(written.sameSubject).toBe(true);
     expect(written.subject).toBe('Kucing');
     expect(written.title).toBe('Kucing');
     expect(written.parts[0]?.name).toBe('kepala');
-    expect(written.parts[0]?.primitive).toBe('circle');
+    expect(written.parts[0]?.colorName).toBe('oranye');
     expect(written.usage).toEqual({ inputTokens: 20, outputTokens: 9, totalTokens: 29 });
     const init = fetchMock.mock.calls[0]?.[1];
     expect(new Headers(init?.headers).get('idempotency-key')).toBe('idem-key-1-text');
@@ -70,10 +71,11 @@ describe('OpenAI client', () => {
     const body = JSON.parse(init.body) as { messages: { content: { type: string; text?: string; image_url?: { url: string } }[] }[] };
     const content = body.messages[0]?.content ?? [];
     const text = content.find((part) => part.type === 'text')?.text ?? '';
-    expect(text).toContain('circle');
+    expect(text).toContain('sameSubject');
     expect(text).toContain('latar belakang');
     expect(text).toContain('1000');
-    expect(content.some((part) => part.type === 'image_url' && part.image_url?.url.startsWith('data:image/png;base64,'))).toBe(true);
+    expect(text).toContain('colorName');
+    expect(content.filter((part) => part.type === 'image_url' && part.image_url?.url.startsWith('data:image/png;base64,')).length).toBe(2);
   });
 
   it('sends low quality and a stricter prompt for the simple variant', async () => {

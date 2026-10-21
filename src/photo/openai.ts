@@ -6,7 +6,7 @@
  * billed request on OpenAI's side.
  */
 
-import { knownPrimitive, type ShapeProposal } from './shapes';
+import { detectedPartFrom, type DetectedPart } from './parts';
 import { imagePrompt, imageSize, type ImageQuality, type PhotoVariant } from './prompts';
 
 export interface TokenUsage {
@@ -27,6 +27,7 @@ export interface ImageEditRequest {
   readonly idempotencyKey: string;
   readonly signal: AbortSignal;
   readonly reinforceSilhouette?: boolean;
+  readonly reinforceSubject?: boolean;
 }
 
 export interface ImageEditResult {
@@ -38,28 +39,19 @@ export interface ImageEditor {
   edit(input: ImageEditRequest): Promise<ImageEditResult>;
 }
 
-export interface ShapeTargetInput {
-  readonly id: string;
-  readonly primitive: string;
-  readonly pair: boolean;
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
-
 export interface InstructionRequest {
   readonly model: string;
-  readonly targets: readonly ShapeTargetInput[];
+  readonly photoPng: Uint8Array;
   readonly illustrationPng: Uint8Array;
   readonly signal: AbortSignal;
   readonly idempotencyKey: string;
 }
 
 export interface InstructionResult {
+  readonly sameSubject: boolean;
   readonly subject: string;
   readonly title: string;
-  readonly parts: readonly ShapeProposal[];
+  readonly parts: readonly DetectedPart[];
   readonly usage: TokenUsage | null;
 }
 
@@ -76,7 +68,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
       async edit(input) {
         const form = new FormData();
         form.set('model', input.model);
-        form.set('prompt', imagePrompt(input.variant, input.reinforceSilhouette === true));
+        form.set('prompt', imagePrompt(input.variant, input.reinforceSilhouette === true, input.reinforceSubject === true));
         form.set('quality', input.quality);
         form.set('size', imageSize(input.width, input.height));
         form.set('n', '1');
@@ -118,32 +110,33 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                 {
                   type: 'text',
                   text: [
-                    'Gambar garis ini adalah panduan menggambar untuk anak, seperti buku how-to-draw.',
-                    'Sebutkan subjek dengan kata benda bahasa Indonesia (kucing, cangkir, bunga, mobil).',
-                    'Judul pendek, 2 sampai 4 kata, menyebut subjek itu.',
-                    'Usulkan bagian-bagian yang akan digambar anak, dari yang terbesar. Setiap bagian SATU bentuk dasar: circle, ellipse, rounded-rect, triangle, atau line.',
-                    'name adalah kata benda bahasa Indonesia untuk bagian tubuh itu (kepala, badan, telinga, roda, gagang), bukan kalimat, dan tanpa kata "dua".',
-                    'pair true bila bagian itu sepasang yang simetris (dua telinga, dua mata, dua roda) dan digambar dalam satu langkah. Kotak lalu mencakup keduanya.',
-                    'x dan y adalah sudut kiri-atas kotak dalam ruang 1000 kali 750. width dan height ukuran kotak. rotation dalam derajat, biasanya 0.',
-                    'Jangan menamai latar belakang, wajah anak, huruf, barcode, atau ventilasi.',
-                    'Jangan menambah bagian yang tidak ada pada gambar.',
-                    'Wilayah yang sudah ditelusuri ini boleh kamu namai atau gabungkan menjadi pasangan:',
-                    JSON.stringify(input.targets),
+                    'Gambar pertama adalah foto. Gambar kedua adalah gambar garis yang dibuat dari foto itu.',
+                    'sameSubject true hanya bila gambar garis adalah benda yang sama dengan foto. Kucing yang digambar menjadi mobil adalah false.',
+                    'subject adalah kata benda bahasa Indonesia untuk benda di foto (kucing, cangkir, bunga).',
+                    'title pendek, 2 sampai 4 kata.',
+                    'parts adalah bagian yang benar-benar terlihat, dari yang terbesar. name adalah kata benda bahasa Indonesia (kepala, badan, telinga, gagang, kelopak), bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
+                    'Jangan memakai "bagian berikutnya", "bentuk utama", "buih", "latar belakang", "wajah anak", "barcode", atau "ventilasi".',
+                    'pair true bila kotak mencakup sepasang simetris (dua telinga, dua mata, dua roda) yang digambar dalam satu langkah.',
+                    'x, y, width, height adalah kotak dalam ruang 1000 kali 750. points adalah polygon bagian itu dalam ruang yang sama, paling banyak 8 titik. Kosongkan points bila kotak sudah cukup.',
+                    'colorName adalah warna bagian itu pada foto: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, hitam, abu-abu, atau putih.',
+                    'Jangan menambah bagian yang tidak ada.',
                   ].join('\n'),
                 },
+                { type: 'image_url', image_url: { url: `data:image/png;base64,${bytesToBase64(input.photoPng)}` } },
                 { type: 'image_url', image_url: { url: `data:image/png;base64,${bytesToBase64(input.illustrationPng)}` } },
               ],
             }],
             response_format: {
               type: 'json_schema',
               json_schema: {
-                name: 'shape_plan',
+                name: 'part_plan',
                 strict: true,
                 schema: {
                   type: 'object',
                   additionalProperties: false,
-                  required: ['subject', 'title', 'parts'],
+                  required: ['sameSubject', 'subject', 'title', 'parts'],
                   properties: {
+                    sameSubject: { type: 'boolean' },
                     subject: { type: 'string' },
                     title: { type: 'string' },
                     parts: {
@@ -151,16 +144,27 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                       items: {
                         type: 'object',
                         additionalProperties: false,
-                        required: ['primitive', 'name', 'pair', 'x', 'y', 'width', 'height', 'rotation'],
+                        required: ['name', 'pair', 'x', 'y', 'width', 'height', 'colorName', 'points'],
                         properties: {
-                          primitive: { type: 'string', enum: ['circle', 'ellipse', 'rounded-rect', 'triangle', 'line'] },
                           name: { type: 'string' },
                           pair: { type: 'boolean' },
                           x: { type: 'number' },
                           y: { type: 'number' },
                           width: { type: 'number' },
                           height: { type: 'number' },
-                          rotation: { type: 'number' },
+                          colorName: { type: 'string' },
+                          points: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              additionalProperties: false,
+                              required: ['x', 'y'],
+                              properties: {
+                                x: { type: 'number' },
+                                y: { type: 'number' },
+                              },
+                            },
+                          },
                         },
                       },
                     },
@@ -180,33 +184,17 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
         const parsed = asRecord(JSON.parse(content) as unknown);
         const subject = typeof parsed.subject === 'string' ? parsed.subject : '';
         const title = typeof parsed.title === 'string' ? parsed.title : '';
+        const sameSubject = parsed.sameSubject !== false;
         const rows = Array.isArray(parsed.parts) ? parsed.parts : [];
-        const parts: ShapeProposal[] = [];
+        const parts: DetectedPart[] = [];
         for (const row of rows) {
-          const part = proposalFrom(row);
+          const part = detectedPartFrom(row);
           if (part) parts.push(part);
         }
-        return { subject, title, parts, usage: usageFrom(record.usage) };
+        return { sameSubject, subject, title, parts, usage: usageFrom(record.usage) };
       },
     },
   };
-}
-
-function proposalFrom(value: unknown): ShapeProposal | null {
-  const row = asRecord(value);
-  const primitive = typeof row.primitive === 'string' ? knownPrimitive(row.primitive) : null;
-  if (!primitive || typeof row.name !== 'string' || typeof row.pair !== 'boolean') return null;
-  const x = finite(row.x);
-  const y = finite(row.y);
-  const width = finite(row.width);
-  const height = finite(row.height);
-  const rotation = finite(row.rotation);
-  if (x === null || y === null || width === null || height === null || rotation === null) return null;
-  return { primitive, name: row.name, pair: row.pair, x, y, width, height, rotation };
-}
-
-function finite(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 export function sumUsage(left: TokenUsage | null, right: TokenUsage | null): TokenUsage | null {

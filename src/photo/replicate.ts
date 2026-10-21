@@ -7,7 +7,7 @@
  */
 
 import { bytesToBase64, type ImageEditor, type ImageEditRequest, type ImageEditResult } from './openai';
-import { imagePrompt } from './prompts';
+import { replicatePrompt } from './prompts';
 
 export const DEFAULT_REPLICATE_MODEL = 'black-forest-labs/flux-kontext-pro';
 
@@ -25,7 +25,11 @@ export function replicateModelFor(configured: string | undefined): string {
   return DEFAULT_REPLICATE_MODEL;
 }
 
-/** Kontext edits the photo. flux-1.1-pro is text-to-image and only uses the photo as guidance. */
+/**
+ * flux-1.1-pro is unsuitable for this spike: it returns near-photos.
+ * An explicit model id can still call it. Compare runs do not.
+ * Kontext edits the photo. flux-1.1-pro is text-to-image and only uses the photo as guidance.
+ */
 export function replicateUsesImagePrompt(model: string): boolean {
   return model === 'black-forest-labs/flux-1.1-pro' || model.endsWith('/flux-1.1-pro');
 }
@@ -53,10 +57,19 @@ export function replicateAspect(width: number, height: number): string {
   return best;
 }
 
+let replicateTail: Promise<void> = Promise.resolve();
+
+/** One Replicate prediction at a time. The account bursts at one request. */
+function enqueue<T>(work: () => Promise<T>): Promise<T> {
+  const run = replicateTail.then(work, work);
+  replicateTail = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 export function replicateEditor(apiKey: string): ImageEditor {
   return {
     edit(input) {
-      return runPrediction(apiKey, input);
+      return enqueue(() => runPrediction(apiKey, input));
     },
   };
 }
@@ -107,7 +120,7 @@ interface Prediction {
 
 async function createPrediction(apiKey: string, model: string, input: ImageEditRequest): Promise<Prediction> {
   const dataUrl = `data:image/png;base64,${bytesToBase64(input.png)}`;
-  const prompt = imagePrompt(input.variant, input.reinforceSilhouette === true);
+  const prompt = replicatePrompt(input.reinforceSilhouette === true, input.reinforceSubject === true);
   const body = replicateUsesImagePrompt(model)
     ? {
       input: {
@@ -125,7 +138,7 @@ async function createPrediction(apiKey: string, model: string, input: ImageEditR
         output_format: 'png',
       },
     };
-  const response = await fetch(`${PREDICT_URL}/${model}/predictions`, {
+  const response = await fetchWithBackoff(`${PREDICT_URL}/${model}/predictions`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${apiKey}`,
@@ -135,17 +148,35 @@ async function createPrediction(apiKey: string, model: string, input: ImageEditR
     },
     body: JSON.stringify(body),
     signal: input.signal,
-  });
+  }, input.signal);
   const payload = await readJson(response);
   if (!response.ok) throw new Error(replicateMessage(payload, response.status));
   return asPrediction(payload);
 }
 
+async function fetchWithBackoff(url: string, init: RequestInit, signal: AbortSignal): Promise<Response> {
+  let last: Response | null = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await fetch(url, init);
+    if (response.status !== 429 || attempt === 3) return response;
+    last = response;
+    await sleep(retryDelay(response, attempt), signal);
+  }
+  if (last) return last;
+  throw new Error('Replicate request failed');
+}
+
+function retryDelay(response: Response, attempt: number): number {
+  const header = Number(response.headers.get('retry-after'));
+  if (Number.isFinite(header) && header > 0) return Math.min(20_000, header * 1000);
+  return Math.min(8_000, 400 * 2 ** attempt);
+}
+
 async function getPrediction(apiKey: string, id: string, signal: AbortSignal): Promise<Prediction> {
-  const response = await fetch(`https://api.replicate.com/v1/predictions/${id}`, {
+  const response = await fetchWithBackoff(`https://api.replicate.com/v1/predictions/${id}`, {
     headers: { authorization: `Bearer ${apiKey}` },
     signal,
-  });
+  }, signal);
   const payload = await readJson(response);
   if (!response.ok) throw new Error(replicateMessage(payload, response.status));
   return asPrediction(payload);
