@@ -19,7 +19,7 @@ const SHARED = [
   'One closed outer silhouette around the whole subject, then only the interior lines that are actually visible on this subject.',
   'Keep the same pose as the photo. The pose is binding. A subject that is lying stays lying. A subject that is sitting stays sitting.',
   'Keep the same framing and crop as the photo. Do not zoom in. Do not zoom out. A full body stays a full body. A close-up stays a close-up. Simplify only inside that crop.',
-  'Leave out the background and anything that is not the subject.',
+  'Draw only the subject. Leave out the background, the table, the surface, and anything sitting on it. Leave out people, hands, legs, leashes, and props.',
   'Do not draw letters, numbers, barcodes, logos, or writing, unless the writing itself is the only subject.',
   'Do not draw a barcode, QR code, price sticker, or any row of vertical black bars. If the photo has one, leave that area blank.',
   'Do not add any object that is not in the photo. Do not invent parts that are hidden.',
@@ -45,7 +45,7 @@ export function imagePrompt(
   if (reinforceSilhouette) {
     extra.push('The previous drawing was only a fragment. Draw the FULL subject: one continuous closed outer silhouette around all of it, on an opaque white background, with no labels and no row of short parallel lines.');
   }
-  if (reinforceSubject) extra.push('The drawing must be the same object as the photo. Do not turn it into something else.');
+  if (reinforceSubject) extra.push('The drawing must be the same object as the photo. Do not turn it into something else. Leave out the table, people, leashes, and props.');
   const hints = cleanHints(partHints);
   if (hints.length > 0) {
     extra.push(`Draw only these parts of this one subject: ${hints.join(', ')}. Do not draw any other object.`);
@@ -102,6 +102,7 @@ export function replicatePrompt(
     'Plain opaque white background. No colour, no shading, no texture, no text.',
     'Keep the photo\'s pose. A subject that is lying stays lying. A subject that is sitting stays sitting.',
     'Keep the photo\'s framing and crop. Do not zoom in or zoom out. A close-up stays a close-up. A full body stays a full body.',
+    'Draw only this one subject. Leave out the table, the surface, and anything on it. Leave out people, hands, legs, leashes, and props.',
   ];
   if (reinforceSilhouette) lines.push('Draw the full subject as one continuous closed outer silhouette.');
   if (reinforceSubject) lines.push('The drawing must be the same object as the photo.');

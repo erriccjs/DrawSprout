@@ -11,8 +11,8 @@
  *
  * `--steps` defaults to `strokes` (call A's ink, two image calls). `reverse`
  * erases one part at a time at low quality. `both` keeps the stroke lesson and
- * adds the reverse images on the sheet. A v11 run and a v12 run are different
- * paid jobs; write v12 to its own `--out` directory. `reverseUsd` is only the
+ * adds the reverse images on the sheet. A v12 run and a v13 run are different
+ * paid jobs; write v13 to its own `--out` directory. `reverseUsd` is only the
  * erase edits. `costUsd` is the whole job.
  *
  * `--compare` runs OpenAI and flux-kontext-pro. flux-1.1-pro is unsuitable.
@@ -50,7 +50,7 @@ import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../
 import { composeContactSheet } from '../../src/photo/sheet';
 
 /** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
-const EVAL_KEY_REVISION = 'v12';
+const EVAL_KEY_REVISION = 'v13';
 
 interface Args {
   readonly score?: string;

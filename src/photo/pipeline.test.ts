@@ -211,6 +211,61 @@ describe('photo pipeline wiring', () => {
     expect(result.reviewReason ?? '').not.toContain('menambah benda');
     expect(result.needsReview).toBe(true);
   });
+
+  it('redraws once when the plan names a leash, and drops that step', async () => {
+    const art = await encodePng(frame());
+    const flags: boolean[] = [];
+    const images: ImageEditor = {
+      edit(input) {
+        flags.push(input.reinforceSubject === true);
+        return Promise.resolve({ png: art, usage: null });
+      },
+    };
+    const instructions: InstructionWriter = {
+      write(input) {
+        if (input.photoOnly) {
+          return Promise.resolve({
+            sameSubject: true,
+            subject: 'Anjing',
+            title: 'Anjing',
+            parts: [
+              { name: 'badan', pair: false, x: 40, y: 20, width: 200, height: 160, points: [], colorName: 'hitam', pieceIds: [], count: 1, shape: 'oval', order: 1 },
+              { name: 'tali', pair: false, x: 20, y: 80, width: 40, height: 120, points: [], colorName: 'hitam', pieceIds: [], count: 1, order: 2 },
+            ],
+            usage: null,
+          });
+        }
+        const redraw = input.idempotencyKey.endsWith('-redraw');
+        return Promise.resolve({
+          sameSubject: true,
+          samePose: true,
+          subject: 'Anjing',
+          title: 'Anjing',
+          extraObjects: [],
+          parts: redraw
+            ? [{ name: 'badan', pair: false, x: 40, y: 20, width: 200, height: 160, points: [], colorName: 'hitam', pieceIds: [], count: 1, shape: 'oval', order: 1 }]
+            : [
+              { name: 'badan', pair: false, x: 40, y: 20, width: 200, height: 160, points: [], colorName: 'hitam', pieceIds: [], count: 1, shape: 'oval', order: 1 },
+              { name: 'tali', pair: false, x: 20, y: 80, width: 40, height: 120, points: [], colorName: 'hitam', pieceIds: [], count: 1, order: 2 },
+            ],
+          usage: null,
+        });
+      },
+    };
+    const result = await runPhotoPipeline({
+      png: art,
+      variant: 'default',
+      idempotencyKey: 'leash-subject',
+      signal: AbortSignal.timeout(5_000),
+      textModel: 'gpt-4.1-mini',
+      lessonId: 'photo-leash',
+    }, { images, instructions });
+    expect(result.regenerated).toBe(true);
+    expect(result.imageCalls).toBe(4);
+    expect(flags.filter(Boolean)).toHaveLength(1);
+    expect(result.reviewReason ?? '').not.toContain('menambah benda');
+    expect(result.lesson.steps.map((step) => step.instruction).join(' ')).not.toMatch(/tali/);
+  });
 });
 
 function marked(eye: boolean): RgbaImage {

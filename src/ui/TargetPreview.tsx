@@ -65,7 +65,7 @@ export function TargetPreview({ space, paths, title, step, steps, colorRegions }
       {lines.map((path) => {
         const current = currentIds.has(path.id);
         const construction = path.role === 'construction';
-        const stroke = current || construction ? '#e23b3b' : '#2c2c2c';
+        const stroke = construction ? '#b5b5b5' : current ? '#e23b3b' : '#2c2c2c';
         const width = current && !construction ? 10 : construction ? 5 : 6;
         return (
           <path

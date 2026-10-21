@@ -256,6 +256,7 @@ function instructionText(input: InstructionRequest): string {
       'pair true hanya untuk sepasang yang memang dua. count 1 atau 2.',
       'x, y, width, height adalah kotak dalam ruang 1000 kali 750. points paling banyak 8 titik. pieceIds array kosong.',
       'colorName adalah warna bagian itu: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, cokelat tua, hitam, abu-abu, atau putih.',
+      'Jangan memasukkan meja, lantai, orang, tangan, tali, atau benda di sekitar subjek sebagai parts.',
       'Jangan menambah benda yang tidak ada di foto.',
     ].join('\n');
   }
@@ -263,7 +264,7 @@ function instructionText(input: InstructionRequest): string {
     'Gambar pertama adalah foto. Gambar kedua adalah garis hitam saja, tanpa warna.',
     'sameSubject true hanya bila gambar itu adalah benda yang sama dengan foto. Kucing yang digambar menjadi mobil adalah false.',
     'samePose true hanya bila pose dan bingkai gambar sama dengan foto. Subjek yang berbaring menjadi duduk adalah false. Close-up yang menjadi seluruh badan adalah false.',
-    'photoObjects adalah benda di foto. drawingObjects adalah benda di gambar garis. extraObjects adalah benda di gambar garis yang tidak ada di foto. Kosong bila tidak ada tambahan.',
+    'photoObjects adalah benda di foto. drawingObjects adalah benda di gambar garis. extraObjects adalah benda di gambar garis yang bukan subjek, walaupun benda itu ada di foto. Meja, benda di atas meja, orang, kaki orang, tali, dan biji kopi masuk extraObjects, bukan parts. Kosong bila tidak ada tambahan.',
     'subject adalah satu kata benda bahasa Indonesia untuk benda di foto (kucing, cangkir, bunga), tanpa kata sifat.',
     'title pendek, 2 sampai 4 kata, tanpa kata sifat.',
     'parts adalah rencana konstruksi, dari bentuk besar ke detail kecil, seperti urutan langkah. name adalah satu kata benda saja, tanpa kata sifat dan tanpa warna: "anjing", bukan "anjing hitam lucu"; "bunga", bukan "bunga putih merah". Bukan nama bentuk, bukan kalimat, tanpa kata "dua".',

@@ -169,6 +169,8 @@ describe('OpenAI client', () => {
       expect(prompt).toContain('closed outer silhouette');
       expect(prompt).toContain('lying stays lying');
       expect(prompt).toContain('close-up stays a close-up');
+      expect(prompt).toContain('the table, the surface');
+      expect(prompt).toContain('leashes, and props');
       expect(prompt).not.toMatch(/chibi|cartoon|character|kid-book/i);
     }
     expect(imagePrompt('default', false, false, ['kelopak', 'daun'])).toContain('Draw only these parts of this one subject: kelopak, daun.');

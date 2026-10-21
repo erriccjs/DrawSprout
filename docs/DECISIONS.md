@@ -1315,4 +1315,18 @@ The v11 run (commit d22a359, OpenAI, `--steps both`, five samples) was a no-go. 
 
 **Reverse.** Each erase stage is aligned to the previous one before the new ink is taken, so a small shift does not paint the whole drawing red. `reverseCalls` and `reverseUsd` are recorded on their own. `costUsd` stays the whole job. Reverse remains opt-in. The default, including the app, is still stroke assignment and two image calls.
 
-The eval idempotency key ends in `v12`. The gate is still not claimed.
+The eval idempotency key ended in `v12`. D-79 bumps it to `v13`. The gate is still not claimed.
+
+### D-79 — Dashed mass guide, subject only, petals kept
+
+The v12 run (commit 4c4d7ef, OpenAI, `--steps both`, five samples) was a no-go. The line drawings were faithful: no invented cats, and the pose and the crop matched. Strokes cost about $0.09 a photo and reverse added about $0.066. The lessons regressed. This is not a pass. `claimedPass` stays false.
+
+**Guide.** Step 1 is a light grey dashed circle or oval fitted inside the main mass (the head, the cup body, the flower head), not a solid line and not a semicircle. It disappears once the real outline is drawn. It is not in the finished lesson or the comparison.
+
+**Subject.** The line prompt draws only the subject. It leaves out the table, the surface, anything on it, people, leashes, and props. A drawing that adds those, including a leash or coffee beans that are in the photo, is drawn once more. If they are still there, `needsReview` is set. They are not lesson steps.
+
+**Strokes.** Petal lines that touch the outline stay one kelopak step. The centre is its own step. A cup and saucer that share one silhouette become two outlines. Whiskers and legs stay even when they touch the outline. A colour region is named by the part that overlaps it most, so eyes are not mulut and a collar is not tali. A brown spill across a white cup is not painted as the cup; the coffee inside the cup stays dark brown.
+
+**Reverse.** Each erase stage is registered to the finished line drawing, and new ink is kept only inside the erased part. Doubled outlines outside that part are not a step.
+
+The eval idempotency key ends in `v13`. The gate is still not claimed.

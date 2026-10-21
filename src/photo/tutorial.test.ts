@@ -1,10 +1,15 @@
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { renderCumulativeStep } from './compare';
-import { buildPhotoLesson, buildTutorialLesson, TUTORIAL_DRAWING_MAX } from './lesson-build';
+import { buildPhotoLesson, buildTutorialLesson, lessonPieces, TUTORIAL_DRAWING_MAX } from './lesson-build';
 import type { DetectedPart, PlanShape } from './parts';
-import type { RgbaImage } from './png';
-import { subtractInk } from './reverse';
-import type { Contour, Point } from './trace';
+import { decodePng, type RgbaImage } from './png';
+import { inkAdded, registerToFinal, subtractInk } from './reverse';
+import { traceInk, type Contour, type Point } from './trace';
+
+/** Real v12 flower line, when the eval sheet is on disk. The synthetic stands in for the same failure. */
+const FLOWER_LINE = '/workspace/m4/v12-openai/illustrations/flower-line.png';
 
 const photo = painted(24, 18, () => [180, 180, 180]);
 
@@ -340,7 +345,268 @@ describe('how-to-draw construction', () => {
     expect(dark).toBeGreaterThan(8);
     expect(dark).toBeLessThan(80);
   });
+
+  it('draws step 1 as a dashed circle or oval inside the mass, then drops it', () => {
+    const built = buildTutorialLesson({
+      id: 'tutorial-dome',
+      title: 'Bunga',
+      targetHash: 'abcdef1234567890',
+      contours: [circle(400, 220, 150)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [planned('bunga', 1, 'dome', cover(220, 40, 360, 500))],
+    });
+    const drawing = built.lesson.steps.filter((step) => step.phase !== 'color');
+    const guide = drawing[0]?.guidePaths[0];
+    expect(drawing[0]?.instruction).toMatch(/lingkaran besar untuk bunga|oval besar untuk bunga/);
+    expect(drawing[0]?.instruction).not.toMatch(/kubah/);
+    expect(guide?.role).toBe('construction');
+    expect(guide?.d).toMatch(/0 1 1/);
+    expect(guide?.d).not.toMatch(/0 0 1/);
+    expect(built.lesson.targetPreview.paths.some((path) => path.role === 'construction' || path.d === guide?.d)).toBe(false);
+    expect(drawing[1]?.instruction).toBe('Gambar garis luar bunga.');
+    const first = renderCumulativeStep(built.lesson, 1, 140);
+    const finished = renderCumulativeStep(built.lesson, drawing.length, 140);
+    const grey = (red: number, green: number, blue: number) => red > 150 && red < 200 && Math.abs(red - green) < 12 && Math.abs(green - blue) < 12;
+    expect(countTone(first, grey)).toBeGreaterThan(4);
+    expect(countTone(finished, grey)).toBe(0);
+    expect(built.reviewReason ?? '').not.toContain('Bentuk bantu ikut gambar akhir');
+  });
+
+  it('splits the cup from the saucer and does not draw the beans', () => {
+    const built = buildTutorialLesson({
+      id: 'tutorial-saucer',
+      title: 'Cangkir',
+      targetHash: 'abcdef1234567890',
+      contours: [tallCup(), square(40, 500, 70), square(860, 520, 60)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#ffffff'],
+      parts: [
+        planned('cangkir', 1, 'dome', cover(180, 40, 480, 280)),
+        planned('piring', 2, 'oval', cover(80, 360, 680, 180)),
+        planned('biji kopi', 3, '', cover(120, 420, 160, 160), { count: 2 }),
+        planned('biji kopi', 3, '', cover(560, 440, 140, 140), { count: 2 }),
+      ],
+    });
+    const text = built.lesson.steps.map((step) => step.instruction).join(' ');
+    expect(text).toContain('Gambar garis luar cangkir.');
+    expect(text).toContain('Gambar garis luar piring.');
+    expect(text).not.toMatch(/biji|kopi/);
+    expect(built.lesson.steps[0]?.guidePaths[0]?.role).toBe('construction');
+    expect(built.lesson.steps[0]?.guidePaths[0]?.d).toMatch(/0 1 1/);
+  });
+
+  it('names eyes and a nose by their own part, and keeps a white cup white', () => {
+    const cat = buildTutorialLesson({
+      id: 'tutorial-mouth',
+      title: 'Kucing',
+      targetHash: 'abcdef1234567890',
+      contours: [circle(400, 280, 180)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      flatRegions: [
+        { name: 'abu-abu', hex: '#888888', points: square(220, 120, 360).points, pixels: 8000, cx: 400, cy: 300 },
+        { name: 'hijau', hex: '#3a8f4a', points: square(330, 250, 36).points, pixels: 180, cx: 348, cy: 268 },
+        { name: 'hitam', hex: '#222222', points: square(450, 250, 32).points, pixels: 160, cx: 466, cy: 266 },
+        { name: 'merah muda', hex: '#e0909a', points: square(390, 320, 28).points, pixels: 140, cx: 404, cy: 334 },
+      ],
+      parts: [
+        planned('kepala', 1, 'circle', cover(220, 100, 360, 360)),
+        planned('mata', 2, 'circle', cover(318, 238, 60, 56)),
+        planned('mata', 2, 'circle', cover(438, 238, 56, 52)),
+        planned('hidung', 3, 'circle', cover(384, 308, 40, 36)),
+        planned('mulut', 4, '', cover(360, 300, 90, 80)),
+      ],
+    });
+    const colours = cat.lesson.steps.filter((step) => step.phase === 'color').map((step) => step.instruction);
+    expect(colours.some((text) => text.includes('mata') && text.includes('hijau'))).toBe(true);
+    expect(colours.some((text) => text.includes('hidung'))).toBe(true);
+    expect(colours.join(' ')).not.toMatch(/mulut/);
+
+    const cup = buildTutorialLesson({
+      id: 'tutorial-white-cup',
+      title: 'Cangkir',
+      targetHash: 'abcdef1234567890',
+      contours: [square(180, 80, 520)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#ffffff'],
+      flatRegions: [
+        { name: 'cokelat', hex: '#8a5a32', points: square(180, 80, 520).points, pixels: 6000, cx: 440, cy: 340 },
+      ],
+      parts: [
+        planned('cangkir', 1, 'oval', cover(180, 80, 520, 420)),
+        planned('kopi', 2, '', cover(330, 160, 180, 160)),
+      ],
+    });
+    const cupColours = cup.lesson.steps.filter((step) => step.phase === 'color').map((step) => step.instruction);
+    expect(cupColours.some((text) => text.includes('kopi') && text.includes('cokelat'))).toBe(true);
+    expect(cupColours.some((text) => text.includes('cangkir'))).toBe(false);
+    expect(cupColours.join(' ')).not.toMatch(/putih/);
+  });
+
+  it('does not let a leash name the collar or the tongue', () => {
+    const built = buildTutorialLesson({
+      id: 'tutorial-leash',
+      title: 'Anjing',
+      targetHash: 'abcdef1234567890',
+      contours: [square(120, 80, 700), square(200, 500, 140), square(360, 300, 40)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#111111'],
+      flatRegions: [
+        { name: 'hitam', hex: '#1a1a1a', points: square(120, 80, 700).points, pixels: 5000, cx: 470, cy: 400 },
+        { name: 'merah', hex: '#c62828', points: square(200, 500, 140).points, pixels: 900, cx: 270, cy: 570 },
+        { name: 'merah muda', hex: '#e0909a', points: square(360, 300, 40).points, pixels: 200, cx: 380, cy: 320 },
+      ],
+      parts: [
+        planned('badan', 1, 'oval', cover(120, 80, 700, 560)),
+        planned('kalung', 2, '', cover(190, 480, 170, 160)),
+        planned('lidah', 3, '', cover(348, 288, 64, 60)),
+        planned('tali', 4, '', cover(180, 470, 200, 180)),
+        planned('tali', 4, '', cover(340, 280, 80, 90)),
+      ],
+    });
+    const colours = built.lesson.steps.filter((step) => step.phase === 'color').map((step) => step.instruction).join(' ');
+    expect(colours).toMatch(/kalung/);
+    expect(colours).toMatch(/lidah/);
+    expect(colours).not.toMatch(/tali/);
+    expect(built.lesson.steps.map((step) => step.instruction).join(' ')).not.toMatch(/tali/);
+  });
+
+  it('keeps whiskers and legs that touch the outline', () => {
+    const head = circle(400, 280, 180);
+    const built = buildTutorialLesson({
+      id: 'tutorial-whiskers',
+      title: 'Kucing',
+      targetHash: 'abcdef1234567890',
+      contours: [
+        head,
+        { closed: false, points: [{ x: 230, y: 300 }, { x: 300, y: 312 }, { x: 390, y: 300 }] },
+        { closed: false, points: [{ x: 420, y: 304 }, { x: 520, y: 316 }, { x: 590, y: 300 }] },
+      ],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      parts: [
+        planned('kepala', 1, 'circle', cover(220, 100, 360, 360)),
+        planned('kumis', 2, 'line', cover(200, 270, 420, 70)),
+      ],
+    });
+    const whiskers = built.lesson.steps.find((step) => step.instruction.includes('kumis'));
+    expect(whiskers?.instruction).toBe('Gambar kumis.');
+    expect(whiskers?.guidePaths.length).toBeGreaterThanOrEqual(1);
+    expect(whiskers?.guidePaths.every((path) => path.role === 'final-outline')).toBe(true);
+
+    const dog = buildTutorialLesson({
+      id: 'tutorial-legs',
+      title: 'Anjing',
+      targetHash: 'abcdef1234567890',
+      contours: [
+        square(160, 80, 520),
+        { closed: false, points: [{ x: 200, y: 520 }, { x: 230, y: 640 }, { x: 270, y: 660 }] },
+        { closed: false, points: [{ x: 520, y: 520 }, { x: 560, y: 640 }, { x: 600, y: 650 }] },
+      ],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      parts: [
+        planned('badan', 1, 'oval', cover(160, 80, 520, 560)),
+        planned('kaki', 2, 'line', cover(180, 480, 460, 200), { count: 2 }),
+      ],
+    });
+    const legs = dog.lesson.steps.find((step) => step.instruction.includes('kaki'));
+    expect(legs?.instruction).toMatch(/kaki/);
+    expect(legs?.guidePaths.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('keeps petal strokes that touch the outline, and a separate centre', async () => {
+    const bloom = circle(400, 300, 180);
+    const touching = [0, 1, 2, 3, 4].map((index) => petalArc(400, 300, 180, index));
+    const built = buildTutorialLesson({
+      id: 'tutorial-flower-line',
+      title: 'Bunga',
+      targetHash: 'abcdef1234567890',
+      contours: [bloom, ...touching, circle(400, 300, 26)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [
+        planned('bunga', 1, 'circle', cover(220, 120, 360, 360)),
+        planned('kelopak', 2, 'oval', cover(220, 120, 360, 360), { count: 5, dependsOn: 'bunga' }),
+        planned('tengah', 3, 'circle', cover(372, 272, 56, 56), { dependsOn: 'bunga' }),
+      ],
+    });
+    const petals = built.lesson.steps.find((step) => step.instruction === 'Gambar kelopak.');
+    const centre = built.lesson.steps.find((step) => /\btengah\b/.test(step.instruction));
+    expect(petals?.guidePaths).toHaveLength(5);
+    expect(petals?.guidePaths.every((path) => path.role === 'final-outline')).toBe(true);
+    expect(centre?.guidePaths.length).toBeGreaterThanOrEqual(1);
+    expect(centre?.id).not.toBe(petals?.id);
+    if (!existsSync(FLOWER_LINE)) return;
+    const image = await decodePng(await readFile(FLOWER_LINE));
+    const contours = traceInk(image);
+    const pieces = lessonPieces(contours, image.width, image.height);
+    const head = pieces.reduce((best, piece) => (piece.width * piece.height > best.width * best.height ? piece : best));
+    const traced = buildTutorialLesson({
+      id: 'tutorial-v12-flower',
+      title: 'Bunga',
+      targetHash: 'abcdef1234567890',
+      contours,
+      sourceWidth: image.width,
+      sourceHeight: image.height,
+      photo,
+      palette: ['#cc3333'],
+      parts: [
+        planned('bunga', 1, 'circle', head),
+        planned('kelopak', 2, 'oval', head, { count: 5, dependsOn: 'bunga' }),
+        planned('tengah', 3, 'circle', {
+          x: head.x + head.width * 0.38,
+          y: head.y + head.height * 0.38,
+          width: Math.max(16, head.width * 0.24),
+          height: Math.max(16, head.height * 0.24),
+        }, { dependsOn: 'bunga' }),
+      ],
+    });
+    expect(traced.lesson.steps.find((step) => step.instruction === 'Gambar kelopak.')?.guidePaths.length).toBeGreaterThanOrEqual(2);
+    expect(traced.lesson.steps.some((step) => /\btengah\b/.test(step.instruction))).toBe(true);
+  });
+
+  it('registers a shifted stage to the final drawing and ignores ink outside the part', () => {
+    const final = painted(40, 28, (x, y) => {
+      const body = x >= 4 && x < 18 && y >= 4 && y < 18;
+      const mark = x >= 28 && x < 36 && y >= 6 && y < 16;
+      return body || mark ? [0, 0, 0] : [255, 255, 255];
+    });
+    const shifted = painted(40, 28, (x, y) => (x >= 8 && x < 22 && y >= 7 && y < 21 ? [0, 0, 0] : [255, 255, 255]));
+    const registered = registerToFinal(final, shifted);
+    const added = inkAdded(registered, final, { x: 26, y: 4, width: 12, height: 14 });
+    expect(added).not.toBeNull();
+    expect(countTone(added!, (red, _green, _blue, x) => red < 20 && x < 24)).toBe(0);
+    expect(countTone(added!, (red, _green, _blue, x) => red < 20 && x >= 26)).toBeGreaterThan(8);
+  });
 });
+
+function petalArc(cx: number, cy: number, radius: number, index: number): Contour {
+  const start = -Math.PI / 2 + (index * 2 * Math.PI) / 5 + 0.15;
+  const points: Point[] = [];
+  for (let step = 0; step <= 6; step += 1) {
+    const angle = start + (step / 6) * 0.7;
+    points.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+  }
+  return { closed: false, points };
+}
 
 function planned(
   name: string,
@@ -402,6 +668,15 @@ function countTone(
     if (match(image.data[index] ?? 0, image.data[index + 1] ?? 0, image.data[index + 2] ?? 0, x, y)) count += 1;
   }
   return count;
+}
+
+function tallCup(): Contour {
+  const points: Point[] = [];
+  for (let y = 40; y <= 640; y += 20) points.push({ x: 200, y });
+  for (let x = 200; x <= 760; x += 20) points.push({ x, y: 640 });
+  for (let y = 640; y >= 40; y -= 20) points.push({ x: 760, y });
+  for (let x = 760; x >= 200; x -= 20) points.push({ x, y: 40 });
+  return { closed: true, points };
 }
 
 function square(x: number, y: number, size: number): Contour {

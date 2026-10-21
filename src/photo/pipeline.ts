@@ -9,14 +9,14 @@ import { compareLessonToInk } from './compare';
 import { dominantColors } from './colors';
 import { regionsColouredBy, type FlatRegion } from './flat-colour';
 import { downscaleLongEdge, flattenOnWhite } from './image-ops';
-import { buildNamedLesson, buildTutorialLesson, lessonPieces, outlineCoverage, sanitizeTitle, shouldRedraw, type BuiltLesson } from './lesson-build';
+import { buildNamedLesson, buildTutorialLesson, imageRect, isBackgroundPart, lessonPieces, outlineCoverage, partNoun, sanitizeTitle, shouldRedraw, type BuiltLesson } from './lesson-build';
 import { sumUsage, type ImageEditor, type InstructionResult, type InstructionWriter, type TokenUsage } from './openai';
 import { decodePng, encodePng, type RgbaImage } from './png';
 import type { ImageProvider } from './provider';
 import { cleanPartName } from './parts';
 import { erasePrompt, imageModelFor, imageQualityFor, type ImageQuality, type PhotoVariant } from './prompts';
 import { replicateModelFor } from './replicate';
-import { MAX_REVERSE_ERASES, subtractInk } from './reverse';
+import { inkAdded, MAX_REVERSE_ERASES, registerToFinal, type InkRegion } from './reverse';
 import type { Contour } from './trace';
 import { traceInk } from './trace';
 import type { LessonPackage } from '../lesson-data/schema';
@@ -104,28 +104,34 @@ export async function runPhotoPipeline(
   pairCalls += traced.calls;
   let imageUsage = traced.usage;
   let retried = false;
-  if (shouldRedraw(outlineCoverage(traced.contours))) {
-    const second = await drawPass(deps.images, input, photo, model, quality, true, false, `${input.idempotencyKey}-redraw`, hints).catch(() => null);
-    retried = true;
-    if (second) {
-      pairCalls += second.calls;
-      imageUsage = sumUsage(imageUsage, second.usage);
-      if (outlineCoverage(second.contours) >= outlineCoverage(traced.contours)) traced = second;
-    }
-  }
 
   let written = await askParts(deps.instructions, input, traced, photoPng, '');
   textUsage = sumUsage(textUsage, written?.usage ?? null);
-  if (written && mismatchesPhoto(written) && !retried) {
-    const second = await drawPass(deps.images, input, photo, model, quality, true, true, `${input.idempotencyKey}-redraw`, hints).catch(() => null);
+  const thin = shouldRedraw(outlineCoverage(traced.contours));
+  const mismatch = mismatchesPhoto(written);
+  const props = hasBackgroundParts(written);
+  if ((mismatch || props || thin) && !retried) {
+    const second = await drawPass(
+      deps.images,
+      input,
+      photo,
+      model,
+      quality,
+      thin,
+      mismatch || props,
+      `${input.idempotencyKey}-redraw`,
+      hints,
+    ).catch(() => null);
     retried = true;
     if (second) {
       pairCalls += second.calls;
       imageUsage = sumUsage(imageUsage, second.usage);
-      const again = await askParts(deps.instructions, input, second, photoPng, '-redraw');
-      textUsage = sumUsage(textUsage, again?.usage ?? null);
-      traced = second;
-      if (again) written = again;
+      if (mismatch || props || outlineCoverage(second.contours) >= outlineCoverage(traced.contours)) {
+        const again = await askParts(deps.instructions, input, second, photoPng, '-redraw');
+        textUsage = sumUsage(textUsage, again?.usage ?? null);
+        traced = second;
+        if (again) written = again;
+      }
     }
   }
 
@@ -198,7 +204,7 @@ export async function runPhotoPipeline(
   }
 
   const subjectMismatch = written?.sameSubject === false;
-  const extraSubject = (written?.extraObjects?.length ?? 0) > 0;
+  const extraSubject = (written?.extraObjects?.length ?? 0) > 0 || hasBackgroundParts(written);
   const poseMismatch = written?.samePose === false;
   const reasons = [...built.reviewReasons];
   if (comparison.reviewReason) reasons.push(comparison.reviewReason);
@@ -244,11 +250,15 @@ function hintNames(written: InstructionResult | null): string[] {
   const names: string[] = [];
   for (const part of written.parts) {
     const name = cleanPartName(part.name);
-    if (!name || names.includes(name)) continue;
+    if (!name || names.includes(name) || isBackgroundPart(name)) continue;
     names.push(name);
     if (names.length === 8) break;
   }
   return names;
+}
+
+function hasBackgroundParts(written: InstructionResult | null): boolean {
+  return written?.parts.some((part) => isBackgroundPart(part.name)) === true;
 }
 
 async function askPhotoPlan(
@@ -318,12 +328,16 @@ async function eraseBackwards(
     }
   }
   const labels = [planNames[0] ?? 'bentuk', ...tail];
+  const final = imagesInOrder[imagesInOrder.length - 1];
+  if (!final) return { stages: forward, calls, usage, lesson: null };
+  const aligned = imagesInOrder.map((image) => registerToFinal(final, image));
   const stages: { name: string; contours: Contour[] }[] = [];
-  for (let index = 0; index < imagesInOrder.length; index += 1) {
-    const image = imagesInOrder[index];
-    const previous = imagesInOrder[index - 1];
+  for (let index = 0; index < aligned.length; index += 1) {
+    const image = aligned[index];
+    const previous = aligned[index - 1];
     if (!image) continue;
-    const ink = index === 0 || !previous ? image : subtractInk(previous, image);
+    const region = index === 0 ? undefined : addedRegion(labels[index] ?? '', parts, final.width, final.height);
+    const ink = index === 0 || !previous ? image : inkAdded(previous, image, region);
     if (!ink) return { stages: forward, calls, usage, lesson: null };
     const contours = traceInk(ink).filter((contour) => contour.points.length >= 2);
     const name = labels[index] ?? 'bagian';
@@ -422,6 +436,30 @@ async function askParts(
   } catch {
     return null;
   }
+}
+
+function addedRegion(
+  name: string,
+  parts: InstructionResult['parts'],
+  sourceWidth: number,
+  sourceHeight: number,
+): InkRegion | undefined {
+  const noun = partNoun(name);
+  const matches = parts.filter((part) => partNoun(part.name) === noun);
+  if (matches.length === 0 || !matches[0]) return undefined;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = 0;
+  let maxY = 0;
+  for (const part of matches) {
+    const rect = imageRect(part, sourceWidth, sourceHeight);
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxX = Math.max(maxX, rect.x + rect.width);
+    maxY = Math.max(maxY, rect.y + rect.height);
+  }
+  if (!Number.isFinite(minX) || maxX <= minX || maxY <= minY) return undefined;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
 function interiorContours(contours: readonly Contour[]): number {
