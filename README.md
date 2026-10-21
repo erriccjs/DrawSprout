@@ -207,19 +207,22 @@ Worker vars, not secrets: `IMAGE_PROVIDER` (`openai` by default, or
 send `quality=medium` on OpenAI. *Lebih sederhana* stays on `gpt-image-1.5` at
 `quality=low` and ignores `OPENAI_IMAGE_MODEL` (D-67). Set
 `OPENAI_IMAGE_MODEL=gpt-image-1-mini` only for a default or faithful job.
-A photo makes two images: a faithful simplified line drawing, then a flat
-colouring of that drawing at `quality=low` (D-74, D-75, D-76, D-77, D-78, D-79).
-The line drawing keeps this photo's pose and framing, both ways, and it draws
-only the subject: no table, surface items, people, leashes, or props. A vision
-plan of this photo only orders the parts from one big shape down to the small
-details. Step 1 is a light grey dashed circle or oval inside the main mass.
+A photo makes a faithful simplified line drawing, then a flat colouring of
+that drawing at `quality=low`, then up to eight low-quality erases that remove
+one planned part at a time (D-74, D-75, D-76, D-77, D-78, D-79, D-80). The line
+drawing keeps this photo's pose and framing, both ways, and it draws only the
+subject: no table, surface items, people, leashes, props, or a branch that is
+not in the photo. A vision plan of this photo only orders the parts from one
+big shape down to the small details. The lesson is those erase stages. Stroke
+assignment is used only when an erase cannot be checked. Step 1 is a light grey
+dashed circle or oval at about 90% of the main mass, centered on that box.
 The real outline is the next step, and the guide is gone after that. Each later
 step adds one part, and the reference draws those new lines in red. A faint
 guide, such as a centre cross, is optional and is left out of the finished ink.
-Colour is last: one flat colour per region, named by the part that overlaps it.
-A white area is not a colour step. Drawing steps stay within about eleven.
-OpenAI stays the default image model. The earlier part-by-part builder is still
-covered by the regression tests (D-76).
+Colour is last: one flat colour per region, named by the smallest planned part
+that contains the region's centroid. A white area is not a colour step.
+Drawing steps stay within about eleven. OpenAI stays the default image model.
+The earlier part-by-part builder is still covered by the regression tests (D-76).
 
 ### Evaluation
 
@@ -227,10 +230,10 @@ On a machine with the key, Node.js 20.16 or newer (`CompressionStream`; this
 repo's tests still need 22.12+), after `npm install`:
 
 ```bash
-OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --out photo-eval-out-v13
+OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --out photo-eval-out-v14
 REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --provider replicate --model black-forest-labs/flux-kontext-pro
 OPENAI_API_KEY=... REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --compare
-OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --steps both --out photo-eval-out-v13-steps
+OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --steps both --out photo-eval-out-v14-steps
 ```
 
 `<photo-directory>` is a folder of JPEG or PNG photos. The command writes
@@ -257,12 +260,12 @@ after the first pair. The harness writes `illustrations/<photo>-line.png` and
 one contact sheet and stops if either provider fails. `flux-1.1-pro` is
 unsuitable (it returns near-photos) and is not part of compare. Kontext uses
 its own short prompt and retries HTTP 429. The idempotency key for this
-revision ends in `v13`, so a rerun after the lesson-step change is a
-new paid job. Compare it with a v12 sheet by writing v13 to its own `--out`
-directory; `--steps strokes` (the default) assigns the line drawing's strokes,
-`--steps reverse` erases one part at a time, and `--steps both` puts both on
-the sheet. Reverse adds at most five low-quality edits and stays optional, so
-the default run stays near the previous cost. Each row in `metrics.json`
+revision ends in `v14`, so a rerun after the lesson-step change is a
+new paid job. Compare it with a v13 sheet by writing v14 to its own `--out`
+directory. The default is `--steps reverse`: one low-quality erase per planned
+part, at most eight edits including one retry. `--steps strokes` assigns the
+line drawing's strokes, and `--steps both` puts the reverse lesson first and
+the stroke lesson beside it. Each row in `metrics.json`
 includes `reviewReasons`, and a reverse run also includes `reverseCalls` and
 `reverseUsd`. `costUsd` is the whole job.
 `REPLICATE_API_TOKEN` is read only when `REPLICATE_API_KEY` is unset.

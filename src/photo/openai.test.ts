@@ -169,8 +169,10 @@ describe('OpenAI client', () => {
       expect(prompt).toContain('closed outer silhouette');
       expect(prompt).toContain('lying stays lying');
       expect(prompt).toContain('close-up stays a close-up');
-      expect(prompt).toContain('the table, the surface');
-      expect(prompt).toContain('leashes, and props');
+    expect(prompt).toContain('the table, the surface');
+    expect(prompt).toContain('leashes, and props');
+    expect(prompt).toContain('branch');
+    expect(prompt).toContain('bud');
       expect(prompt).not.toMatch(/chibi|cartoon|character|kid-book/i);
     }
     expect(imagePrompt('default', false, false, ['kelopak', 'daun'])).toContain('Draw only these parts of this one subject: kelopak, daun.');
@@ -199,6 +201,8 @@ describe('OpenAI client', () => {
     const prompt = form.get('prompt');
     const promptText = typeof prompt === 'string' ? prompt : '';
     expect(promptText).toContain('Only fill');
+    expect(promptText).toContain('enclosed areas');
+    expect(promptText).toContain('harness');
     expect(promptText).toContain('Keep every line exactly');
     expect(promptText).toContain('barcode');
     expect(promptText).toContain('Grey stays grey');
@@ -207,5 +211,28 @@ describe('OpenAI client', () => {
     expect(form.getAll('image[]')).toHaveLength(2);
     expect(form.get('image')).toBeNull();
     expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('idempotency-key')).toBe('colour-key');
+  });
+
+  it('retries an image edit once when the connection drops', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: [{ b64_json: bytesToBase64(png) }],
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await openAiClients('sk-test-not-real').images.edit({
+      png,
+      variant: 'default',
+      model: 'gpt-image-1.5',
+      quality: 'low',
+      width: 64,
+      height: 64,
+      idempotencyKey: 'retry-key',
+      signal: AbortSignal.timeout(1000),
+    });
+    expect(result.png[0]).toBe(137);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('idempotency-key')).toBe('retry-key');
   });
 });

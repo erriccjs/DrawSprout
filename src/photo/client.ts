@@ -32,7 +32,7 @@ export interface PhotoLessonApiResult {
 const FALLBACK = 'Gambar belum bisa dibuat. Coba lagi, atau pilih foto lain.';
 
 export async function requestPhotoLesson(input: PhotoLessonRequest): Promise<PhotoLessonApiResult> {
-  const signal = AbortSignal.any([input.signal, AbortSignal.timeout(130_000)]);
+  const signal = AbortSignal.any([input.signal, AbortSignal.timeout(450_000)]);
   const form = new FormData();
   form.set('image', new File([copyBytes(input.png)], 'photo.png', { type: 'image/png' }));
   form.set('idempotencyKey', input.idempotencyKey);

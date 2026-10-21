@@ -114,7 +114,11 @@ export function regionsColouredBy(lineArt: RgbaImage, coloured: RgbaImage): { re
 function registerToLines(lineArt: RgbaImage, coloured: RgbaImage): RgbaImage {
   const { width, height } = lineArt;
   const line = lineMask(lineArt);
-  const dark = darkMask(coloured);
+  const black = nearBlackMask(coloured);
+  let blackCount = 0;
+  for (const value of black) blackCount += value;
+  const wide = blackCount >= 40;
+  const dark = wide ? black : darkMask(coloured);
   const samples: number[] = [];
   const stride = Math.max(1, Math.floor(line.reduce((count, value) => count + value, 0) / 1800));
   for (let index = 0, seen = 0; index < line.length; index += 1) {
@@ -123,18 +127,34 @@ function registerToLines(lineArt: RgbaImage, coloured: RgbaImage): RgbaImage {
     if (seen % stride === 0) samples.push(index);
   }
   if (samples.length < 20) return coloured;
-  const maxShift = Math.max(2, Math.round(Math.min(width, height) * 0.04));
-  const step = Math.max(1, Math.round(maxShift / 4));
+  const maxShift = wide
+    ? Math.max(4, Math.round(Math.min(width, height) * 0.12))
+    : Math.max(2, Math.round(Math.min(width, height) * 0.04));
+  const step = Math.max(1, Math.round(maxShift / (wide ? 6 : 4)));
+  const scales = wide ? [0.94, 0.97, 1, 1.03, 1.06] : [0.97, 1, 1.03];
   let best = { score: hitScore(samples, dark, width, height, 1, 0, 0), scale: 1, dx: 0, dy: 0 };
-  for (const scale of [0.97, 1, 1.03]) {
+  const consider = (scale: number, dx: number, dy: number) => {
+    const score = hitScore(samples, dark, width, height, scale, dx, dy);
+    if (score > best.score) best = { score, scale, dx, dy };
+  };
+  for (const scale of scales) {
     for (let dy = -maxShift; dy <= maxShift; dy += step) {
       for (let dx = -maxShift; dx <= maxShift; dx += step) {
         if (scale === 1 && dx === 0 && dy === 0) continue;
-        const score = hitScore(samples, dark, width, height, scale, dx, dy);
-        if (score > best.score) best = { score, scale, dx, dy };
+        consider(scale, dx, dy);
       }
     }
   }
+  if (wide && step > 1) {
+    for (let dy = best.dy - step; dy <= best.dy + step; dy += 1) {
+      for (let dx = best.dx - step; dx <= best.dx + step; dx += 1) {
+        if (dx === best.dx && dy === best.dy) continue;
+        consider(best.scale, dx, dy);
+      }
+    }
+  }
+  const identity = hitScore(samples, dark, width, height, 1, 0, 0);
+  if (wide && best.score < identity + Math.max(8, samples.length * 0.04)) return coloured;
   if (best.dx === 0 && best.dy === 0 && best.scale === 1) return coloured;
   return warp(coloured, best.scale, best.dx, best.dy);
 }
@@ -179,6 +199,22 @@ function warp(image: RgbaImage, scale: number, dx: number, dy: number): RgbaImag
     }
   }
   return { width, height, data };
+}
+
+/** Black lines only. A red or brown fill is not an alignment mark. */
+function nearBlackMask(image: RgbaImage): Uint8Array {
+  const mask = new Uint8Array(image.width * image.height);
+  for (let index = 0, pixel = 0; index < mask.length; index += 1, pixel += 4) {
+    const red = image.data[pixel] ?? 255;
+    const green = image.data[pixel + 1] ?? 255;
+    const blue = image.data[pixel + 2] ?? 255;
+    const max = Math.max(red, green, blue);
+    const min = Math.min(red, green, blue);
+    const lum = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    const sat = max === 0 ? 0 : (max - min) / max;
+    if (lum < 80 && sat < 0.25) mask[index] = 1;
+  }
+  return mask;
 }
 
 function darkMask(image: RgbaImage): Uint8Array {

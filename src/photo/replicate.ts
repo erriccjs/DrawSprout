@@ -163,13 +163,26 @@ async function createPrediction(apiKey: string, model: string, input: ImageEditR
 async function fetchWithBackoff(url: string, init: RequestInit, signal: AbortSignal): Promise<Response> {
   let last: Response | null = null;
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const response = await fetch(url, init);
-    if (response.status !== 429 || attempt === 3) return response;
-    last = response;
-    await sleep(retryDelay(response, attempt), signal);
+    try {
+      const response = await fetch(url, init);
+      if (response.status !== 429 || attempt === 3) return response;
+      last = response;
+      await sleep(retryDelay(response, attempt), signal);
+    } catch (error) {
+      if (attempt === 3 || !isTransientFetch(error)) throw error;
+      await sleep(400 * 2 ** attempt, signal);
+    }
   }
   if (last) return last;
   throw new Error('Replicate request failed');
+}
+
+function isTransientFetch(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const name = 'name' in error ? String(error.name) : '';
+  if (name === 'AbortError') return false;
+  const message = error instanceof Error ? error.message : '';
+  return /fetch failed|network|econnreset|etimedout|socket|und_err/i.test(message);
 }
 
 function retryDelay(response: Response, attempt: number): number {

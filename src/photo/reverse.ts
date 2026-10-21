@@ -2,13 +2,46 @@
  * Reverse construction. A finished line drawing is edited, at low quality,
  * to remove one planned part at a time. Each step image is still that drawing,
  * so the steps cannot drift apart the way a fresh illustration can.
- * The default lesson does not do this. The harness asks for it (D-77, D-78).
+ * This is the lesson the app shows. Stroke assignment is the fallback (D-80).
  */
 
+import { isBackgroundPart, partNoun } from './lesson-build';
 import type { RgbaImage } from './png';
 
-/** Enough to compare, and cheap enough to stay near $0.25 a photo with call A and call B. */
-export const MAX_REVERSE_ERASES = 5;
+/** One low-quality edit per planned part, including a single retry. Stays near $0.25 with call A and call B. */
+export const MAX_REVERSE_ERASES = 8;
+
+export interface EraseTarget {
+  readonly name: string;
+  readonly guide?: boolean;
+  readonly order?: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * Planned parts in draw order, biggest first, without guides or background props.
+ * The first name is the mass and is not an erase. Later names are capped so the
+ * erase budget stays at {@link MAX_REVERSE_ERASES}.
+ */
+export function eraseDetailNames(parts: readonly EraseTarget[]): { mass: string; details: readonly string[] } {
+  const ranked = parts.filter((part) => part.guide !== true && !isBackgroundPart(part.name));
+  const stated = ranked.filter((part) => (part.order ?? 0) > 0).length;
+  const sorted = [...ranked].sort((left, right) => {
+    if (stated >= Math.ceil(ranked.length / 2)) {
+      const order = (left.order ?? 99) - (right.order ?? 99);
+      if (order !== 0) return order;
+    }
+    return right.width * right.height - left.width * left.height;
+  });
+  const names: string[] = [];
+  for (const part of sorted) {
+    const name = partNoun(part.name);
+    if (!name || names.includes(name)) continue;
+    names.push(name);
+  }
+  return { mass: names[0] ?? '', details: names.slice(1, 1 + MAX_REVERSE_ERASES) };
+}
 
 /**
  * Dark pixels that are in `current` and not already in `previous`.
@@ -78,7 +111,38 @@ export interface InkRegion {
  * Both images must already share a frame. `region` keeps only the ink inside
  * that box, expanded a little, so a shifted outline outside the erased part is not new.
  */
-export function inkAdded(previous: RgbaImage, current: RgbaImage, region?: InkRegion): RgbaImage | null {
+/**
+ * True when the edit removed ink inside `region` and left the rest of the
+ * drawing alone. A new mark outside that box, such as a circle past the body,
+ * is not accepted.
+ */
+export function partErasedCleanly(before: RgbaImage, after: RgbaImage, region: InkRegion): boolean {
+  if (before.width !== after.width || before.height !== after.height) return false;
+  const aligned = registerToFinal(before, after);
+  const { width, height } = before;
+  const padX = Math.max(8, region.width * 0.18);
+  const padY = Math.max(8, region.height * 0.18);
+  let removedIn = 0;
+  let removedOut = 0;
+  let addedOut = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const was = dark(before, x, y);
+      const now = dark(aligned, x, y);
+      const inside = x >= region.x - padX && y >= region.y - padY
+        && x < region.x + region.width + padX && y < region.y + region.height + padY;
+      if (was && !now) {
+        if (inside) removedIn += 1;
+        else removedOut += 1;
+      } else if (!was && now && !inside) addedOut += 1;
+    }
+  }
+  if (removedIn < 12) return false;
+  const limit = Math.max(40, removedIn * 0.35);
+  return removedOut < limit && addedOut < limit;
+}
+
+export function inkAdded(previous: RgbaImage, current: RgbaImage, region?: InkRegion, exclude?: InkRegion): RgbaImage | null {
   if (previous.width !== current.width || previous.height !== current.height) return null;
   const { width, height } = current;
   const prior = new Uint8Array(width * height);
@@ -103,7 +167,9 @@ export function inkAdded(previous: RgbaImage, current: RgbaImage, region?: InkRe
     for (let x = 0; x < width; x += 1) {
       const inPart = !region
         || (x >= region.x - padX && y >= region.y - padY && x < region.x + region.width + padX && y < region.y + region.height + padY);
-      const on = inPart && dark(current, x, y) && prior[y * width + x] !== 1;
+      const hidden = exclude !== undefined
+        && x >= exclude.x && y >= exclude.y && x < exclude.x + exclude.width && y < exclude.y + exclude.height;
+      const on = inPart && !hidden && dark(current, x, y) && prior[y * width + x] !== 1;
       if (on) marks += 1;
       const offset = (y * width + x) * 4;
       data[offset] = on ? 0 : 255;

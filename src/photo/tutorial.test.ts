@@ -5,7 +5,7 @@ import { renderCumulativeStep } from './compare';
 import { buildPhotoLesson, buildTutorialLesson, lessonPieces, TUTORIAL_DRAWING_MAX } from './lesson-build';
 import type { DetectedPart, PlanShape } from './parts';
 import { decodePng, type RgbaImage } from './png';
-import { inkAdded, registerToFinal, subtractInk } from './reverse';
+import { eraseDetailNames, inkAdded, partErasedCleanly, registerToFinal, subtractInk } from './reverse';
 import { traceInk, type Contour, type Point } from './trace';
 
 /** Real v12 flower line, when the eval sheet is on disk. The synthetic stands in for the same failure. */
@@ -332,6 +332,52 @@ describe('how-to-draw construction', () => {
     expect(colours.join(' ')).not.toMatch(/leher/);
   });
 
+  it('drops a guide step that is not the opening cross', () => {
+    const built = buildTutorialLesson({
+      id: 'tutorial-empty-guide',
+      title: 'Kucing',
+      targetHash: 'abcdef1234567890',
+      contours: [circle(400, 280, 180)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      parts: [
+        planned('kepala', 1, 'circle', cover(220, 100, 360, 360)),
+        planned('leher', 2, 'line', cover(300, 400, 160, 40), { guide: true }),
+      ],
+    });
+    const text = built.lesson.steps.map((step) => step.instruction).join(' ');
+    expect(text).not.toMatch(/garis bantu|leher/);
+  });
+
+  it('erases the centre after the petals, and rejects ink outside the part', () => {
+    const plan = eraseDetailNames([
+      { name: 'bunga', order: 1, width: 400, height: 400 },
+      { name: 'kelopak', order: 2, width: 220, height: 180 },
+      { name: 'tengah', order: 3, width: 48, height: 48 },
+      { name: 'tali', order: 4, width: 30, height: 80 },
+    ]);
+    expect(plan.mass).toBe('bunga');
+    expect(plan.details).toEqual(['kelopak', 'tengah']);
+    const before = painted(40, 32, (x, y) => {
+      const body = x >= 4 && x < 28 && y >= 4 && y < 24 && (x < 7 || x >= 25 || y < 7 || y >= 21);
+      const mark = x >= 14 && x < 22 && y >= 10 && y < 18;
+      return body || mark ? [0, 0, 0] : [255, 255, 255];
+    });
+    const clean = painted(40, 32, (x, y) => (
+      x >= 4 && x < 28 && y >= 4 && y < 24 && (x < 7 || x >= 25 || y < 7 || y >= 21) ? [0, 0, 0] : [255, 255, 255]
+    ));
+    const spilled = painted(40, 32, (x, y) => {
+      const body = x >= 4 && x < 28 && y >= 4 && y < 24 && (x < 7 || x >= 25 || y < 7 || y >= 21);
+      const blob = x >= 30 && x < 38 && y >= 2 && y < 12;
+      return body || blob ? [0, 0, 0] : [255, 255, 255];
+    });
+    const region = { x: 12, y: 8, width: 12, height: 12 };
+    expect(partErasedCleanly(before, clean, region)).toBe(true);
+    expect(partErasedCleanly(before, spilled, region)).toBe(false);
+  });
+
   it('does not treat a shifted copy of the same lines as new ink', () => {
     const earlier = painted(32, 24, (x, y) => (x >= 4 && x < 16 && y >= 4 && y < 16 ? [0, 0, 0] : [255, 255, 255]));
     const later = painted(32, 24, (x, y) => {
@@ -365,6 +411,17 @@ describe('how-to-draw construction', () => {
     expect(guide?.role).toBe('construction');
     expect(guide?.d).toMatch(/0 1 1/);
     expect(guide?.d).not.toMatch(/0 0 1/);
+    const box = cover(220, 40, 360, 500);
+    const arc = /A ([0-9.]+) ([0-9.]+)/.exec(guide?.d ?? '');
+    const move = /M ([0-9.]+) ([0-9.]+)/.exec(guide?.d ?? '');
+    const rx = Number(arc?.[1]);
+    const ry = Number(arc?.[2]);
+    const left = Number(move?.[1]);
+    const cy = Number(move?.[2]);
+    expect(rx).toBeCloseTo(box.width / 2 * 0.9, 0);
+    expect(ry).toBeCloseTo(box.height / 2 * 0.9, 0);
+    expect(left + rx).toBeCloseTo(box.x + box.width / 2, 0);
+    expect(cy).toBeCloseTo(box.y + box.height / 2, 0);
     expect(built.lesson.targetPreview.paths.some((path) => path.role === 'construction' || path.d === guide?.d)).toBe(false);
     expect(drawing[1]?.instruction).toBe('Gambar garis luar bunga.');
     const first = renderCumulativeStep(built.lesson, 1, 140);
@@ -439,7 +496,7 @@ describe('how-to-draw construction', () => {
       photo,
       palette: ['#ffffff'],
       flatRegions: [
-        { name: 'cokelat', hex: '#8a5a32', points: square(180, 80, 520).points, pixels: 6000, cx: 440, cy: 340 },
+        { name: 'cokelat', hex: '#8a5a32', points: square(370, 190, 100).points, pixels: 4000, cx: 420, cy: 240 },
       ],
       parts: [
         planned('cangkir', 1, 'oval', cover(180, 80, 520, 420)),

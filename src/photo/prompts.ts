@@ -20,6 +20,7 @@ const SHARED = [
   'Keep the same pose as the photo. The pose is binding. A subject that is lying stays lying. A subject that is sitting stays sitting.',
   'Keep the same framing and crop as the photo. Do not zoom in. Do not zoom out. A full body stays a full body. A close-up stays a close-up. Simplify only inside that crop.',
   'Draw only the subject. Leave out the background, the table, the surface, and anything sitting on it. Leave out people, hands, legs, leashes, and props.',
+  'Do not add a branch, a bud, or a stem that is not in the photo.',
   'Do not draw letters, numbers, barcodes, logos, or writing, unless the writing itself is the only subject.',
   'Do not draw a barcode, QR code, price sticker, or any row of vertical black bars. If the photo has one, leave that area blank.',
   'Do not add any object that is not in the photo. Do not invent parts that are hidden.',
@@ -53,15 +54,17 @@ export function imagePrompt(
   return extra.length === 0 ? base : `${base} ${extra.join(' ')}`;
 }
 
-/** Remove one planned part from a finished line drawing. Low quality, and only for a harness compare. */
-export function erasePrompt(partName: string): string {
+/** Remove one planned part from a finished line drawing. `strict` is the one retry after a bad edit. */
+export function erasePrompt(partName: string, strict = false): string {
   const name = partName.replace(/[^\p{L}\p{N} '-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 40);
-  return [
+  const lines = [
     `Erase only the ${name || 'last small part'}.`,
     'Keep every other black line exactly where it is.',
     'Do not redraw, move, scale, or add a line.',
     'Plain white background. No colour, no shading, and no text.',
-  ].join(' ');
+  ];
+  if (strict) lines.push('Change nothing outside that one part. Do not draw a new outline, circle, or mark.');
+  return lines.join(' ');
 }
 
 /** Fill the line drawing. The first image is the line art and the second is the photo. */
@@ -70,6 +73,7 @@ export function colourPrompt(): string {
     'The first image is a finished line drawing. The second image is the photo of the same subject.',
     'Only fill. Keep every line exactly where it is.',
     'Do not redraw, move, scale, rotate, or replace any line. Do not add a line, letter, number, barcode, or sticker.',
+    'Fill only enclosed areas of the line drawing. Do not add a collar, a harness, a strap, or any part that is not already a line.',
     'Fill each enclosed area with one flat solid colour that matches that part in the photo.',
     'Keep the same framing and crop as the photo. Do not zoom in. Do not zoom out.',
     'No shading, no gradients, no texture.',
@@ -91,6 +95,7 @@ export function replicatePrompt(
   if (colour) {
     return [
       'Only fill this line drawing. Keep every line exactly where it is.',
+      'Fill only enclosed areas. Do not add a collar, a harness, a strap, or any part that is not already a line.',
       'Do not redraw, move, or add any line.',
       'Match the subject\'s true colours. Grey stays grey. Red stays red. Black stays black.',
       'Plain white background. No shading and no text.',
@@ -103,6 +108,7 @@ export function replicatePrompt(
     'Keep the photo\'s pose. A subject that is lying stays lying. A subject that is sitting stays sitting.',
     'Keep the photo\'s framing and crop. Do not zoom in or zoom out. A close-up stays a close-up. A full body stays a full body.',
     'Draw only this one subject. Leave out the table, the surface, and anything on it. Leave out people, hands, legs, leashes, and props.',
+    'Do not add a branch, a bud, or a stem that is not in the photo.',
   ];
   if (reinforceSilhouette) lines.push('Draw the full subject as one continuous closed outer silhouette.');
   if (reinforceSubject) lines.push('The drawing must be the same object as the photo.');

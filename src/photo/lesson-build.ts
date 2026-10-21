@@ -5,8 +5,8 @@
  * vision model names nothing usable, the lesson falls back to one named
  * outline and drops unnamed scraps instead of printing a generic sentence.
  * `buildTutorialLesson` orders the steps like a how-to-draw page: one
- * dashed circle or oval inside the main mass, then one part at a time
- * (D-77, D-78, D-79). The line art itself stays a faithful drawing of the photo.
+ * dashed circle or oval at about 90% of the main mass, then one part at a time
+ * (D-77, D-78, D-79, D-80). The line art itself stays a faithful drawing of the photo.
  * `buildPhotoLesson` stays for the earlier pins.
  * See D-70, D-71, D-72, D-73, D-76, D-77, D-78, and D-79.
  */
@@ -596,96 +596,48 @@ function stepNoun(name: string): string {
   return words.join(' ') || plain;
 }
 
+const MASS_BOX = /^(kepala|wajah|cangkir|bunga|badan)$/;
+
 function massPrimitive(
   group: TutorialGroup,
   contour: MappedContour | undefined,
   groups: readonly TutorialGroup[],
 ): { d: string; word: string } | null {
-  const part = guidePart(group, groups);
-  const region = guideRegion(part, contour, group);
-  if (!region) return null;
-  const preferCircle = wantsCircle(group, part);
-  const fitted = fitEllipse(contour?.points, region, preferCircle);
-  if (!fitted) return null;
-  return { d: fitted.d, word: fitted.circle ? 'lingkaran' : 'oval' };
-}
-
-function wantsCircle(group: TutorialGroup, part: DetectedPart | undefined): boolean {
-  if (group.shape === 'dome' || part?.shape === 'dome') return false;
-  if (group.shape === 'circle' || part?.shape === 'circle') return true;
-  if (group.shape === 'oval' || part?.shape === 'oval') return false;
-  if (!part) return false;
-  const ratio = part.width / Math.max(1, part.height);
-  return ratio <= 1.35 && ratio >= 1 / 1.35;
+  const box = massBox(group, contour, groups);
+  if (!box) return null;
+  const ratio = box.w / Math.max(1, box.h);
+  const circle = ratio <= 1.2 && ratio >= 1 / 1.2;
+  const side = Math.min(box.w, box.h);
+  const rx = Math.max(8, (circle ? side : box.w) / 2 * 0.9);
+  const ry = Math.max(8, (circle ? side : box.h) / 2 * 0.9);
+  return {
+    d: ellipsePath(box.x + box.w / 2, box.y + box.h / 2, rx, ry),
+    word: circle ? 'lingkaran' : 'oval',
+  };
 }
 
 function guidePart(group: TutorialGroup, groups: readonly TutorialGroup[]): DetectedPart | undefined {
-  const massPart = [...group.parts].sort((left, right) => areaOf(right) - areaOf(left))[0];
-  const massNoun = massPart ? stepNoun(massPart.name) : group.name;
-  if (massPart && /^(kepala|wajah|cangkir|bunga)$/.test(massNoun)) return massPart;
-  const named = groups.flatMap((item) => item.parts).filter((part) => /^(kepala|wajah|cangkir)$/.test(stepNoun(part.name)));
-  if (massPart) {
-    const inner = named
-      .filter((part) => areaOf(part) < areaOf(massPart) * 0.85)
-      .sort((left, right) => areaOf(right) - areaOf(left))[0];
-    if (inner) return inner;
-  }
-  return massPart ?? named[0];
+  const preferred = groups.flatMap((item) => item.parts).filter((part) => MASS_BOX.test(stepNoun(part.name)));
+  const largest = preferred.sort((left, right) => areaOf(right) - areaOf(left))[0];
+  const own = [...group.parts].sort((left, right) => areaOf(right) - areaOf(left))[0];
+  return largest ?? own;
 }
 
-function guideRegion(
-  part: DetectedPart | undefined,
-  contour: MappedContour | undefined,
+function massBox(
   group: TutorialGroup,
-): { cx: number; cy: number; rx: number; ry: number } | null {
-  const fromPart = part && part.width >= 12 && part.height >= 12
-    ? { x: part.x, y: part.y, w: part.width, h: part.height }
-    : null;
-  const fromContour = contour ? boxOf(contour.points) : null;
-  const box = fromPart ?? (fromContour
-    ? { x: fromContour.minX, y: fromContour.minY, w: fromContour.maxX - fromContour.minX, h: fromContour.maxY - fromContour.minY }
-    : null);
-  if (!box || box.w < 12 || box.h < 12) return null;
-  const noun = stepNoun(part?.name ?? group.name);
-  const dome = group.shape === 'dome' || part?.shape === 'dome';
-  const tall = box.h > box.w * 1.25 && /^(cangkir|bunga|kepala)$/.test(noun);
-  const height = dome || tall ? box.h * 0.62 : box.h;
-  return { cx: box.x + box.w / 2, cy: box.y + height / 2, rx: box.w / 2, ry: height / 2 };
-}
-
-function fitEllipse(
-  points: readonly Point[] | undefined,
-  region: { cx: number; cy: number; rx: number; ry: number },
-  preferCircle: boolean,
-): { d: string; circle: boolean } | null {
-  let rx = Math.max(8, region.rx);
-  let ry = Math.max(8, region.ry);
-  if (preferCircle) {
-    const radius = Math.min(rx, ry);
-    rx = radius;
-    ry = radius;
+  contour: MappedContour | undefined,
+  groups: readonly TutorialGroup[],
+): { x: number; y: number; w: number; h: number } | null {
+  const part = guidePart(group, groups);
+  if (part && part.width >= 12 && part.height >= 12) {
+    return { x: part.x, y: part.y, w: part.width, h: part.height };
   }
-  const emit = (scale: number) => {
-    const srx = rx * scale;
-    const sry = ry * scale;
-    const circle = Math.abs(srx - sry) / Math.max(srx, sry) < 0.18;
-    return { d: ellipsePath(region.cx, region.cy, srx, sry), circle: preferCircle || circle };
-  };
-  if (!points || points.length < 4) return emit(0.86);
-  for (let scale = 0.9; scale >= 0.42; scale -= 0.04) {
-    if (rimInside(points, region.cx, region.cy, rx * scale, ry * scale) >= 0.8) return emit(scale);
-  }
-  return emit(0.42);
-}
-
-function rimInside(polygon: readonly Point[], cx: number, cy: number, rx: number, ry: number): number {
-  const samples = 24;
-  let hits = 0;
-  for (let index = 0; index < samples; index += 1) {
-    const angle = (index / samples) * Math.PI * 2;
-    if (pointInPolygon(cx + Math.cos(angle) * rx, cy + Math.sin(angle) * ry, polygon)) hits += 1;
-  }
-  return hits / samples;
+  if (!contour) return null;
+  const box = boxOf(contour.points);
+  const width = box.maxX - box.minX;
+  const height = box.maxY - box.minY;
+  if (width < 12 || height < 12) return null;
+  return { x: box.minX, y: box.minY, w: width, h: height };
 }
 
 function interiorGroup(
@@ -861,19 +813,17 @@ function assembleTutorial(
       }
     }
     if (group.guide) {
-      const id = `draw-${steps.length + 1}`;
-      const guides = guidePaths(group, `${id}-g1`);
-      if (guides.length === 0) return;
-      steps.push(lineStep(id, 'detail', tutorialInstruction(group, false, contours, null), guides));
+      dropped += group.contours.length;
       return;
     }
     if (contours.length > 0) {
-      const own = ownInk(contours);
-      const fresh = steps.length === 0 ? own : freshInk(mask, contours);
+      const shown = group.name === 'piring' ? contours.map((contour) => visibleSaucer(contour, allParts)) : contours;
+      const own = ownInk(shown);
+      const fresh = steps.length === 0 ? own : freshInk(mask, shown);
       const mostlyThere = own > 0 && fresh / own < 0.3;
       const keepTouching = group.parts.length > 0 && INTERIOR_STEP.test(group.name) && own >= MIN_NEW_INK;
       if (keepTouching || (fresh >= MIN_NEW_INK && !(steps.length > 0 && mostlyThere))) {
-        pushContours(group, contours, false);
+        pushContours(group, shown, false);
         return;
       }
       if (pushSynthetic(group)) return;
@@ -1040,27 +990,16 @@ function appendFlatColours(
       empty = true;
       continue;
     }
-    let label = nameRegion(mapped.points, parts, spoken);
+    const label = nameRegion(mapped.points, parts, spoken);
     if (isBackgroundPart(label)) continue;
-    let path = mapped.path;
-    let keptArea = area;
-    const kopi = parts.find((part) => stepNoun(part.name) === 'kopi');
-    if (kopi && COFFEE_COLOURS.has(region.name)) {
-      const share = regionShare(mapped.points, kopi);
-      if (share >= 0.45) label = 'kopi';
-      else if (stepNoun(label) === 'cangkir' || stepNoun(label) === stepNoun(spoken) || label === spoken) {
-        label = 'kopi';
-        path = rectPath(kopi);
-        keptArea = areaOf(kopi);
-      }
-    }
+    if (smallMassColour(label, parts, spoken, area, subject)) continue;
     prepared.push({
       label,
       colour: region.name,
       hex: region.hex,
       pixels: region.pixels,
-      path,
-      area: keptArea,
+      path: mapped.path,
+      area,
     });
   }
   const coloured = collapseDoublePaint(prepared);
@@ -1168,24 +1107,22 @@ function collapseDoublePaint(regions: Array<{ label: string; colour: string; hex
 }
 
 /**
- * The part that owns the region. Highest overlap wins. A near tie keeps the
- * tighter box, so a mouth does not rename the eyes and a neck does not rename
- * the tongue. Background props are not names.
+ * The part that owns the region: the smallest planned part whose box contains
+ * the region's centroid. A part far smaller than the paint is skipped, so a
+ * mouth does not rename the whole face. Background props are not names.
  */
 function nameRegion(points: readonly Point[], parts: readonly DetectedPart[], spoken: string): string {
-  const small = boxOf(points).area < 22000;
-  const bar = small ? 0.35 : 0.45;
+  const center = centroidOf(points);
+  const regionArea = Math.max(1, boxOf(points).area);
   let best: DetectedPart | null = null;
-  let bestShare = -1;
   let bestArea = Number.POSITIVE_INFINITY;
   for (const part of parts) {
     if (isBackgroundPart(part.name)) continue;
-    const share = regionShare(points, part);
-    if (share < bar) continue;
+    if (!containsPoint(part, center)) continue;
     const area = areaOf(part);
-    if (share > bestShare + 0.02 || (share >= bestShare - 0.02 && area < bestArea)) {
+    if (area < regionArea * 0.4) continue;
+    if (area < bestArea) {
       best = part;
-      bestShare = share;
       bestArea = area;
     }
   }
@@ -1193,12 +1130,30 @@ function nameRegion(points: readonly Point[], parts: readonly DetectedPart[], sp
   return named || spoken;
 }
 
-function regionShare(points: readonly Point[], part: DetectedPart): number {
+function centroidOf(points: readonly Point[]): Point {
   const samples = insideSamples(points);
-  if (samples.length === 0) return 0;
-  let hits = 0;
-  for (const point of samples) if (containsPoint(part, point)) hits += 1;
-  return hits / samples.length;
+  const pool = samples.length > 0 ? samples : [...points];
+  const sum = pool.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
+  const count = Math.max(1, pool.length);
+  return { x: sum.x / count, y: sum.y / count };
+}
+
+/** A small patch whose only name is the whole subject is a colour the line drawing does not have. */
+function smallMassColour(
+  label: string,
+  parts: readonly DetectedPart[],
+  spoken: string,
+  area: number,
+  subject: Box,
+): boolean {
+  if (subject.area <= 0 || area >= subject.area * 0.18 || area >= 22000) return false;
+  const noun = stepNoun(label);
+  if (!noun) return false;
+  const usable = parts.filter((part) => !isBackgroundPart(part.name));
+  const largest = usable.reduce((best, part) => Math.max(best, areaOf(part)), 0);
+  const own = usable.find((part) => stepNoun(part.name) === noun);
+  const ownArea = own ? areaOf(own) : largest;
+  return noun === stepNoun(spoken) || ownArea >= largest * 0.98;
 }
 
 function insideSamples(points: readonly Point[]): Point[] {
@@ -1576,7 +1531,17 @@ function splitCupSaucer(main: MappedContour, parts: readonly DetectedPart[]): Ma
   const cupContour = closeContour(cupPoints, main.id);
   const saucerContour = closeContour(saucerPoints, main.id + 1000);
   if (!cupContour || !saucerContour) return null;
-  return [cupContour, saucerContour];
+  return [cupContour, visibleSaucer(saucerContour, [cup])];
+}
+
+/** The arc of the saucer that sits behind the cup is not a line the child draws. */
+function visibleSaucer(contour: MappedContour, parts: readonly DetectedPart[]): MappedContour {
+  const cup = parts.find((part) => stepNoun(part.name) === 'cangkir');
+  if (!cup) return contour;
+  const lip = cup.y + cup.height - Math.max(10, cup.height * 0.08);
+  const kept = contour.points.filter((point) => point.y >= lip || !containsPoint(cup, point));
+  if (kept.length < 4 || kept.length === contour.points.length) return contour;
+  return closeContour(kept, contour.id) ?? contour;
 }
 
 function closeContour(points: readonly Point[], id: number): MappedContour | null {
@@ -1680,12 +1645,6 @@ function containment(contour: MappedContour, part: DetectedPart): number {
     if (pointInPolygon(point.x, point.y, polygon)) inside += 1;
   }
   return inside / Math.max(1, contour.points.length);
-}
-
-function rectPath(part: DetectedPart): string {
-  const right = part.x + part.width;
-  const bottom = part.y + part.height;
-  return `M ${n(part.x)} ${n(part.y)} L ${n(right)} ${n(part.y)} L ${n(right)} ${n(bottom)} L ${n(part.x)} ${n(bottom)} Z`;
 }
 
 function rectPoints(part: DetectedPart): Point[] {

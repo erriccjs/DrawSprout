@@ -266,6 +266,51 @@ describe('photo pipeline wiring', () => {
     expect(result.reviewReason ?? '').not.toContain('menambah benda');
     expect(result.lesson.steps.map((step) => step.instruction).join(' ')).not.toMatch(/tali/);
   });
+
+  it('does not redraw when the only extra object is the subject itself', async () => {
+    const art = await encodePng(frame());
+    let imageCalls = 0;
+    const images: ImageEditor = {
+      edit() {
+        imageCalls += 1;
+        return Promise.resolve({ png: art, usage: null });
+      },
+    };
+    const instructions: InstructionWriter = {
+      write(input) {
+        if (input.photoOnly) {
+          return Promise.resolve({
+            sameSubject: true,
+            subject: 'Kucing',
+            title: 'Kucing',
+            parts: [{ name: 'kepala', pair: false, x: 80, y: 40, width: 200, height: 160, points: [], colorName: 'abu-abu', pieceIds: [], count: 1, shape: 'circle', order: 1 }],
+            usage: null,
+          });
+        }
+        return Promise.resolve({
+          sameSubject: true,
+          samePose: true,
+          subject: 'Kucing',
+          title: 'Kucing',
+          extraObjects: ['kucing', 'latar', 'bayangan'],
+          parts: [{ name: 'kepala', pair: false, x: 80, y: 40, width: 200, height: 160, points: [], colorName: 'abu-abu', pieceIds: [], count: 1, shape: 'circle', order: 1 }],
+          usage: null,
+        });
+      },
+    };
+    const result = await runPhotoPipeline({
+      png: art,
+      variant: 'default',
+      idempotencyKey: 'cat-extra',
+      signal: AbortSignal.timeout(5_000),
+      textModel: 'gpt-4.1-mini',
+      lessonId: 'photo-cat-extra',
+      stepMode: 'strokes',
+    }, { images, instructions });
+    expect(imageCalls).toBe(2);
+    expect(result.regenerated).toBe(false);
+    expect(result.reviewReason ?? '').not.toContain('menambah benda');
+  });
 });
 
 function marked(eye: boolean): RgbaImage {

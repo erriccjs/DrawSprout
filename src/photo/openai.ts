@@ -110,7 +110,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
         } else {
           form.set('image', new File([toBlobPart(input.png)], 'photo.png', { type: 'image/png' }));
         }
-        const response = await fetch(IMAGE_URL, {
+        const response = await fetchWithRetry(IMAGE_URL, {
           method: 'POST',
           headers: {
             authorization: `Bearer ${apiKey}`,
@@ -130,7 +130,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
     },
     instructions: {
       async write(input) {
-        const response = await fetch(TEXT_URL, {
+        const response = await fetchWithRetry(TEXT_URL, {
           method: 'POST',
           headers: {
             authorization: `Bearer ${apiKey}`,
@@ -257,14 +257,14 @@ function instructionText(input: InstructionRequest): string {
       'x, y, width, height adalah kotak dalam ruang 1000 kali 750. points paling banyak 8 titik. pieceIds array kosong.',
       'colorName adalah warna bagian itu: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, cokelat tua, hitam, abu-abu, atau putih.',
       'Jangan memasukkan meja, lantai, orang, tangan, tali, atau benda di sekitar subjek sebagai parts.',
-      'Jangan menambah benda yang tidak ada di foto.',
+      'Jangan menambah benda yang tidak ada di foto. Jangan menambah cabang, kuncup, atau batang yang tidak ada di foto.',
     ].join('\n');
   }
   return [
     'Gambar pertama adalah foto. Gambar kedua adalah garis hitam saja, tanpa warna.',
     'sameSubject true hanya bila gambar itu adalah benda yang sama dengan foto. Kucing yang digambar menjadi mobil adalah false.',
     'samePose true hanya bila pose dan bingkai gambar sama dengan foto. Subjek yang berbaring menjadi duduk adalah false. Close-up yang menjadi seluruh badan adalah false.',
-    'photoObjects adalah benda di foto. drawingObjects adalah benda di gambar garis. extraObjects adalah benda di gambar garis yang bukan subjek, walaupun benda itu ada di foto. Meja, benda di atas meja, orang, kaki orang, tali, dan biji kopi masuk extraObjects, bukan parts. Kosong bila tidak ada tambahan.',
+    'photoObjects adalah benda di foto. drawingObjects adalah benda di gambar garis. extraObjects adalah benda di gambar garis yang bukan subjek, walaupun benda itu ada di foto. Meja, benda di atas meja, orang, kaki orang, tali, biji kopi, cabang, dan kuncup yang tidak ada di foto masuk extraObjects, bukan parts. Kosong bila tidak ada tambahan. Subjek itu sendiri, bayangan, dan latar bukan extraObjects.',
     'subject adalah satu kata benda bahasa Indonesia untuk benda di foto (kucing, cangkir, bunga), tanpa kata sifat.',
     'title pendek, 2 sampai 4 kata, tanpa kata sifat.',
     'parts adalah rencana konstruksi, dari bentuk besar ke detail kecil, seperti urutan langkah. name adalah satu kata benda saja, tanpa kata sifat dan tanpa warna: "anjing", bukan "anjing hitam lucu"; "bunga", bukan "bunga putih merah". Bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
@@ -274,8 +274,8 @@ function instructionText(input: InstructionRequest): string {
     'Jangan memakai "bagian berikutnya", "bentuk utama", "buih", "latar belakang", "wajah anak", "barcode", atau "ventilasi".',
     'Jangan memasukkan setiap potongan ke dalam satu kotak.',
     'Contoh nama bila bagian itu memang terlihat: garis luar, telinga, mata, hidung, kumis, kaki, ekor, roda, gagang, kelopak, daun, tengah bunga, kopi, kalung, lidah, kursi. Jangan menyebut contoh yang tidak ada di foto ini.',
-    'Kopi bukan cangkir. Piring dan cangkir bagian terpisah. Kalung bukan mata dan bukan badan. Daun bukan kelopak. Roda bukan badan. Setir bukan badan mobil. Mata, hidung, dan kumis masing-masing bagian sendiri. Foto close-up kepala tidak punya kaki atau ekor. Jangan sebut bagian yang tidak ada garisnya.',
-    'Kotak sebuah bagian hanya menutupi bagian itu. Kumis tidak menutupi seluruh wajah. Nama daerah warna adalah bagian yang mengelilingi daerah itu.',
+    'Kopi bukan cangkir. Piring dan cangkir bagian terpisah. Kalung bukan mata dan bukan badan. Daun bukan kelopak. Roda bukan badan. Setir bukan badan mobil. Mata, hidung, dan kumis masing-masing bagian sendiri. Kelopak dan tengah bunga masing-masing bagian sendiri bila terlihat. Foto close-up kepala tidak punya kaki atau ekor. Jangan sebut bagian yang tidak ada garisnya.',
+    'Kotak sebuah bagian hanya menutupi bagian itu. Kumis tidak menutupi seluruh wajah. Nama daerah warna adalah bagian terkecil yang berisi titik tengah daerah itu.',
     'Kotak harus ketat di garis bagian itu. Jangan menamai bagian yang tidak ada garisnya.',
     'pieceIds adalah nomor potongan yang termasuk bagian itu. Bagian garis luar hanya berisi potongan siluet, bukan detail di dalamnya.',
     'pair true bila satu langkah menggambar sepasang simetris (dua telinga, dua mata, dua roda). pair true boleh berisi dua pieceIds.',
@@ -355,6 +355,33 @@ function firstNumber(...values: unknown[]): number | null {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
   }
   return null;
+}
+
+const TRANSIENT_NETWORK = /fetch failed|network|econnreset|etimedout|econnrefused|socket|und_err|other side closed/i;
+
+function isTransientStatus(status: number): boolean {
+  return status === 502 || status === 503 || status === 504;
+}
+
+function isTransientError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const name = 'name' in error ? String(error.name) : '';
+  if (name === 'AbortError') return false;
+  const message = error instanceof Error ? error.message : '';
+  const code = 'code' in error ? String(error.code) : '';
+  return TRANSIENT_NETWORK.test(`${message} ${code}`);
+}
+
+/** One retry for a dropped connection or a gateway error. The same idempotency key is sent again. */
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  try {
+    const response = await fetch(url, init);
+    if (!isTransientStatus(response.status)) return response;
+    return await fetch(url, init);
+  } catch (error) {
+    if (!isTransientError(error)) throw error;
+    return await fetch(url, init);
+  }
 }
 
 async function readJson(response: Response): Promise<unknown> {

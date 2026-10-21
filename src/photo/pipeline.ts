@@ -16,12 +16,12 @@ import type { ImageProvider } from './provider';
 import { cleanPartName } from './parts';
 import { erasePrompt, imageModelFor, imageQualityFor, type ImageQuality, type PhotoVariant } from './prompts';
 import { replicateModelFor } from './replicate';
-import { inkAdded, MAX_REVERSE_ERASES, registerToFinal, type InkRegion } from './reverse';
+import { eraseDetailNames, inkAdded, MAX_REVERSE_ERASES, partErasedCleanly, registerToFinal, type InkRegion } from './reverse';
 import type { Contour } from './trace';
 import { traceInk } from './trace';
 import type { LessonPackage } from '../lesson-data/schema';
 
-/** Strokes assign call A's ink. Reverse erases one part at a time. Both keeps strokes as the lesson. */
+/** Strokes assign call A's ink. Reverse erases one planned part at a time and is the lesson. Both keeps strokes beside it. */
 export type PhotoStepMode = 'strokes' | 'reverse' | 'both';
 
 export interface PhotoPipelineInput {
@@ -33,7 +33,7 @@ export interface PhotoPipelineInput {
   readonly textModel: string;
   readonly lessonId: string;
   readonly provider?: ImageProvider;
-  /** Default is stroke assignment, two image calls. Reverse is a harness compare. */
+  /** Default is reverse. Strokes run only when `strokes` is set, or when the erase pass cannot build a lesson. */
   readonly stepMode?: PhotoStepMode;
 }
 
@@ -60,8 +60,10 @@ export interface PhotoPipelineResult {
   /** True when the line drawing was requested again after the first pair. Reverse erases do not set this. */
   readonly regenerated: boolean;
   readonly stepMode: PhotoStepMode;
-  /** Present when `stepMode` is `reverse` or `both` and the erase pass produced a lesson. */
+  /** Stroke lesson when `stepMode` is `both` and reverse became the lesson. Otherwise null. */
   readonly reverseLesson: LessonPackage | null;
+  /** Which builder produced `lesson`. Reverse falls back to strokes when no erase stage is usable. */
+  readonly lessonSource: 'reverse' | 'strokes';
   /** Cumulative line drawings, simplest first. Empty unless reverse ran. */
   readonly reverseStages: readonly Uint8Array[];
   /** Low-quality erase edits. Zero unless reverse ran. Not part of `regenerated`. */
@@ -177,10 +179,14 @@ export async function runPhotoPipeline(
     }
   }
 
-  const mode = input.stepMode ?? 'strokes';
+  const mode = input.stepMode ?? 'reverse';
+  const strokeBuilt = built;
   let reverseLesson: LessonPackage | null = null;
   let reverseStages: Uint8Array[] = [];
-  if (mode !== 'strokes' && built.planNames.length >= 2) {
+  let lessonSource: 'reverse' | 'strokes' = 'strokes';
+  const visionParts = written?.sameSubject ? written.parts : [];
+  const plannedErase = eraseDetailNames(visionParts).details.length;
+  if (mode !== 'strokes' && (plannedErase >= 1 || built.planNames.length >= 2)) {
     const erased = await eraseBackwards(
       deps.images,
       input,
@@ -188,7 +194,7 @@ export async function runPhotoPipeline(
       model,
       built.planNames,
       built.lesson.title,
-      written?.sameSubject ? written.parts : [],
+      visionParts,
     );
     extraCalls += erased.calls;
     reverseCalls = erased.calls;
@@ -196,15 +202,16 @@ export async function runPhotoPipeline(
     imageUsage = sumUsage(imageUsage, erased.usage);
     reverseStages = erased.stages;
     const staged = erased.lesson;
-    if (staged) reverseLesson = staged.lesson;
-    if (mode === 'reverse' && staged) {
+    if (staged) {
       built = staged;
+      lessonSource = 'reverse';
       comparison = compareLessonToInk(staged.lesson, traced.illustration);
+      if (mode === 'both') reverseLesson = strokeBuilt.lesson;
     }
   }
 
   const subjectMismatch = written?.sameSubject === false;
-  const extraSubject = (written?.extraObjects?.length ?? 0) > 0 || hasBackgroundParts(written);
+  const extraSubject = objectionableExtras(written).length > 0 || hasBackgroundParts(written);
   const poseMismatch = written?.samePose === false;
   const reasons = [...built.reviewReasons];
   if (comparison.reviewReason) reasons.push(comparison.reviewReason);
@@ -231,18 +238,36 @@ export async function runPhotoPipeline(
     imageCalls: pairCalls + extraCalls,
     regenerated: pairCalls > 2,
     stepMode: mode,
-    reverseLesson: mode === 'reverse' ? null : reverseLesson,
+    reverseLesson,
+    lessonSource,
     reverseStages,
     reverseCalls,
     reverseUsage,
   };
 }
 
+const BENIGN_EXTRA = /^(latar|latar belakang|latar foto|bayangan|kertas|putih|background)$/;
+
+function objectionableExtras(written: InstructionResult | null): string[] {
+  if (!written) return [];
+  const subject = partNoun(written.subject).toLowerCase();
+  const planned = new Set(written.parts.map((part) => partNoun(part.name).toLowerCase()));
+  const extras: string[] = [];
+  for (const name of written.extraObjects ?? []) {
+    const noun = partNoun(name).toLowerCase();
+    if (!noun || BENIGN_EXTRA.test(noun)) continue;
+    if (subject && (noun === subject || noun.includes(subject) || subject.includes(noun))) continue;
+    if (planned.has(noun)) continue;
+    extras.push(noun);
+  }
+  return extras;
+}
+
 function mismatchesPhoto(written: InstructionResult | null): boolean {
   if (!written) return false;
   if (written.sameSubject === false) return true;
   if (written.samePose === false) return true;
-  return (written.extraObjects?.length ?? 0) > 0;
+  return objectionableExtras(written).length > 0;
 }
 
 function hintNames(written: InstructionResult | null): string[] {
@@ -290,60 +315,70 @@ async function eraseBackwards(
   title: string,
   parts: InstructionResult['parts'],
 ): Promise<{ stages: Uint8Array[]; calls: number; usage: TokenUsage | null; lesson: BuiltLesson | null }> {
-  const tail = planNames.slice(1).slice(-MAX_REVERSE_ERASES);
-  const backward: Uint8Array[] = [traced.png];
+  const planned = eraseDetailNames(parts);
+  const fallback = planNames
+    .slice(1)
+    .map((name) => partNoun(name))
+    .filter((name, index, all) => name.length > 0 && all.indexOf(name) === index && !isBackgroundPart(name));
+  const details = [...(planned.details.length > 0 ? planned.details : fallback)].slice(0, MAX_REVERSE_ERASES);
+  const massName = planned.mass || partNoun(planNames[0] ?? '') || 'bentuk';
   let current = traced.png;
   let calls = 0;
   let usage: TokenUsage | null = null;
-  for (let index = tail.length - 1; index >= 0; index -= 1) {
-    const name = tail[index] ?? '';
-    try {
-      const edited = await images.edit({
-        png: current,
-        variant: input.variant,
-        model,
-        quality: 'low',
-        width: traced.illustration.width,
-        height: traced.illustration.height,
-        idempotencyKey: `${input.idempotencyKey}-erase-${tail.length - index}`,
-        signal: input.signal,
-        instruction: erasePrompt(name),
-      });
-      calls += 1;
-      usage = sumUsage(usage, edited.usage);
-      current = edited.png;
-      backward.push(current);
-    } catch {
-      break;
-    }
+  const undone: { name: string; png: Uint8Array }[] = [];
+  let ordinal = 0;
+  for (let index = details.length - 1; index >= 0; index -= 1) {
+    const name = details[index] ?? '';
+    if (!name || calls >= MAX_REVERSE_ERASES) break;
+    ordinal += 1;
+    const region = addedRegion(name, parts, traced.illustration.width, traced.illustration.height);
+    if (!region) continue;
+    const erased = await eraseOnePart(
+      images,
+      input,
+      traced,
+      model,
+      current,
+      name,
+      region,
+      MAX_REVERSE_ERASES - calls,
+      `${input.idempotencyKey}-erase-${ordinal}`,
+    );
+    calls += erased.calls;
+    usage = sumUsage(usage, erased.usage);
+    if (!erased.png) continue;
+    undone.push({ name, png: current });
+    current = erased.png;
   }
-  const forward = [...backward].reverse();
-  if (forward.length !== tail.length + 1) return { stages: forward, calls, usage, lesson: null };
+  const forwardPng = [current, ...[...undone].reverse().map((step) => step.png)];
+  const labels = [massName, ...[...undone].reverse().map((step) => step.name)];
+  if (forwardPng.length < 2) return { stages: forwardPng, calls, usage, lesson: null };
   const imagesInOrder: RgbaImage[] = [];
-  for (const png of forward) {
+  for (const png of forwardPng) {
     try {
       imagesInOrder.push(flattenOnWhite(await decodePng(png)));
     } catch {
-      return { stages: forward, calls, usage, lesson: null };
+      return { stages: forwardPng, calls, usage, lesson: null };
     }
   }
-  const labels = [planNames[0] ?? 'bentuk', ...tail];
   const final = imagesInOrder[imagesInOrder.length - 1];
-  if (!final) return { stages: forward, calls, usage, lesson: null };
+  if (!final) return { stages: forwardPng, calls, usage, lesson: null };
   const aligned = imagesInOrder.map((image) => registerToFinal(final, image));
   const stages: { name: string; contours: Contour[] }[] = [];
   for (let index = 0; index < aligned.length; index += 1) {
     const image = aligned[index];
     const previous = aligned[index - 1];
     if (!image) continue;
-    const region = index === 0 ? undefined : addedRegion(labels[index] ?? '', parts, final.width, final.height);
-    const ink = index === 0 || !previous ? image : inkAdded(previous, image, region);
-    if (!ink) return { stages: forward, calls, usage, lesson: null };
-    const contours = traceInk(ink).filter((contour) => contour.points.length >= 2);
     const name = labels[index] ?? 'bagian';
-    if (contours.length === 0) return { stages: forward, calls, usage, lesson: null };
+    const region = index === 0 ? undefined : addedRegion(name, parts, final.width, final.height);
+    const exclude = name === 'piring' ? occludedCup(parts, final.width, final.height) : undefined;
+    const ink = index === 0 || !previous ? image : inkAdded(previous, image, region, exclude);
+    if (!ink) continue;
+    const contours = traceInk(ink).filter((contour) => contour.points.length >= 2);
+    if (contours.length === 0) continue;
     stages.push({ name, contours });
   }
+  if (stages.length < 2) return { stages: forwardPng, calls, usage, lesson: null };
   const lesson = buildNamedLesson({
     id: input.lessonId,
     title,
@@ -357,7 +392,48 @@ async function eraseBackwards(
     ...(parts.length > 0 ? { parts } : {}),
     stages,
   });
-  return { stages: forward, calls, usage, lesson };
+  return { stages: forwardPng, calls, usage, lesson };
+}
+
+async function eraseOnePart(
+  images: ImageEditor,
+  input: PhotoPipelineInput,
+  traced: TracedEdit,
+  model: string,
+  current: Uint8Array,
+  name: string,
+  region: InkRegion,
+  budget: number,
+  key: string,
+): Promise<{ png: Uint8Array | null; calls: number; usage: TokenUsage | null }> {
+  let instruction = erasePrompt(name);
+  let calls = 0;
+  let usage: TokenUsage | null = null;
+  const attempts = Math.min(2, Math.max(0, budget));
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const edited = await images.edit({
+        png: current,
+        variant: input.variant,
+        model,
+        quality: 'low',
+        width: traced.illustration.width,
+        height: traced.illustration.height,
+        idempotencyKey: attempt === 0 ? key : `${key}b`,
+        signal: input.signal,
+        instruction,
+      });
+      calls += 1;
+      usage = sumUsage(usage, edited.usage);
+      const before = flattenOnWhite(await decodePng(current));
+      const after = flattenOnWhite(await decodePng(edited.png));
+      if (partErasedCleanly(before, after, region)) return { png: edited.png, calls, usage };
+      instruction = erasePrompt(name, true);
+    } catch {
+      return { png: null, calls, usage };
+    }
+  }
+  return { png: null, calls, usage };
 }
 
 async function drawPass(
@@ -460,6 +536,17 @@ function addedRegion(
   }
   if (!Number.isFinite(minX) || maxX <= minX || maxY <= minY) return undefined;
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/** The cup body, shortened so the saucer's front lip can still be new ink. */
+function occludedCup(
+  parts: InstructionResult['parts'],
+  sourceWidth: number,
+  sourceHeight: number,
+): InkRegion | undefined {
+  const cup = addedRegion('cangkir', parts, sourceWidth, sourceHeight);
+  if (!cup) return undefined;
+  return { x: cup.x, y: cup.y, width: cup.width, height: cup.height * 0.85 };
 }
 
 function interiorContours(contours: readonly Contour[]): number {

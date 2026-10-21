@@ -9,11 +9,11 @@
  *   npm run photo-eval -- <photo-directory> --steps reverse --out <directory>
  *   npm run photo-eval -- <photo-directory> --steps both --out <directory>
  *
- * `--steps` defaults to `strokes` (call A's ink, two image calls). `reverse`
- * erases one part at a time at low quality. `both` keeps the stroke lesson and
- * adds the reverse images on the sheet. A v12 run and a v13 run are different
- * paid jobs; write v13 to its own `--out` directory. `reverseUsd` is only the
- * erase edits. `costUsd` is the whole job.
+ * `--steps` defaults to `reverse` (one low-quality erase per planned part).
+ * `strokes` is the fallback and the explicit compare. `both` shows the reverse
+ * lesson first and the stroke lesson beside it. A v13 run and a v14 run are
+ * different paid jobs; write v14 to its own `--out` directory. `reverseUsd`
+ * is only the erase edits. `costUsd` is the whole job.
  *
  * `--compare` runs OpenAI and flux-kontext-pro. flux-1.1-pro is unsuitable.
  *
@@ -50,7 +50,7 @@ import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../
 import { composeContactSheet } from '../../src/photo/sheet';
 
 /** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
-const EVAL_KEY_REVISION = 'v13';
+const EVAL_KEY_REVISION = 'v14';
 
 interface Args {
   readonly score?: string;
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
   const htmlRows: string[] = [];
   const metrics: PhotoMetric[] = [];
   let failures = 0;
-  const stepMode = args.steps ?? 'strokes';
+  const stepMode = args.steps ?? 'reverse';
   console.log(`Photo eval: ${names.length} file(s), variant ${variant}, steps ${stepMode}, jobs ${jobs.map((job) => job.label).join(', ')}, output ${outDir}`);
 
   for (const name of names) {
@@ -156,21 +156,10 @@ async function main(): Promise<void> {
       const photoImage = await decodePng(photo.png);
       const illustration = await decodePng(result.illustrationPng);
       const stepImages = result.lesson.steps.map((_, index) => renderCumulativeStep(result.lesson, index + 1, 280, { r: 255, g: 255, b: 255 }, true));
-      const reverseImages = result.reverseLesson
+      const strokeImages = result.reverseLesson
         ? result.reverseLesson.steps.map((_, index) => renderCumulativeStep(result.reverseLesson!, index + 1, 280, { r: 255, g: 255, b: 255 }, true))
         : [];
-      const reverseStageImages = [];
-      for (const png of result.reverseStages) {
-        try {
-          reverseStageImages.push(await decodePng(png));
-        } catch {
-          // A stage that is not a PNG is left off the sheet.
-        }
-      }
-      const cells = [photoImage, illustration, ...stepImages];
-      if (reverseImages.length > 0 || reverseStageImages.length > 0) {
-        cells.push(...(reverseStageImages.length > 0 ? reverseStageImages : reverseImages));
-      }
+      const cells = [photoImage, illustration, ...stepImages, ...strokeImages];
       for (let index = 0; index < cells.length; index += 6) rows.push(cells.slice(index, index + 6));
       const priced = listCostUsd({
         imageModel: result.model,
@@ -197,15 +186,13 @@ async function main(): Promise<void> {
       await writeFile(path.join(outDir, 'illustrations', `${stem}-line.png`), result.lineArtPng);
       if (result.colouredPng) await writeFile(path.join(outDir, 'illustrations', `${stem}-colour.png`), result.colouredPng);
       const stepPngs = await Promise.all(stepImages.map((image) => encodePng(image)));
-      const reversePngs = result.reverseLesson
-        ? await Promise.all(reverseImages.map((image) => encodePng(image)))
-        : result.reverseStages;
-      const reverseSteps = result.reverseLesson
+      const strokePngs = await Promise.all(strokeImages.map((image) => encodePng(image)));
+      const strokeSteps = result.reverseLesson
         ? result.reverseLesson.steps.map((step, index) => ({
           instruction: step.instruction,
-          png: base64(reversePngs[index] ?? new Uint8Array()),
+          png: base64(strokePngs[index] ?? new Uint8Array()),
         }))
-        : result.reverseStages.map((png, index) => ({ instruction: `erase ${index + 1}`, png: base64(png) }));
+        : [];
       htmlRows.push(htmlRow({
         name: label,
         photo: photoB64,
@@ -227,7 +214,8 @@ async function main(): Promise<void> {
         reviewReasons: result.reviewReasons,
         regenerated: result.regenerated,
         stepMode,
-        reverse: reverseSteps,
+        lessonSource: result.lessonSource,
+        reverse: strokeSteps,
       }));
       metrics.push({
         file: name,
@@ -480,6 +468,7 @@ function htmlRow(input: {
   readonly reviewReasons: readonly string[];
   readonly regenerated: boolean;
   readonly stepMode?: string;
+  readonly lessonSource?: string;
   readonly reverse?: readonly { instruction: string; png: string }[];
 }): string {
   const cost = input.costUsd === null ? 'unknown' : input.costUsd.toFixed(4);
@@ -499,8 +488,8 @@ function htmlRow(input: {
     + `<figure><img alt="" src="data:image/png;base64,${input.lineArt}"><figcaption>line</figcaption></figure>`
     + (input.coloured ? `<figure><img alt="" src="data:image/png;base64,${input.coloured}"><figcaption>colour</figcaption></figure>` : '')
     + `</div>`
-    + `<h3>${escapeHtml(input.stepMode === 'reverse' ? 'reverse' : 'strokes')}</h3><div class="steps">${figures(input.steps)}</div>`
-    + (reverse.length > 0 ? `<h3>reverse edits</h3><div class="steps">${figures(reverse)}</div>` : '')
+    + `<h3>${escapeHtml(input.lessonSource === 'strokes' ? 'strokes' : 'reverse')}</h3><div class="steps">${figures(input.steps)}</div>`
+    + (reverse.length > 0 ? `<h3>strokes</h3><div class="steps">${figures(reverse)}</div>` : '')
     + `</section>`;
 }
 

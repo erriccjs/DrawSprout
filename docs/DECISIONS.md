@@ -1329,4 +1329,18 @@ The v12 run (commit 4c4d7ef, OpenAI, `--steps both`, five samples) was a no-go. 
 
 **Reverse.** Each erase stage is registered to the finished line drawing, and new ink is kept only inside the erased part. Doubled outlines outside that part are not a step.
 
-The eval idempotency key ends in `v13`. The gate is still not claimed.
+The eval idempotency key ended in `v13`. D-80 bumps it to `v14`. The gate is still not claimed.
+
+### D-80 — Reverse is the lesson, one part at a time
+
+The v13 run (commit 9a2d318, OpenAI, `--steps both`, five samples) was a no-go. The dashed guide did disappear after step 1, and call A no longer drew beans, a leash, or a person's leg. The lessons were still wrong. Reverse drew whole lines: the cup then the saucer, and the cat's full face. Stroke steps were fragments inside the outline. Five photos cost $1.17, of which $0.31 was reverse. This is not a pass. `claimedPass` stays false.
+
+**Reverse.** The app and the harness use reverse by default. Strokes remain the lesson only when an erase cannot be checked, or when `--steps strokes` is set. `--steps both` shows the reverse lesson first and the stroke lesson beside it. Every planned part except the mass gets its own erase, up to eight low-quality edits, including one retry. Guides and background props are not erased. The centre is erased before the petals when both are planned. After each edit, the removed ink has to sit in that part's box and the rest of the drawing has to stay put. A new circle outside the body is rejected. One retry uses a stricter erase. If it still fails, that part is merged into the neighbouring step and the bad edit is not used. A transient `fetch failed`, or HTTP 502, 503, or 504, is tried once more with the same idempotency key.
+
+**Guide.** Step 1 is a circle or oval at about 90% of the main mass box (the head, the cup body, the flower head, the car body), centered on that box. It is not cropped to the top of the box and it is not shrunk until it floats.
+
+**Colour.** A region is named by the smallest planned part that contains its centroid. A part much smaller than the paint does not rename the whole face. The coffee keeps the dark pixels from the colour image. A small patch whose only name is the whole subject, such as a harness the line drawing does not have, is not a colour step. The colour prompt fills only enclosed areas and does not add a collar, harness, or strap. Colour fills are shifted and scaled onto the line drawing, up to about 12%, so a fill that sits past the ears lands on the drawing.
+
+**Other.** A guide that is not the opening cross, such as a neck construction line with no ink, is not a step. The part of the saucer behind the cup is hidden. Call A does not add a branch, a bud, or a stem that is not in the photo. The photo request waits long enough for the erase pass.
+
+The eval idempotency key ends in `v14`. The gate is still not claimed.
