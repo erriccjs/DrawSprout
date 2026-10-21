@@ -41,6 +41,31 @@ export function placementForTop(stageHeight: number, fittedHeight: number, top: 
   return { offsetX: 0, offsetY: desired - centeredTop };
 }
 
+/** Rest the sheet on the bottom of the free band, `bottom` px above the stage edge. */
+export function placementForBottom(stageHeight: number, fittedHeight: number, bottom: number): PaperPlacement {
+  return placementForTop(stageHeight, fittedHeight, stageHeight - bottom - fittedHeight);
+}
+
+/**
+ * Top-align the sheet, then slide it right until its left edge clears `left`.
+ * It stops before `rightLimit` so a dock on the right stays uncovered.
+ */
+export function placementClearingLeft(
+  stageWidth: number,
+  stageHeight: number,
+  fittedWidth: number,
+  fittedHeight: number,
+  top: number,
+  left: number,
+  rightLimit: number,
+): PaperPlacement {
+  const base = placementForTop(stageHeight, fittedHeight, top);
+  const centeredLeft = (stageWidth - fittedWidth) / 2;
+  const maxLeft = Math.max(centeredLeft, rightLimit - fittedWidth);
+  const nextLeft = Math.min(Math.max(centeredLeft, left), maxLeft);
+  return { offsetX: base.offsetX + (nextLeft - centeredLeft), offsetY: base.offsetY };
+}
+
 export interface FrameRect {
   readonly left: number;
   readonly top: number;

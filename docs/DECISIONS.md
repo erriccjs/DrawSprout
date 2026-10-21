@@ -556,6 +556,11 @@ double width land on a step. Returning the thumb to that default clears the
 custom width, which is the same engine action as before. A new step still
 clears a custom width.
 
+The column also shows what the slider is for (D-61): a live dot in the
+current colour, sized with the thumb, and a thick mark at the top of the
+track with a thin mark at the bottom. The column stays 64px on a tablet and
+52px on a portrait phone.
+
 The active colour is a circle. It opens a compact palette plus up to five
 recently used colours. Recent colours are component state. They are not saved
 in the session. *Ikuti panduan* still switches back to the guide colour. The
@@ -608,23 +613,22 @@ The instruction, the example, and *Lanjut* used to share one card. A hand
 resting on the lower part of a tablet covers that card while the child is
 drawing, which is when they need the instruction.
 
-**Choice.** The instruction, the step dots, and the example thumbnail sit at
-the top, under the header, on every layout. *Lanjut* and *Kembali* stay on
-the bottom edge, and *Lanjut* stays the large button. Advancing is one
-deliberate tap at the end of a step, and the hand is already down there, so
-the tap does not reach across the paper or hide the instruction. The paper
-is fitted into the band between those two bars (`drawingChrome` in
-`src/ui/drawing-chrome.ts`), so the guides are not under the card. The
-thumbnail still opens the same preview larger. Collapsing hides the
-instruction and the thumbnail. The dots stay, and the step count stays
-available to assistive tech.
+**Choice.** The instruction and the step dots sit at the top, under the
+header, on every layout. *Lanjut* and *Kembali* stay on the bottom edge, and
+*Lanjut* stays the large button. Advancing is one deliberate tap at the end
+of a step, and the hand is already down there, so the tap does not reach
+across the paper or hide the instruction. The paper is fitted into the band
+between those two bars (`drawingChrome` in `src/ui/drawing-chrome.ts`), so
+the guides are not under the card. The target picture is its own control,
+not part of this card (D-61). Collapsing hides the instruction. The dots
+stay, and the step count stays available to assistive tech.
 
 The finish screen adds three decorative dots above the existing title. They
 animate only when `prefers-reduced-motion` is not reduce. The decoration is
 `aria-hidden` and does not judge the drawing (D-41).
 
 On a phone the reference starts folded: dots and the expand control. The
-instruction and the thumbnail come back when the child opens it. *Lanjut*
+instruction comes back when the child opens it. *Lanjut*
 stays on the bottom edge either way. A tablet still starts with the reference
 open. The phone note, when it is showing, sits between the header and that
 reference so the two do not pile on top of each other.
@@ -641,3 +645,159 @@ the note, the shell shows "DrawSprout paling nyaman di tablet." with
 the session checkpoint and it is not read by the service worker (D-46). A
 blocked store fails quietly and the note can appear again. A tablet never
 shows it.
+
+### D-55 — Pencil and finger mode are on the toolbar
+
+Switching mode used to mean opening the help sheet. On a tablet that control
+was easy to miss, and a child who draws with a finger had no visible way to
+say so.
+
+**Choice.** The toolbar has its own rounded box for the mode. Inside it are
+two icon buttons, a pencil (*Pensil*) and a hand (*Jari*). The pressed one
+is the current mode. One tap switches, and the switch is still
+`set-input-mode`, so the preference is saved as before. The names are the
+accessible name and the tooltip. They are not drawn as labels, because a
+label made the dock wider than the tool buttons.
+
+When the dock is a column (tablet, and phone landscape), the icons stack and
+the box is 56px wide, the same as one tool button. On a portrait phone the
+toolbar is a row, so the icons sit side by side in a box the width of two
+tool buttons, on its own line under that row. Measured against main before
+this change, the dock stays 70px wide on a tablet and 310px on a 390px-wide
+phone, and the toolbar panel stays 70px and 262px. The help sheet still
+explains the modes. It is not the only place the mode can be changed.
+
+The pressed mode button and the pressed tool button are the accent fill and
+the border. A check glyph crowded those icons, so the dock does not draw one
+(D-60). Text buttons outside that dock can still use the check (D-39).
+
+### D-56 — Continuing a saved drawing is a toast
+
+The sentence "Karya terakhirmu dilanjutkan dari tempat kamu berhenti." was a
+banner that stayed on the drawing screen.
+
+**Choice.** That sentence is a small toast. It removes itself after 3 seconds.
+It is not a dialog, and a stroke can start while it is visible. The saved
+drawing is already on the page, so continuing does not need a tap. *Mulai
+ulang* on the toast starts the lesson over: the session is deleted and
+`restart` runs, the same fresh start the finish screen uses. A load failure,
+a full disk, and a lesson whose content version changed stay banners, because
+those are warnings rather than "you are already continuing".
+
+On a portrait phone the toast sits below the tools and above *Lanjut*. It
+does not cover the mode box, the sheet, or the other tools (D-60).
+
+### D-57 — Finger mode avoids the screen edge; a page cannot stop Android gestures
+
+On a real Android tablet, a hand resting or drawing at the edge of the screen
+in finger mode fires system navigation: back, home, the app switcher, or the
+notification shade. The app then closes or goes to the background. Pencil mode
+did not do this.
+
+**Choice.** Finger-mode touches only:
+
+- A contact whose `width` or `height` is at least 80 CSS pixels does not
+  start a stroke and is not tracked. `0` or `1` means the browser did not
+  report a size, and that is not treated as a palm.
+- A touch that goes down within 28 CSS pixels of the viewport edge does not
+  start a stroke and is not captured. The event is left alone, so the page
+  does not also begin a line.
+- Mouse input in finger mode is not filtered, so a desktop check can still
+  draw at the window edge.
+
+On a tablet and in phone landscape the paper is fitted with that same 28px
+inset on the left and right (`drawingChrome.side`). A portrait phone uses an
+8px visual margin so the 4:3 sheet can use the screen width. Finger strokes
+still do not start within 28px of the screen edge. The top and bottom bars
+are already taller than 28px, so the guides sit inside the margin.
+
+The canvas, and `html` and `body` while a drawing is open, use
+`touch-action: none` and `overscroll-behavior: none`. Cancelable touch and
+pointer events on the canvas call `preventDefault`, except the small touch
+in the edge margin. The viewport meta tag still does not set `maximum-scale`
+or `user-scalable` (PRD section 10). The picture list is not under those
+rules, so it can still scroll.
+
+Opening a picture from the picker calls the Fullscreen API, while that tap
+is still a user gesture. A stroke does not. *Layar penuh* asks again, and
+leaves fullscreen when it is already on. If fullscreen, rotation, or the
+browser chrome changes the screen while a stroke is in progress, that stroke
+is discarded and the canvas is measured again before the next one. The
+manifest `display` is `fullscreen`, and `display_override` is `fullscreen`
+then `standalone`. A browser that does not implement fullscreen display uses
+standalone. A copy that is already installed keeps the display mode it was
+installed with.
+
+**What the page cannot do.** Android gesture navigation is handled by the
+system. `preventDefault`, `touch-action`, and a dead zone do not cancel a
+back swipe, a home gesture, the app switcher, or the notification shade when
+the system takes that edge before the page does. Fullscreen hides browser
+chrome only where the browser allows the request. It does not turn off
+system navigation.
+
+This is not the palm rejection D-16 refuses to claim. A large reported
+contact is skipped. A palm the digitiser reports as an ordinary finger still
+draws. Whether any of this is enough on a particular tablet is something only
+that tablet can show.
+
+### D-58 — Bola Basket is a bundled lesson
+
+**Choice.** `basketball`, titled "Bola Basket", is a sixth hand-authored
+package in the 1000×750 space. The steps are the circle, the curved seam
+down the middle, the two curved seams at the sides, then orange colour on
+the ball. The picker preview is those outline paths. The package is
+validated with the others and listed on `BUNDLED_LESSONS`.
+
+### D-59 — The dock chip is help
+
+The dock chip was briefly a palette, because people had been opening
+*Bantuan* when they wanted a colour (D-49). The colour circle already opens
+those choices, so a second palette control was redundant.
+
+**Choice.** The dock chip is a `?` again. Its accessible name is "Bantuan".
+One tap opens the help sheet: assistance, the mode explanation, and boundary
+assist on a colour step. A second tap closes it. The chip is the same size
+as the other dock icons, 56px on a tablet and 48px on a portrait phone, so
+the dock does not grow. The colour circle is the only control that opens
+colours. The colour popover has no *Bantuan* button.
+
+### D-61 — Brush size is visible, and the example leaves the instruction card
+
+The size slider was a bare range. A child could not tell it changed the
+brush. The target picture was an 84×64 thumbnail inside the instruction
+card, too small to read the current step.
+
+**Choice.** The slider's accessible name is "Ukuran kuas". Above the track,
+a dot uses the active colour and grows with the width. A thick stroke marks
+the large end and a thin stroke marks the small end. Neither adds width:
+the column stays 64px, and 52px on a portrait phone.
+
+The instruction card keeps the words, the step dots, and the collapse
+button. The picture moves out. On a landscape tablet it is a 200×150 card
+in the top-left column, above the brush slider. The card is 4:3 with no
+padding, and the picture is framed on the artwork so the drawing fills the
+card. A tap on the card opens the large preview;
+a tap on the preview closes it. The sheet stays the same size and slides
+right until its left edge clears the card. On a portrait tablet and on a
+phone it is a thumbnail in that same top corner, and a tap opens the same
+preview. On a portrait tablet that thumbnail is 128×96, still inside the
+band above the paper. The sheet is not made smaller to make room.
+
+### D-60 — Dock icons stay readable, and the phone sheet sits above the tools
+
+The pressed check glyph landed on the hand icon and under the pencil. *Layar
+penuh* and *Sesuai layar* were both corner-bracket marks, and the fit control
+stayed on screen, greyed, while the paper was already fitted. On a 390×844
+phone the resume toast covered the mode box, and the 4:3 sheet was pinned
+under the step reference, leaving an empty band above the toolbar.
+
+**Choice.** Pressed dock icons (mode, tools, fullscreen) use the fill and the
+border only. *Sesuai layar* is a magnifying glass with a "1" in the lens, and
+it is not shown while zoom is 1. *Layar penuh* stays the four corner brackets.
+
+On a portrait phone the sheet is the largest 4:3 that fits the screen width,
+with an 8px side margin (D-57). It sits just under the step card. The brush
+slider and the dock follow the bottom of the sheet, so the open space is
+below the tools rather than around the paper. The toast sits in that lower
+band, above *Lanjut*, and does not cover the tools. The sheet does not grow
+past 4:3, because cropping the lesson would hide strokes at the sides.

@@ -10,7 +10,6 @@
 import { useState } from 'react';
 import type { LessonPackage, LessonStep } from '../lesson-data/schema';
 import type { AssistanceMode, HintDurationMs, SessionAction, SessionState } from '../lesson-engine/types';
-import { TargetPreview } from './TargetPreview';
 
 const ASSISTANCE_CHOICES: readonly { mode: AssistanceMode; label: string; help: string }[] = [
   { mode: 'visible', label: 'Garis terlihat', help: 'Garis tetap tampil.' },
@@ -49,7 +48,6 @@ export function StepPanel({
   startCollapsed = false,
 }: StepPanelProps) {
   const [collapsed, setCollapsed] = useState(startCollapsed);
-  const [enlarged, setEnlarged] = useState(false);
   const stepNumber = state.currentStepIndex + 1;
   const stepCount = lesson.steps.length;
 
@@ -84,35 +82,6 @@ export function StepPanel({
       >
         <span aria-hidden="true">{collapsed ? '▴' : '▾'}</span>
       </button>
-
-      {!collapsed && (
-        <button type="button" className="step-card__thumb" aria-label="Perbesar contoh" onClick={() => setEnlarged(true)}>
-          <TargetPreview
-            space={lesson.coordinateSpace}
-            paths={lesson.targetPreview.paths}
-            title={lesson.title}
-            step={step}
-            steps={lesson.steps}
-            colorRegions={lesson.colorRegions}
-          />
-        </button>
-      )}
-
-      {enlarged && (
-        <div className="example-lightbox" role="dialog" aria-label="Contoh besar">
-          <button type="button" className="button example-lightbox__close" onClick={() => setEnlarged(false)}>
-            Tutup contoh
-          </button>
-          <TargetPreview
-            space={lesson.coordinateSpace}
-            paths={lesson.targetPreview.paths}
-            title={lesson.title}
-            step={step}
-            steps={lesson.steps}
-            colorRegions={lesson.colorRegions}
-          />
-        </div>
-      )}
     </div>
   );
 }

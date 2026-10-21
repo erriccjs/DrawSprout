@@ -5,6 +5,7 @@ import { FLOWER_LESSON } from './flower-lesson';
 import { FISH_LESSON } from './fish-lesson';
 import { SUN_LESSON } from './sun-lesson';
 import { TREE_LESSON } from './tree-lesson';
+import { BASKETBALL_LESSON } from './basketball-lesson';
 import { assertValidLessons } from './validate';
 
 describe('bundled lessons', () => {
@@ -15,12 +16,14 @@ describe('bundled lessons', () => {
       FISH_LESSON.id,
       SUN_LESSON.id,
       TREE_LESSON.id,
+      BASKETBALL_LESSON.id,
     ]);
     expect(getLesson(CAT_LESSON.id).title).toBe(CAT_LESSON.title);
     expect(getLesson(FLOWER_LESSON.id).title).toBe(FLOWER_LESSON.title);
     expect(getLesson(FISH_LESSON.id).title).toBe(FISH_LESSON.title);
     expect(getLesson(SUN_LESSON.id).title).toBe(SUN_LESSON.title);
     expect(getLesson(TREE_LESSON.id).title).toBe(TREE_LESSON.title);
+    expect(getLesson(BASKETBALL_LESSON.id).title).toBe('Bola Basket');
   });
 
   it('ships only packages the picker can render in full', () => {
@@ -36,6 +39,30 @@ describe('bundled lessons', () => {
     const ids = TREE_LESSON.steps.flatMap((step) => step.guidePaths.map((path) => path.id));
     expect(new Set(ids).size).toBe(ids.length);
     expect(() => assertValidLessons([TREE_LESSON])).not.toThrow();
+  });
+
+  it('teaches the basketball as a circle, then curved seams, then colour', () => {
+    expect(BASKETBALL_LESSON.coordinateSpace).toEqual({ width: 1000, height: 750 });
+    expect(BASKETBALL_LESSON.steps.map((step) => step.phase)).toEqual([
+      'outline',
+      'outline',
+      'outline',
+      'color',
+    ]);
+    expect(BASKETBALL_LESSON.steps[0]?.instruction).toMatch(/lingkaran/i);
+    expect(BASKETBALL_LESSON.steps[1]?.instruction).toMatch(/lengkung/i);
+    expect(BASKETBALL_LESSON.steps[2]?.instruction).toMatch(/lengkung/i);
+    expect(BASKETBALL_LESSON.steps[3]?.phase).toBe('color');
+    expect(BASKETBALL_LESSON.steps[3]?.colorRegionIds).toEqual(['ball']);
+    const ids = BASKETBALL_LESSON.steps.flatMap((step) => step.guidePaths.map((path) => path.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(BASKETBALL_LESSON.targetPreview.paths.map((path) => path.id)).toEqual([
+      'ball',
+      'seam-center',
+      'seam-left',
+      'seam-right',
+    ]);
+    expect(() => assertValidLessons([BASKETBALL_LESSON])).not.toThrow();
   });
 
   it('refuses a lesson id nothing ships', () => {

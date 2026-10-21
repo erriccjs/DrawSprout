@@ -17,6 +17,28 @@ const TOOLS: readonly { kind: ToolKind; label: string; icon: string }[] = [
   { kind: 'eraser', label: 'Penghapus', icon: '🧽' },
 ];
 
+function PencilIcon() {
+  return (
+    <svg className="chip-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+      />
+    </svg>
+  );
+}
+
+function FingerIcon() {
+  return (
+    <svg className="chip-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M9 11.5V5.2a1.7 1.7 0 0 1 3.4 0V12h.3V7.2a1.6 1.6 0 0 1 3.2 0V13h.2v-2.2a1.5 1.5 0 0 1 3 0V15c0 3.3-2.4 6-6.2 6H11c-2.2 0-3.6-1-4.4-2.2L4.2 14a1.6 1.6 0 0 1 2.5-2l2.3 1.6V11.5z"
+      />
+    </svg>
+  );
+}
+
 interface ToolbarProps {
   readonly state: SessionState;
   readonly canUndo: boolean;
@@ -40,6 +62,30 @@ export function Toolbar({
 
   return (
     <div className="toolbar">
+      <fieldset className="toolbar__group toolbar__group--mode">
+        <legend>Cara menggambar</legend>
+        <button
+          type="button"
+          className="chip chip--mode"
+          aria-label="Mode pensil"
+          title="Pensil"
+          aria-pressed={state.inputMode === 'pencil'}
+          onClick={() => dispatch({ type: 'set-input-mode', mode: 'pencil' })}
+        >
+          <PencilIcon />
+        </button>
+        <button
+          type="button"
+          className="chip chip--mode"
+          aria-label="Mode jari"
+          title="Jari"
+          aria-pressed={state.inputMode === 'finger'}
+          onClick={() => dispatch({ type: 'set-input-mode', mode: 'finger' })}
+        >
+          <FingerIcon />
+        </button>
+      </fieldset>
+
       <fieldset className="toolbar__group toolbar__group--tools">
         <legend>Alat</legend>
         {TOOLS.map((tool) => (
@@ -136,24 +182,10 @@ export function ToolbarSettings({ state, isColorStep, dispatch }: ToolbarSetting
     <div className="toolbar toolbar--settings">
       <fieldset className="toolbar__group">
         <legend>Cara menggambar</legend>
-        <button
-          type="button"
-          className="chip"
-          aria-pressed={state.inputMode === 'finger'}
-          onClick={() => dispatch({ type: 'set-input-mode', mode: 'finger' })}
-        >
-          Mode jari
-        </button>
-        <button
-          type="button"
-          className="chip"
-          aria-pressed={state.inputMode === 'pencil'}
-          onClick={() => dispatch({ type: 'set-input-mode', mode: 'pencil' })}
-        >
-          Mode pensil
-        </button>
         <p className="toolbar__readout toolbar__readout--muted">
-          Mode pensil: hanya stylus. Telapak tangan tidak menggambar; palm rejection tak dijamin.
+          Ganti mode di tombol Jari atau Pensil. Mode pensil hanya menerima stylus.
+          Sentuhan yang sangat lebar diabaikan di mode jari, tetapi penolakan telapak
+          tangan dari sistem tidak dijamin.
         </p>
       </fieldset>
 

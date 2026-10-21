@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawingChrome } from './drawing-chrome';
+import { drawingChrome, PHONE_PORTRAIT_SIDE } from './drawing-chrome';
 
 describe('drawing chrome', () => {
   function band(width: number, height: number, layout: 'tablet' | 'phone-portrait' | 'phone-landscape', notice = false) {
@@ -18,6 +18,16 @@ describe('drawing chrome', () => {
       expect(sample.chrome.top).toBeGreaterThan(48);
       expect(sample.chrome.bottom).toBeGreaterThan(48);
     }
+  });
+
+  it('fits a portrait phone to the screen width under the step card', () => {
+    const chrome = drawingChrome('phone-portrait', false);
+    expect(chrome.side).toBe(PHONE_PORTRAIT_SIDE);
+    expect(chrome.top).toBe(136);
+    expect(chrome.bottom).toBe(80);
+    const fittedWidth = 390 - chrome.side * 2;
+    const fittedHeight = fittedWidth * 0.75;
+    expect(fittedHeight).toBeLessThan(844 - chrome.top - chrome.bottom);
   });
 
   it('drops the paper further when the phone note is open', () => {

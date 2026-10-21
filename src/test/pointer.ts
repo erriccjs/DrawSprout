@@ -14,12 +14,14 @@ export interface StrokeSample {
 export interface PointerOptions {
   readonly pointerId?: number;
   readonly pointerType?: 'pen' | 'touch' | 'mouse';
+  readonly width?: number;
+  readonly height?: number;
 }
 
 /** A box the canvas pretends to occupy, so client coordinates map cleanly. */
 export const TEST_CANVAS_RECT = { left: 0, top: 0, width: 1000, height: 750 } as const;
 
-export function stubLayoutBox(width = TEST_CANVAS_RECT.width, height = TEST_CANVAS_RECT.height): void {
+export function stubLayoutBox(width: number = TEST_CANVAS_RECT.width, height: number = TEST_CANVAS_RECT.height): void {
   Element.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
     return {
       x: 0,
@@ -44,6 +46,8 @@ function pointerEvent(type: string, sample: StrokeSample, options: PointerOption
     isPrimary: true,
     clientX: sample.x,
     clientY: sample.y,
+    width: options.width ?? 1,
+    height: options.height ?? 1,
   });
 }
 

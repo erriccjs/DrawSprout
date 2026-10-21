@@ -147,6 +147,8 @@ body {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
 }
 
 .pad__title {
@@ -188,9 +190,19 @@ body {
 
 .stage__canvas {
   display: block;
-  /* The one place browser gestures are given up, so a drawing stroke is not
-     read as a scroll or a pinch (PRD section 11). */
+  /* The drawing surface gives up browser pan and pinch so a stroke stays a
+     stroke (PRD section 11). The page zoom lock stays off (see index.html). */
   touch-action: none;
+  overscroll-behavior: none;
+}
+
+/* While a drawing is open, the page itself should not scroll or overscroll.
+   This does not cancel Android gesture navigation. The picture list is not
+   covered, so it can still scroll. */
+html:has(.pad),
+html:has(.pad) body {
+  touch-action: none;
+  overscroll-behavior: none;
 }
 
 .guide-overlay {
@@ -209,7 +221,7 @@ body {
   pointer-events: none;
 }
 
-.pad__chrome :is(button, a, input, select, label, .step-card, .step-nav, .float-dock, .float-header, .float-notices, .float-help) {
+.pad__chrome :is(button, a, input, select, label, .step-card, .step-nav, .step-reference, .example-lightbox, .float-dock, .float-header, .float-notices, .float-help, .resume-toast) {
   pointer-events: auto;
 }
 
@@ -298,9 +310,51 @@ body {
   box-shadow: 0 8px 24px rgba(31, 41, 51, 0.16);
 }
 
-.float-dock__help {
+.float-dock__help,
+.float-dock__fullscreen,
+.float-dock__fit {
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 2px 8px rgba(31, 41, 51, 0.12);
+}
+
+.resume-toast {
+  position: absolute;
+  bottom: 112px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(460px, calc(100% - 24px));
+  margin: 0;
+  padding: 6px 8px 6px 14px;
+  border-radius: 999px;
+  background: rgba(31, 41, 51, 0.92);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(31, 41, 51, 0.22);
+  pointer-events: auto;
+}
+
+.resume-toast p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+
+.resume-toast__action {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .float-dock .toolbar {
@@ -314,9 +368,51 @@ body {
   width: max-content;
 }
 
+/* Mode is its own box, the same width as one tool button. The icons stack
+   so the box does not widen the vertical dock. Phone portrait lays them in
+   a row, still no wider than two tool buttons. */
+.float-dock .toolbar__group--mode {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.float-dock .toolbar__group--mode .chip--mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 48px;
+  min-height: 44px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.chip-icon {
+  display: block;
+  flex: 0 0 auto;
+}
+
 .float-dock .toolbar__group--tools .chip:not(.chip--wide),
 .float-dock .toolbar__group--history .chip,
 .float-dock__help,
+.float-dock__fullscreen,
 .float-dock__fit {
   width: 56px;
   min-width: 56px;
@@ -353,20 +449,54 @@ body {
   margin-top: auto;
   margin-bottom: auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 8px 0;
+  gap: 3px;
+  padding: 6px 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 6px 18px rgba(31, 41, 51, 0.12);
 }
 
+.brush-slider__preview {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+}
+
+.brush-slider__dot {
+  display: block;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(31, 41, 51, 0.35);
+}
+
+.brush-slider__hint {
+  flex: 0 0 auto;
+  width: 16px;
+  border-radius: 999px;
+  background: var(--ink);
+}
+
+.brush-slider__hint--thick {
+  height: 5px;
+  width: 22px;
+}
+
+.brush-slider__hint--thin {
+  height: 2px;
+  width: 12px;
+}
+
 .brush-slider__input {
   writing-mode: vertical-lr;
   direction: rtl;
-  width: 56px;
-  height: 100%;
-  min-height: 172px;
+  width: 100%;
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 120px;
   margin: 0;
   appearance: none;
   background: transparent;
@@ -566,8 +696,7 @@ body {
   border-color: var(--ink);
 }
 
-.step-card__toggle,
-.step-card__thumb {
+.step-card__toggle {
   flex: 0 0 auto;
   padding: 0;
   border: 1px solid var(--line);
@@ -580,19 +709,6 @@ body {
   height: var(--tap);
   border-radius: 12px;
   font-size: 1.25rem;
-}
-
-.step-card__thumb {
-  width: 84px;
-  height: 64px;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.step-card__thumb .target-preview {
-  width: 100%;
-  height: 100%;
-  display: block;
 }
 
 .example-lightbox {
@@ -885,6 +1001,14 @@ body {
 
 .chip[aria-pressed='true']::after {
   content: ' ✓';
+}
+
+/* Icon buttons in the dock are too small for a check glyph. The fill and the
+   border are the pressed state, for the mode box, the tools, and fullscreen. */
+.float-dock .toolbar:not(.toolbar--settings) .chip[aria-pressed='true']::after,
+.float-dock__fullscreen[aria-pressed='true']::after,
+.float-dock__help[aria-pressed='true']::after {
+  content: none;
 }
 
 .swatches {
@@ -1409,11 +1533,6 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   gap: 6px;
 }
 
-.shell[data-layout^='phone'] .step-card__thumb {
-  width: 64px;
-  height: 48px;
-}
-
 .shell[data-layout^='phone'] .step-nav .button--primary {
   min-height: 56px;
   min-width: 120px;
@@ -1693,7 +1812,6 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   font-size: 1.25rem;
 }
 
-.shell[data-layout='phone-landscape'] .toolbar__group--tools .chip[aria-pressed='true']::after,
 .shell[data-layout='phone-landscape'] .pad__tabs .chip[aria-pressed='true']::after {
   position: absolute;
   top: 1px;
@@ -1905,8 +2023,8 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 }
 
 .shell[data-layout='phone-portrait'] .float-dock {
-  top: auto;
-  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  top: calc(var(--sheet-bottom, 420px) + 8px);
+  bottom: auto;
   left: 72px;
   right: 8px;
   transform: none;
@@ -1926,17 +2044,59 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   padding: 2px;
 }
 
-.shell[data-layout='phone-portrait'] .float-dock .toolbar:not(.toolbar--settings),
+.shell[data-layout='phone-portrait'] .float-dock .toolbar:not(.toolbar--settings) {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  /* Five 48px tool buttons and the four gaps between them. The mode box
+     wraps onto its own line inside this width, so the panel stays the
+     size it had before the mode box existed. */
+  width: calc(48px * 5 + 4px * 4);
+  max-width: 100%;
+}
+
 .shell[data-layout='phone-portrait'] .float-dock .toolbar__group--tools,
 .shell[data-layout='phone-portrait'] .float-dock .toolbar__group--history {
   flex-direction: row;
   align-items: center;
-  width: auto;
+  width: max-content;
+}
+
+.shell[data-layout='phone-portrait'] .float-dock .toolbar__group--mode {
+  flex-direction: row;
+  align-items: center;
+  flex: 0 0 100%;
+  justify-content: flex-end;
+  width: 100px;
+  min-width: 0;
+  max-width: 100px;
+  margin-left: auto;
+  padding: 2px;
+  gap: 2px;
+}
+
+.shell[data-layout='phone-portrait'] .float-dock .toolbar__group--mode .chip--mode {
+  width: 46px;
+  min-width: 44px;
+  max-width: 46px;
+  height: 48px;
+}
+
+/* Below the tools that follow the sheet, and above Lanjut. */
+.shell[data-layout='phone-portrait'] .resume-toast {
+  top: auto;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+
+.shell[data-layout='phone-landscape'] .resume-toast {
+  bottom: 80px;
 }
 
 .shell[data-layout='phone-portrait'] .float-dock .toolbar__group--tools .chip:not(.chip--wide),
 .shell[data-layout='phone-portrait'] .float-dock .toolbar__group--history .chip,
 .shell[data-layout='phone-portrait'] .float-dock__help,
+.shell[data-layout='phone-portrait'] .float-dock__fullscreen,
 .shell[data-layout='phone-portrait'] .float-dock__fit {
   width: 48px;
   min-width: 48px;
@@ -1952,8 +2112,8 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 }
 
 .shell[data-layout='phone-portrait'] .brush-slider {
-  top: auto;
-  bottom: calc(128px + env(safe-area-inset-bottom, 0px));
+  top: calc(var(--sheet-bottom, 420px) + 8px);
+  bottom: auto;
   left: max(8px, env(safe-area-inset-left, 0px));
   width: 52px;
   height: 132px;
@@ -1964,7 +2124,8 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 
 .shell[data-layout='phone-portrait'] .brush-slider__input {
   min-height: 0;
-  height: 100%;
+  height: auto;
+  flex: 1 1 0;
 }
 
 .shell[data-layout='phone-landscape'] .float-dock {
@@ -1985,4 +2146,87 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 .shell[data-layout='phone-landscape'][data-tablet-notice='open'] .float-dock,
 .shell[data-layout='phone-landscape'][data-tablet-notice='open'] .brush-slider {
   top: 160px;
+}
+
+.shell[data-layout^='phone'] .brush-slider__input {
+  min-height: 0;
+}
+
+/* The target picture sits outside the instruction card. On a landscape tablet
+   it is a card in the top-left band (drawingChrome top is 168px), above the
+   brush slider and clear of the paper. Portrait and phone use a thumbnail. */
+.step-reference {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  padding: 0;
+  border: 1px solid var(--line);
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.16);
+  overflow: hidden;
+}
+
+.step-reference .target-preview {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.step-reference--thumb {
+  top: 68px;
+  left: max(8px, env(safe-area-inset-left, 0px));
+  width: 88px;
+  height: 66px;
+  cursor: pointer;
+}
+
+@media (orientation: landscape) {
+  /* 200×150 is 4:3, matching the lesson, so the drawing fills the card.
+     Width matches TABLET_REFERENCE_CARD_RIGHT in drawing-chrome.ts. */
+  .shell[data-layout='tablet'] .step-reference--card {
+    top: 58px;
+    left: max(8px, env(safe-area-inset-left, 0px));
+    width: 200px;
+    height: 150px;
+  }
+
+  .shell[data-layout='tablet'] .step-card {
+    left: 220px;
+    transform: none;
+    width: min(720px, calc(100% - 236px));
+  }
+}
+
+@media (orientation: portrait) {
+  .shell[data-layout='tablet'] .step-reference--thumb {
+    width: 128px;
+    height: 96px;
+  }
+
+  .shell[data-layout='tablet'] .step-card {
+    left: 148px;
+    transform: none;
+    width: calc(100% - 160px);
+  }
+}
+
+.shell[data-layout^='phone'] .step-reference--thumb {
+  top: 58px;
+  width: 64px;
+  height: 48px;
+}
+
+.shell[data-layout^='phone'] .step-card {
+  left: 80px;
+  transform: none;
+  width: calc(100% - 88px);
+}
+
+.shell[data-layout^='phone'][data-tablet-notice='open'] .step-reference--thumb {
+  top: 122px;
 }

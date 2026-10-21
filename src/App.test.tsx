@@ -69,6 +69,30 @@ async function returnToPicker() {
 }
 
 describe('lesson picker', () => {
+  it('asks for fullscreen when a picture is opened, not when the first stroke starts', async () => {
+    const requestFullscreen = vi.fn(() => Promise.resolve());
+    const host = document.documentElement;
+    const original = host.requestFullscreen;
+    host.requestFullscreen = requestFullscreen;
+    try {
+      render(<App />);
+      await open('Kucing');
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+
+      const canvas = document.querySelector('canvas');
+      expect(canvas).toBeTruthy();
+      act(() =>
+        drawStroke(canvas!, [
+          { x: 40, y: 40 },
+          { x: 90, y: 70 },
+        ]),
+      );
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    } finally {
+      host.requestFullscreen = original;
+    }
+  });
+
   it('lists the exposed lessons with pictures and opens the chosen one', async () => {
     render(<App />);
     await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
@@ -152,12 +176,13 @@ describe('lesson picker', () => {
     expect(screen.queryByText(/Ada versi baru/)).toBeNull();
 
     await returnToPicker();
-    fireEvent.click(screen.getByRole('button', { name: 'Nanti saja' }));
+    // The prompt stays hidden until the exit save settles, so wait for it.
+    fireEvent.click(await screen.findByRole('button', { name: 'Nanti saja' }));
     expect(screen.queryByRole('button', { name: 'Muat versi baru' })).toBeNull();
 
     await open('Kucing');
     await returnToPicker();
-    fireEvent.click(screen.getByRole('button', { name: 'Muat versi baru' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Muat versi baru' }));
     expect(screen.getByText('Memuat versi baru…')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Kucing/ }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('heading', { name: 'Mau gambar apa hari ini?' })).toBeTruthy();
@@ -324,7 +349,7 @@ describe('resume notice', () => {
     fireEvent.click(screen.getByRole('button', { name: /Mode jari/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Pen' }));
     fireEvent.click(screen.getByRole('button', { name: 'Ikuti panduan' }));
-    fireEvent.change(screen.getByRole('slider', { name: 'Ketebalan' }), { target: { value: '12' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Ukuran kuas' }), { target: { value: '12' } });
     expect(save).not.toHaveBeenCalled();
 
     await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));

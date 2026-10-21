@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { RefObject } from 'react';
+import type { CSSProperties, RefObject } from 'react';
 import type { LessonPackage } from '../lesson-data/schema';
 import {
   activeClipRegionIds,
@@ -36,6 +36,7 @@ import {
   CENTERED_PLACEMENT,
   FIT_VIEW,
   pinchView,
+  placementClearingLeft,
   placementForTop,
   sameView,
   viewTransformCss,
@@ -44,13 +45,16 @@ import {
 } from '../renderer/view';
 import { acceptsPointerType, rejectionMessage } from '../input/pointer-mode';
 import { useStrokeInput } from '../input/useStrokeInput';
+import { exitDocumentFullscreen, isDocumentFullscreen, requestDocumentFullscreen } from './fullscreen';
+import { RESUME_NOTICE, RESUME_TOAST_MS } from './resume-notice';
 import { FinishScreen } from './FinishScreen';
 import { GuideOverlay } from './GuideOverlay';
 import { StepControls, StepNavigation, StepPanel } from './StepPanel';
+import { StepReference } from './StepReference';
 import { BrushSlider } from './BrushSlider';
 import { ColorWell } from './ColorWell';
 import { Toolbar, ToolbarSettings } from './Toolbar';
-import { drawingChrome } from './drawing-chrome';
+import { TABLET_REFERENCE_CARD_RIGHT, drawingChrome } from './drawing-chrome';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 import { useLayoutTier } from './useLayoutTier';
 import { newId } from './ids';
@@ -105,12 +109,20 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const { status: saveStatus, flush, clearSession } = useAutosave(store, state, !restorePending, pendingSave);
   const [restartError, setRestartError] = useState<string | null>(null);
   const restartingRef = useRef(false);
+  const remeasureRef = useRef<() => void>(() => {});
+  const [resumeToastHidden, setResumeToastHidden] = useState(false);
   // Leaving never waits on storage: the child reaches the picker immediately
   // and the save result follows it there.
   const choosePicture = () => {
     if (restartingRef.current) return;
     onChoosePicture(restorePending ? Promise.resolve(true) : flush(), stateRef.current);
   };
+
+  useEffect(() => {
+    if (notice !== RESUME_NOTICE) return;
+    const timer = window.setTimeout(() => setResumeToastHidden(true), RESUME_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   const step = activeStep(lesson, state);
   const preset = effectiveToolPreset(lesson, state);
   const isColorStep = step.phase === 'color';
@@ -145,8 +157,23 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const placementRef = useRef<PaperPlacement>(CENTERED_PLACEMENT);
   const placement = useMemo(() => {
     if (!viewport || stageBox.height <= 0) return CENTERED_PLACEMENT;
-    return placementForTop(stageBox.height, viewport.cssHeight, drawingChrome(layout, tabletNoticeOpen).top);
-  }, [layout, viewport, stageBox.height, tabletNoticeOpen]);
+    const chrome = drawingChrome(layout, tabletNoticeOpen);
+    const topAligned = placementForTop(stageBox.height, viewport.cssHeight, chrome.top);
+    // The landscape sample card occupies the left margin. Slide the sheet
+    // right of it. The sheet stays the same 4:3 size; only its left edge moves.
+    if (layout === 'tablet' && stageBox.width > stageBox.height) {
+      return placementClearingLeft(
+        stageBox.width,
+        stageBox.height,
+        viewport.cssWidth,
+        viewport.cssHeight,
+        chrome.top,
+        TABLET_REFERENCE_CARD_RIGHT,
+        stageBox.width - 80,
+      );
+    }
+    return topAligned;
+  }, [layout, viewport, stageBox.width, stageBox.height, tabletNoticeOpen]);
 
   const applyView = useCallback((next: CanvasView, commit: boolean) => {
     viewRef.current = next;
@@ -178,18 +205,33 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
       setViewport(
         fitViewport(
           lesson.coordinateSpace,
-          rect.width,
+          Math.max(1, rect.width - chrome.side * 2),
           Math.max(1, rect.height - chrome.top - chrome.bottom),
           window.devicePixelRatio,
         ),
       );
     };
+    remeasureRef.current = measure;
     measure();
 
-    if (typeof ResizeObserver === 'undefined') return;
+    const blockTouch = (event: TouchEvent) => {
+      if (event.cancelable) event.preventDefault();
+    };
+    stage.addEventListener('touchstart', blockTouch, { passive: false });
+    stage.addEventListener('touchmove', blockTouch, { passive: false });
+
+    const release = () => {
+      remeasureRef.current = () => {};
+      stage.removeEventListener('touchstart', blockTouch);
+      stage.removeEventListener('touchmove', blockTouch);
+    };
+    if (typeof ResizeObserver === 'undefined') return release;
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      release();
+    };
   }, [stage, lesson.coordinateSpace, layout, tabletNoticeOpen]);
 
   const paint = useCallback(() => {
@@ -236,7 +278,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const [rejection, setRejection] = useState<string | null>(null);
   const [controlTab, setControlTab] = useState<'drawing' | 'help'>('drawing');
 
-  const discardLiveStroke = () => {
+  const discardLiveStroke = useCallback(() => {
     // A multi-finger gesture must not leave the dot the first finger started.
     // Replay the committed strokes only — no session update, so this stays off
     // the React path the same way a pointermove does.
@@ -246,7 +288,36 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     surface.endStroke();
     surface.replay(toRenderStrokes(stateRef.current.strokes));
     paint();
-  };
+  }, [paint, surfaceRef]);
+
+  useEffect(() => {
+    // A fullscreen or rotation change moves the canvas under the finger.
+    // Samples taken before and after that change are not in the same mapping,
+    // so the line in progress is thrown away instead of saved crooked.
+    let frame = 0;
+    const onViewportChange = () => {
+      if (pendingRef.current || surfaceRef.current?.hasLiveStroke()) {
+        discardLiveStroke();
+      }
+      remeasureRef.current();
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        remeasureRef.current();
+      });
+    };
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', onViewportChange);
+    document.addEventListener('fullscreenchange', onViewportChange);
+    const visual = window.visualViewport;
+    visual?.addEventListener('resize', onViewportChange);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('orientationchange', onViewportChange);
+      document.removeEventListener('fullscreenchange', onViewportChange);
+      visual?.removeEventListener('resize', onViewportChange);
+    };
+  }, [discardLiveStroke, surfaceRef]);
 
   useStrokeInput(canvas, lesson.coordinateSpace, {
     accepts: (pointerType) => acceptsPointerType(state.inputMode, pointerType),
@@ -378,6 +449,22 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     setHintWindow((previous) => ({ key: guideKey, open: true, nonce: previous.nonce + 1 }));
   }, [guideKey]);
 
+  const startOver = () => {
+    if (restartingRef.current) return;
+    restartingRef.current = true;
+    setRestartError(null);
+    setResumeToastHidden(true);
+    void clearSession(reduceSession(lesson, stateRef.current, { type: 'restart' }))
+      .then(() => {
+        setHintWindow({ key: '', open: false, nonce: 0 });
+        dispatch({ type: 'restart' });
+      })
+      .catch(() => setRestartError('Belum bisa mulai gambar baru. Coba lagi.'))
+      .finally(() => {
+        restartingRef.current = false;
+      });
+  };
+
   if (state.finished) {
     return (
       <FinishScreen
@@ -390,27 +477,25 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           dispatch({ type: 'reopen' });
         }}
         onChoosePicture={choosePicture}
-        onStartFresh={() => {
-          if (restartingRef.current) return;
-          restartingRef.current = true;
-          setRestartError(null);
-          void clearSession(reduceSession(lesson, state, { type: 'restart' }))
-            .then(() => {
-              setHintWindow({ key: '', open: false, nonce: 0 });
-              dispatch({ type: 'restart' });
-            })
-            .catch(() => setRestartError('Belum bisa mulai gambar baru. Coba lagi.'))
-            .finally(() => {
-              restartingRef.current = false;
-            });
-        }}
+        onStartFresh={startOver}
         restartError={restartError}
       />
     );
   }
 
+  const sheetBottom = viewport == null
+    ? null
+    : stageBox.height / 2 + placement.offsetY + viewport.cssHeight / 2;
+
   return (
-    <div className="pad">
+    <div
+      className="pad"
+      style={
+        sheetBottom == null
+          ? undefined
+          : ({ '--sheet-bottom': `${Math.round(sheetBottom)}px` } as CSSProperties)
+      }
+    >
       {/* The stage is the whole screen. Controls overlay it; they do not
           reserve a column, so the paper can use every pixel (D-49). */}
       <div className="pad__stage" ref={setStage}>
@@ -461,8 +546,17 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           <ColorWell state={state} preset={preset} dispatch={dispatch} />
         </header>
 
+        {notice === RESUME_NOTICE && !resumeToastHidden && (
+          <div className="resume-toast" role="status">
+            <p>{notice}</p>
+            <button type="button" className="resume-toast__action" onClick={startOver}>
+              Mulai ulang
+            </button>
+          </div>
+        )}
+
         <div className="float-notices">
-          {notice !== null && <p className="banner">{notice}</p>}
+          {notice !== null && notice !== RESUME_NOTICE && <p className="banner">{notice}</p>}
           {!durable && (
             <p className="banner banner--warning">
               Penyimpanan permanen tidak tersedia di browser ini, jadi karya ini hanya bertahan
@@ -478,6 +572,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           {saveStatus.kind === 'failed' && (
             <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
           )}
+          {restartError !== null && (
+            <p className="banner banner--warning" role="alert">{restartError}</p>
+          )}
           {rejection !== null && <p className="banner">{rejection}</p>}
         </div>
 
@@ -488,6 +585,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           dispatch={dispatch}
         />
 
+        <StepReference lesson={lesson} step={step} />
         <div className="step-card">
           <StepPanel lesson={lesson} state={state} step={step} startCollapsed={layout !== 'tablet'} />
         </div>
@@ -519,15 +617,18 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           >
             <span aria-hidden="true">?</span>
           </button>
-          <button
-            type="button"
-            className="chip float-dock__fit"
-            aria-label="Sesuai layar"
-            disabled={view.zoom === 1 && view.panX === 0 && view.panY === 0}
-            onClick={() => applyView(FIT_VIEW, true)}
-          >
-            <span aria-hidden="true">⛶</span>
-          </button>
+          <FullscreenToggle />
+          {(view.zoom !== 1 || view.panX !== 0 || view.panY !== 0) && (
+            <button
+              type="button"
+              className="chip float-dock__fit"
+              aria-label="Sesuai layar"
+              title="Sesuai layar"
+              onClick={() => applyView(FIT_VIEW, true)}
+            >
+              <FitIcon />
+            </button>
+          )}
           <div className="pad__control-panel float-help" data-active={controlTab === 'help'}>
             <ToolbarSettings
               state={state}
@@ -544,6 +645,47 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         </aside>
       </div>
     </div>
+  );
+}
+
+function FitIcon() {
+  return (
+    <svg className="chip-icon" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+      <circle cx="10" cy="10" r="5.5" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M14.2 14.2 L20 20" />
+      <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M10 7.4 v5.2 M8.3 12.6 h3.4" />
+    </svg>
+  );
+}
+
+function FullscreenToggle() {
+  const [active, setActive] = useState(isDocumentFullscreen);
+  useEffect(() => {
+    const sync = () => setActive(isDocumentFullscreen());
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+  return (
+    <button
+      type="button"
+      className="chip float-dock__fullscreen"
+      aria-label={active ? 'Keluar layar penuh' : 'Layar penuh'}
+      aria-pressed={active}
+      onClick={() => {
+        if (isDocumentFullscreen()) exitDocumentFullscreen();
+        else requestDocumentFullscreen();
+      }}
+    >
+      <svg className="chip-icon" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"
+        />
+      </svg>
+    </button>
   );
 }
 

@@ -2,9 +2,10 @@
 
 A tablet-first web app that teaches a child to draw, one small step at a time.
 
-This repository has five hand-authored lessons: "Kucing Duduk" (a sitting
+This repository has six hand-authored lessons: "Kucing Duduk" (a sitting
 cat), "Bunga Ceria" (a smiling flower), "Ikan Lucu" (a cheerful fish),
-"Matahari Ceria" (a smiling sun) and "Pohon Apel" (an apple tree). Each can be
+"Matahari Ceria" (a smiling sun), "Pohon Apel" (an apple tree) and "Bola
+Basket" (a basketball: circle, curved seams, then orange). Each can be
 played from the first line to a saved PNG, with autosave and resume and an
 export containing only the child's drawing.
 
@@ -22,10 +23,13 @@ export containing only the child's drawing.
 - Canvas drawing with Pointer Events, pen / brush / eraser, undo and redo.
 - A full-bleed drawing screen. The paper fills the stage, and the tools, the
   brush-size slider, and the step card float at the edges instead of taking a
-  column beside it. *Bantuan* is an icon, so the label stays inside its button.
+  column beside it. The dock chip is a ? named *Bantuan* and opens the help
+  sheet. The colour circle opens the colours.
   On a phone the step card starts folded, and the slider and tools sit in the
   space under the paper.
-- Brush size is a vertical slider. The active colour is a circle that opens a
+- Brush size is a vertical slider labelled *Ukuran kuas*. A dot above it
+  shows the current size and colour, with a thick mark at the large end and
+  a thin mark at the small end. The active colour is a circle that opens a
   small palette and the last few colours. Each step still starts with its own
   tool, width, and colour, and *Ikuti panduan* returns to the guide colour.
 - Two-finger tap undoes and three-finger tap redoes, as well as the buttons.
@@ -33,11 +37,15 @@ export containing only the child's drawing.
   it does not leave a dot or a line. In pencil mode the fingers can gesture
   while a stylus stroke continues.
 - Pinch to zoom and two-finger drag to pan, with no rotation. *Sesuai layar*
-  fits the paper again. Strokes stay in the 1000×750 lesson space. Export does
-  not include the zoom.
-- The step reference (instruction, progress dots, and a small example that
-  opens larger) sits at the top of the drawing screen, so a hand resting on
-  the lower part does not cover it. *Lanjut* and *Kembali* stay on the bottom
+  (a magnifying glass) appears once the paper is zoomed and fits it again.
+  *Layar penuh* stays the corner-bracket control. Strokes stay in the 1000×750
+  lesson space. Export does not include the zoom.
+- The step reference (instruction and progress dots) sits at the top of the
+  drawing screen, so a hand resting on the lower part does not cover it. The
+  target picture is separate: a 200×150 card at the top-left on a landscape
+  tablet, and a thumbnail on a portrait tablet or a phone. A tap on either
+  opens a large preview. *Lanjut*
+  and *Kembali* stay on the bottom
   edge, with *Lanjut* the large button. On a phone the reference starts
   folded. Finishing a lesson plays a small decoration, which stays still when
   the system asks for less motion.
@@ -47,7 +55,20 @@ export containing only the child's drawing.
   session only: it is not saved, so reopening the app restores the last saved
   drawing.
 - **Pencil mode** (stylus only) and **finger mode**, switchable at any time
-  without losing the drawing.
+  from *Jari* and *Pensil* on the toolbar, without losing the drawing and
+  without opening help.
+- Continuing a saved drawing shows a small toast for about 3 seconds. Drawing
+  is not blocked. *Mulai ulang* on the toast starts that picture over. On a
+  phone the sheet sits between the step card and the tools, and the toast
+  sits below the tools, above *Lanjut*.
+- In finger mode, a touch in the outer 28px of the screen does not start a
+  stroke, and a very large reported contact is ignored. The paper stays inset
+  from the side edges (8px on a portrait phone, 28px otherwise). Opening a
+  picture asks the browser to go fullscreen, and *Layar penuh* asks again. A
+  stroke does not. If the screen changes size during a stroke, that stroke is
+  dropped. An installed copy prefers fullscreen and falls
+  back to standalone. None of this disables Android's own edge gestures
+  (back, home, recents, the notification shade). See D-57.
 - Three assistance levels: dashed guides always visible, guides that fade after
   3/5/10 seconds, or example-in-the-panel only — plus a "show the hint" button
   that is always available.
@@ -196,6 +217,7 @@ own job so one failure still shows the state of the rest.
 | Export containing artwork only | `src/renderer/export.test.ts` |
 | Coordinate mapping across sizes and orientations | `src/renderer/coordinates.test.ts` |
 | Pencil / finger input filter | `src/input/pointer-mode.test.ts` |
+| Finger-mode edge margin and large-contact filter | `src/input/edge-guard.test.ts` |
 | Two-finger and three-finger tap recognition | `src/input/gesture-tracker.test.ts` |
 | Zoom and pan mapped back to lesson coordinates | `src/renderer/view.test.ts` |
 | The picker, leaving and reopening a picture, resume notices, phone tablet notice | `src/App.test.tsx` |
@@ -209,8 +231,8 @@ own job so one failure still shows the state of the rest.
 
 1. `npm run dev`, then open the **Network** URL on the tablet and choose the
    cat picture.
-2. Draw step 1 with a finger. In the *Bantuan* tab, switch to pencil mode and confirm a finger no
-   longer draws while the stylus does.
+2. Draw step 1 with a finger. Tap *Pensil* on the toolbar and confirm a finger no
+   longer draws while the stylus does. Tap *Jari* to switch back.
 3. Walk all nine steps with *Lanjut*, colour the cat, press *Selesai ✓*, then
    *Simpan gambar (PNG)* and confirm the saved file has no dashed guides.
 4. Close the tab, reopen it, and confirm the drawing and the step come back.

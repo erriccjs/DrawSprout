@@ -4,8 +4,10 @@
     <meta charset="UTF-8" />
     <!--
       maximum-scale/user-scalable are deliberately NOT locked: PRD section 10
-      forbids disabling page-level accessibility gestures. Only the canvas
-      surface opts out of browser gestures, via CSS touch-action.
+      forbids disabling page-level accessibility zoom. While a drawing is
+      open, CSS sets touch-action and overscroll-behavior on html and body
+      so the page does not scroll under a stroke. That does not cancel
+      Android system gestures. See D-57.
     -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#1f2933" />

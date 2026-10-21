@@ -14,7 +14,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { CAT_LESSON } from '../lesson-data/cat-lesson';
 import { backingSize, fitViewport } from '../renderer/coordinates';
 import { recordedCalls } from '../test/fake-canvas';
-import { createSession } from '../lesson-engine/session';
+import { createSession, reduceSession } from '../lesson-engine/session';
+import { RESUME_NOTICE, RESUME_TOAST_MS } from './resume-notice';
 import { fromRestoredSession } from '../persistence/mapping';
 import { MemorySessionStore } from '../persistence/memory-store';
 import { drawingChrome } from './drawing-chrome';
@@ -36,16 +37,16 @@ vi.setConfig({ testTimeout: 60_000 });
 
 const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
-function setup() {
+function setup(options?: { readonly notice?: string | null; readonly initialState?: ReturnType<typeof createSession> }) {
   const store = new MemorySessionStore();
-  const initialState = createSession(CAT_LESSON, 'test-session');
+  const initialState = options?.initialState ?? createSession(CAT_LESSON, 'test-session');
   const view = render(
     <DrawingPad
       lesson={CAT_LESSON}
       store={store}
       initialState={initialState}
       durable
-      notice={null}
+      notice={options?.notice ?? null}
       restorePending={false}
       preferencesPending={false}
       pendingSave={null}
@@ -129,8 +130,54 @@ describe('starting a lesson', () => {
     expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Gambar lingkaran besar untuk kepala.' })).toBeTruthy();
     const help = screen.getByRole('button', { name: 'Bantuan' });
-    expect(help.textContent).toContain('?');
-    expect(help.textContent).not.toContain('Bantuan');
+    expect(help.textContent).toBe('?');
+    expect(screen.queryByRole('button', { name: 'Palet warna' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Layar penuh' })).toBeTruthy();
+  });
+
+  it('opens line help from the question mark and leaves colours on the circle', () => {
+    const { view } = setup();
+    const help = screen.getByRole('button', { name: 'Bantuan' });
+    const sheet = () => view.container.querySelector('.float-help');
+    expect(sheet()?.getAttribute('data-active')).toBe('false');
+
+    act(() => help.click());
+    expect(help.getAttribute('aria-expanded')).toBe('true');
+    expect(sheet()?.getAttribute('data-active')).toBe('true');
+    expect(sheet()?.textContent).toMatch(/Tampilkan petunjuk/);
+    expect(sheet()?.textContent).toMatch(/Cara menggambar/);
+
+    act(() => help.click());
+    expect(sheet()?.getAttribute('data-active')).toBe('false');
+
+    act(() => screen.getByRole('button', { name: /Pilih warna/ }).click());
+    expect(screen.getByRole('group', { name: 'Palet' })).toBeTruthy();
+    const popover = view.container.querySelector('.color-well__popover');
+    expect(popover?.textContent).not.toMatch(/Bantuan/);
+  });
+
+  it('switches pencil and finger from the toolbar while help is closed', () => {
+    const { view } = setup();
+    expect(view.container.querySelector('.float-help')?.getAttribute('data-active')).toBe('false');
+    const finger = screen.getByRole('button', { name: 'Mode jari' });
+    const pencil = screen.getByRole('button', { name: 'Mode pensil' });
+    expect(finger.getAttribute('aria-pressed')).toBe('true');
+    expect(finger.getAttribute('title')).toBe('Jari');
+    expect(pencil.getAttribute('title')).toBe('Pensil');
+    expect(finger.textContent?.trim()).toBe('');
+    expect(pencil.textContent?.trim()).toBe('');
+    expect(finger.querySelector('svg')).toBeTruthy();
+    expect(pencil.querySelector('svg')).toBeTruthy();
+    const modeGroup = finger.closest('.toolbar__group--mode');
+    expect(modeGroup).toBeTruthy();
+    expect(modeGroup?.querySelectorAll('button')).toHaveLength(2);
+
+    act(() => pencil.click());
+
+    expect(pencil.getAttribute('aria-pressed')).toBe('true');
+    expect(finger.getAttribute('aria-pressed')).toBe('false');
+    expect(view.container.querySelector('.float-help')?.getAttribute('data-active')).toBe('false');
+    expect(screen.getAllByRole('button', { name: 'Mode pensil' })).toHaveLength(1);
   });
 
   it('shows the dashed guide for the active step only', () => {
@@ -144,6 +191,95 @@ describe('starting a lesson', () => {
     setup();
     expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: /Ulangi/ }).hasAttribute('disabled')).toBe(true);
+  });
+});
+
+function fittedBacking(width: number, height: number) {
+  const chrome = drawingChrome(layoutTier(window.innerWidth, window.innerHeight), false);
+  return backingSize(
+    fitViewport(
+      CAT_LESSON.coordinateSpace,
+      Math.max(1, width - chrome.side * 2),
+      Math.max(1, height - chrome.top - chrome.bottom),
+      window.devicePixelRatio || 1,
+    ),
+  );
+}
+
+describe('fullscreen and a resizing screen', () => {
+  const originalRequest = document.documentElement.requestFullscreen;
+  const originalViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+
+  beforeEach(() => {
+    if (window.visualViewport) return;
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: new EventTarget(),
+    });
+  });
+
+  afterEach(() => {
+    document.documentElement.requestFullscreen = originalRequest;
+    if (originalViewport) Object.defineProperty(window, 'visualViewport', originalViewport);
+    else Reflect.deleteProperty(window, 'visualViewport');
+  });
+
+  it('draws without asking for fullscreen, and Layar penuh still asks', () => {
+    document.documentElement.requestFullscreen = vi.fn(() => Promise.resolve());
+    const { canvas } = setup();
+
+    act(() =>
+      drawStroke(canvas, [
+        { x: 40, y: 40 },
+        { x: 90, y: 70 },
+      ]),
+    );
+
+    expect(document.documentElement.requestFullscreen).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+
+    act(() => screen.getByRole('button', { name: 'Layar penuh' }).click());
+    expect(document.documentElement.requestFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['resize', () => window.dispatchEvent(new Event('resize'))],
+    ['orientationchange', () => window.dispatchEvent(new Event('orientationchange'))],
+    ['fullscreenchange', () => document.dispatchEvent(new Event('fullscreenchange'))],
+    ['visualViewport resize', () => window.visualViewport?.dispatchEvent(new Event('resize'))],
+  ])('drops the stroke in progress when %s fires and fits the canvas again', async (_label, fire) => {
+    const { store, canvas } = setup();
+    const before = canvas.width;
+
+    act(() => {
+      pointerDown(canvas, { x: 100, y: 100 });
+      pointerMove(canvas, { x: 180, y: 140 });
+    });
+
+    stubLayoutBox(800, 600);
+    act(() => {
+      fire();
+    });
+    act(() => pointerUp(canvas, { x: 220, y: 180 }));
+
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
+    const expected = fittedBacking(800, 600);
+    expect(canvas.width).toBe(expected.width);
+    expect(canvas.height).toBe(expected.height);
+    expect(canvas.width).not.toBe(before);
+
+    act(() =>
+      drawStroke(canvas, [
+        { x: 80, y: 60 },
+        { x: 160, y: 120 },
+      ]),
+    );
+    await waitFor(async () => {
+      const restored = await store.loadSession('test-session');
+      expect(restored?.strokes).toHaveLength(1);
+    });
+    const restored = await store.loadSession('test-session');
+    expect(fromRestoredSession(restored!).strokes[0]!.points[0]).toEqual({ x: 100, y: 75 });
   });
 });
 
@@ -321,6 +457,83 @@ describe('drawing', () => {
   });
 });
 
+describe('resume toast', () => {
+  it('lets the child keep drawing while the toast is up, then hides it', () => {
+    vi.useFakeTimers();
+    try {
+      const { canvas } = setup({ notice: RESUME_NOTICE });
+      expect(screen.getByText(RESUME_NOTICE)).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Mulai ulang' })).toBeTruthy();
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      act(() => drawStroke(canvas, [{ x: 160, y: 160 }, { x: 240, y: 200 }]));
+      expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+
+      act(() => {
+        vi.advanceTimersByTime(RESUME_TOAST_MS);
+      });
+      expect(screen.queryByText(RESUME_NOTICE)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts over from Mulai ulang without a modal question', async () => {
+    const restored = reduceSession(CAT_LESSON, createSession(CAT_LESSON, 'test-session'), { type: 'next-step' });
+    setup({ notice: RESUME_NOTICE, initialState: restored });
+    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+
+    act(() => screen.getByRole('button', { name: 'Mulai ulang' }).click());
+
+    await waitFor(() => {
+      expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeNull();
+  });
+});
+
+describe('finger-mode edge and palm', () => {
+  it('does not start a touch stroke in the screen margin or from a large contact', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
+    const { canvas } = setup();
+    const undo = () => screen.getByRole('button', { name: /Batalkan/ });
+
+    act(() =>
+      drawStroke(canvas, [{ x: 8, y: 200 }, { x: 80, y: 240 }], { pointerType: 'touch', pointerId: 31 }),
+    );
+    expect(undo().hasAttribute('disabled')).toBe(true);
+
+    act(() =>
+      drawStroke(
+        canvas,
+        [{ x: 240, y: 240 }, { x: 300, y: 280 }],
+        { pointerType: 'touch', pointerId: 32, width: 120, height: 90 },
+      ),
+    );
+    expect(undo().hasAttribute('disabled')).toBe(true);
+
+    act(() =>
+      drawStroke(canvas, [{ x: 240, y: 240 }, { x: 320, y: 300 }], { pointerType: 'touch', pointerId: 33, width: 22, height: 28 }),
+    );
+    expect(undo().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('still explains a touch in pencil mode instead of treating it as a palm', () => {
+    const { canvas } = setup();
+    act(() => screen.getByRole('button', { name: 'Mode pensil' }).click());
+    act(() =>
+      drawStroke(
+        canvas,
+        [{ x: 240, y: 240 }, { x: 300, y: 280 }],
+        { pointerType: 'touch', pointerId: 34, width: 140, height: 100 },
+      ),
+    );
+    expect(screen.getByText(/Mode pensil: gambar dengan stylus/)).toBeTruthy();
+  });
+});
+
 describe('finger gestures', () => {
   function tapFingers(target: Element, count: number): void {
     act(() => {
@@ -415,7 +628,7 @@ describe('pinch and pan', () => {
     const canvas = stageCanvas(view.container);
     const frame = view.container.querySelector('.stage__frame');
     expect(frame?.querySelector('.guide-overlay')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Sesuai layar' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Sesuai layar' })).toBeNull();
 
     const afterMount = commits;
     act(() => {
@@ -434,10 +647,11 @@ describe('pinch and pan', () => {
       pointerUp(canvas, { x: 200, y: 300 }, { pointerId: 1, pointerType: 'touch' });
     });
     const fit = screen.getByRole('button', { name: 'Sesuai layar' });
-    expect(fit.hasAttribute('disabled')).toBe(false);
+    expect(fit.querySelector('svg')).toBeTruthy();
+    expect(fit.textContent).not.toContain('⛶');
     act(() => fit.click());
     expect((frame as HTMLElement).style.transform).toContain('scale(1)');
-    expect(screen.getByRole('button', { name: 'Sesuai layar' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Sesuai layar' })).toBeNull();
     // The guide is still a child of the transformed frame, so it cannot drift
     // from the paper. Export never reads this transform.
     expect(frame?.querySelector('.guide-overlay')).toBeTruthy();
@@ -685,13 +899,23 @@ describe('navigation and colouring', () => {
 
   it('draws at the slider width, then takes the next step\'s own width (FR-03)', async () => {
     const { store, canvas } = setup();
-    const slider = screen.getByRole('slider', { name: 'Ketebalan' });
+    const slider = screen.getByRole('slider', { name: 'Ukuran kuas' });
     expect(slider.getAttribute('aria-valuetext')).toBe('Ukuran langkah');
+    const dot = () => document.querySelector<HTMLElement>('.brush-slider__dot')!;
+    expect(dot().style.backgroundColor).toBeTruthy();
+    const thin = Number.parseFloat(dot().style.width);
 
     act(() => {
       fireEvent.change(slider, { target: { value: '12' } });
     });
-    expect(screen.getByRole('slider', { name: 'Ketebalan' }).getAttribute('aria-valuetext')).toBe(
+    expect(Number.parseFloat(dot().style.width)).toBeGreaterThan(thin);
+    const ink = dot().style.backgroundColor;
+    act(() => screen.getByRole('button', { name: /Pilih warna/ }).click());
+    act(() => screen.getByRole('button', { name: 'Warna Merah' }).click());
+    const red = dot().style.backgroundColor.replace(/\s/g, '').toLowerCase();
+    expect(red).not.toBe(ink.replace(/\s/g, '').toLowerCase());
+    expect(red).toMatch(/e8552d|232,85,45/);
+    expect(screen.getByRole('slider', { name: 'Ukuran kuas' }).getAttribute('aria-valuetext')).toBe(
       'Ukuran pilihanku',
     );
 
@@ -703,7 +927,7 @@ describe('navigation and colouring', () => {
 
     act(() => screen.getByRole('button', { name: /Lanjut/ }).click());
     const nextWidth = String(CAT_LESSON.steps[1]!.toolPreset.widthViewbox);
-    expect(screen.getByRole('slider', { name: 'Ketebalan' }).getAttribute('value')).toBe(nextWidth);
+    expect(screen.getByRole('slider', { name: 'Ukuran kuas' }).getAttribute('value')).toBe(nextWidth);
   });
 
   it('keeps a chosen colour when the step changes (FR-04, AT-02)', () => {
@@ -805,7 +1029,7 @@ describe('finishing', () => {
     const expected = backingSize(
       fitViewport(
         CAT_LESSON.coordinateSpace,
-        TEST_CANVAS_RECT.width,
+        TEST_CANVAS_RECT.width - chrome.side * 2,
         TEST_CANVAS_RECT.height - chrome.top - chrome.bottom,
         1,
       ),
@@ -1119,7 +1343,7 @@ describe('clearing the whole drawing', () => {
     chooseEraser();
     // Inside the tool group, below the three tools, so it reads as the
     // eraser's own action rather than as another tool to choose.
-    const group = view.container.querySelector<HTMLFieldSetElement>('.toolbar__group')!;
+    const group = view.container.querySelector<HTMLFieldSetElement>('.toolbar__group--tools')!;
     expect(group.contains(clearAll())).toBe(true);
     expect(group.querySelectorAll('[aria-pressed]')).toHaveLength(3);
     expect(clearAll().hasAttribute('aria-pressed')).toBe(false);

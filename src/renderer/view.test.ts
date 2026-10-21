@@ -7,6 +7,8 @@ import {
   clampView,
   frameVisualRect,
   pinchView,
+  placementClearingLeft,
+  placementForBottom,
   placementForTop,
   stagePointToSpace,
   viewTransformCss,
@@ -142,6 +144,24 @@ describe('canvas view mapping', () => {
     expect(Math.abs(high.panX)).toBeLessThan(5000);
     expect(Math.abs(high.panY)).toBeLessThan(5000);
     expect(clampView({ zoom: Number.NaN, panX: Number.NaN, panY: 0 }, 800, 600, 800, 600)).toEqual(FIT_VIEW);
+  });
+
+  it('rests a short sheet on the bottom of the free band', () => {
+    const stageHeight = 844;
+    const fittedHeight = 250;
+    const bottom = 276;
+    const placement = placementForBottom(stageHeight, fittedHeight, bottom);
+    const rect = frameVisualRect(390, stageHeight, 334, fittedHeight, FIT_VIEW, placement);
+    expect(rect.top + rect.height).toBeCloseTo(stageHeight - bottom, 5);
+    expect(rect.top).toBeGreaterThan(124);
+  });
+
+  it('slides a landscape sheet right of a 200px sample card', () => {
+    const placement = placementClearingLeft(1024, 768, 672, 504, 168, 220, 1024 - 80);
+    const rect = frameVisualRect(1024, 768, 672, 504, FIT_VIEW, placement);
+    expect(rect.left).toBeCloseTo(220, 5);
+    expect(rect.top).toBeCloseTo(168, 5);
+    expect(rect.left + rect.width).toBeLessThanOrEqual(1024 - 80);
   });
 
   it('can rest the paper higher on the stage and still map a pinch', () => {
