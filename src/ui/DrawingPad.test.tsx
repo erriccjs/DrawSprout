@@ -129,11 +129,31 @@ describe('starting a lesson', () => {
     setup();
     expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Gambar lingkaran besar untuk kepala.' })).toBeTruthy();
-    const palette = screen.getByRole('button', { name: 'Palet warna' });
-    expect(palette.querySelector('svg')).toBeTruthy();
-    expect(palette.textContent).not.toContain('?');
-    expect(screen.getByRole('button', { name: 'Bantuan' })).toBeTruthy();
+    const help = screen.getByRole('button', { name: 'Bantuan' });
+    expect(help.textContent).toBe('?');
+    expect(screen.queryByRole('button', { name: 'Palet warna' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Layar penuh' })).toBeTruthy();
+  });
+
+  it('opens line help from the question mark and leaves colours on the circle', () => {
+    const { view } = setup();
+    const help = screen.getByRole('button', { name: 'Bantuan' });
+    const sheet = () => view.container.querySelector('.float-help');
+    expect(sheet()?.getAttribute('data-active')).toBe('false');
+
+    act(() => help.click());
+    expect(help.getAttribute('aria-expanded')).toBe('true');
+    expect(sheet()?.getAttribute('data-active')).toBe('true');
+    expect(sheet()?.textContent).toMatch(/Tampilkan petunjuk/);
+    expect(sheet()?.textContent).toMatch(/Cara menggambar/);
+
+    act(() => help.click());
+    expect(sheet()?.getAttribute('data-active')).toBe('false');
+
+    act(() => screen.getByRole('button', { name: /Pilih warna/ }).click());
+    expect(screen.getByRole('group', { name: 'Palet' })).toBeTruthy();
+    const popover = view.container.querySelector('.color-well__popover');
+    expect(popover?.textContent).not.toMatch(/Bantuan/);
   });
 
   it('switches pencil and finger from the toolbar while help is closed', () => {

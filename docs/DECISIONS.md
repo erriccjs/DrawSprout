@@ -748,16 +748,18 @@ down the middle, the two curved seams at the sides, then orange colour on
 the ball. The picker preview is those outline paths. The package is
 validated with the others and listed on `BUNDLED_LESSONS`.
 
-### D-59 — The dock chip is the palette
+### D-59 — The dock chip is help
 
-The dock chip was a question mark named *Bantuan*. That is the control
-people used when they wanted to change colour (D-49).
+The dock chip was briefly a palette, because people had been opening
+*Bantuan* when they wanted a colour (D-49). The colour circle already opens
+those choices, so a second palette control was redundant.
 
-**Choice.** The dock chip is a palette icon. Its accessible name is "Palet
-warna". It opens the same colour popover as the circle in the header.
-*Bantuan* is a button inside that popover and opens the help sheet
-(assistance, the mode explanation, and boundary assist on a colour step).
-The header circle still changes colour on its own.
+**Choice.** The dock chip is a `?` again. Its accessible name is "Bantuan".
+One tap opens the help sheet: assistance, the mode explanation, and boundary
+assist on a colour step. A second tap closes it. The chip is the same size
+as the other dock icons, 56px on a tablet and 48px on a portrait phone, so
+the dock does not grow. The colour circle is the only control that opens
+colours. The colour popover has no *Bantuan* button.
 
 ### D-61 — Brush size is visible, and the example leaves the instruction card
 

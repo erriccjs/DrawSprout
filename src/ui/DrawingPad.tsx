@@ -110,7 +110,6 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const [restartError, setRestartError] = useState<string | null>(null);
   const restartingRef = useRef(false);
   const remeasureRef = useRef<() => void>(() => {});
-  const [paletteSignal, setPaletteSignal] = useState(0);
   const [resumeToastHidden, setResumeToastHidden] = useState(false);
   // Leaving never waits on storage: the child reaches the picker immediately
   // and the save result follows it there.
@@ -544,13 +543,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           <p className="pad__status" role="status">
             {statusLabel(saveStatus, durable)}
           </p>
-          <ColorWell
-            state={state}
-            preset={preset}
-            dispatch={dispatch}
-            openSignal={paletteSignal}
-            onOpenHelp={() => setControlTab('help')}
-          />
+          <ColorWell state={state} preset={preset} dispatch={dispatch} />
         </header>
 
         {notice === RESUME_NOTICE && !resumeToastHidden && (
@@ -616,11 +609,13 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           </div>
           <button
             type="button"
-            className="chip float-dock__palette"
-            aria-label="Palet warna"
-            onClick={() => setPaletteSignal((value) => value + 1)}
+            className="chip float-dock__help"
+            aria-label="Bantuan"
+            aria-pressed={controlTab === 'help'}
+            aria-expanded={controlTab === 'help'}
+            onClick={() => setControlTab((tab) => (tab === 'help' ? 'drawing' : 'help'))}
           >
-            <PaletteIcon />
+            <span aria-hidden="true">?</span>
           </button>
           <FullscreenToggle />
           {(view.zoom !== 1 || view.panX !== 0 || view.panY !== 0) && (
@@ -650,21 +645,6 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         </aside>
       </div>
     </div>
-  );
-}
-
-function PaletteIcon() {
-  return (
-    <svg className="chip-icon" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M12 3a9 9 0 1 0 0 18h1.1a2.2 2.2 0 0 0 1.7-3.6 1.5 1.5 0 0 1 1.2-2.4H17a4 4 0 0 0 4-4A9 9 0 0 0 12 3z"
-      />
-      <circle cx="7.5" cy="10" r="1.3" fill="#e24b4b" />
-      <circle cx="10.2" cy="7.1" r="1.3" fill="#f0b429" />
-      <circle cx="14" cy="7.1" r="1.3" fill="#3d9a5f" />
-      <circle cx="16.4" cy="10.2" r="1.3" fill="#3d6bdb" />
-    </svg>
   );
 }
 

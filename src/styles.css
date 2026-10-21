@@ -310,7 +310,7 @@ html:has(.pad) body {
   box-shadow: 0 8px 24px rgba(31, 41, 51, 0.16);
 }
 
-.float-dock__palette,
+.float-dock__help,
 .float-dock__fullscreen,
 .float-dock__fit {
   background: rgba(255, 255, 255, 0.94);
@@ -411,7 +411,7 @@ html:has(.pad) body {
 
 .float-dock .toolbar__group--tools .chip:not(.chip--wide),
 .float-dock .toolbar__group--history .chip,
-.float-dock__palette,
+.float-dock__help,
 .float-dock__fullscreen,
 .float-dock__fit {
   width: 56px;
@@ -1006,7 +1006,8 @@ html:has(.pad) body {
 /* Icon buttons in the dock are too small for a check glyph. The fill and the
    border are the pressed state, for the mode box, the tools, and fullscreen. */
 .float-dock .toolbar:not(.toolbar--settings) .chip[aria-pressed='true']::after,
-.float-dock__fullscreen[aria-pressed='true']::after {
+.float-dock__fullscreen[aria-pressed='true']::after,
+.float-dock__help[aria-pressed='true']::after {
   content: none;
 }
 
@@ -2094,7 +2095,7 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 
 .shell[data-layout='phone-portrait'] .float-dock .toolbar__group--tools .chip:not(.chip--wide),
 .shell[data-layout='phone-portrait'] .float-dock .toolbar__group--history .chip,
-.shell[data-layout='phone-portrait'] .float-dock__palette,
+.shell[data-layout='phone-portrait'] .float-dock__help,
 .shell[data-layout='phone-portrait'] .float-dock__fullscreen,
 .shell[data-layout='phone-portrait'] .float-dock__fit {
   width: 48px;
