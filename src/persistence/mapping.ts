@@ -22,6 +22,9 @@ export function toCheckpoint(state: SessionState, revision: number, now: number)
     toolPreferences: state.toolPreferences,
     nextSequence: state.nextSequence,
     finished: state.finished,
+    // Absent on older checkpoints. Readers treat a missing flag as false, so
+    // the schema version stays put (a bump would refuse every saved drawing).
+    freeCreation: state.freeCreation,
     committedStrokeIds: state.strokes.map((stroke) => stroke.id),
     redoStrokeIds: state.redoStack.map((stroke) => stroke.id),
   };
@@ -77,6 +80,8 @@ export function fromRestoredSession(restored: RestoredSession): SessionState {
     // back. Until new work lands, the stored drawing is what the saved
     // checkpoint still holds (see `saveProgress`), so nothing is lost either.
     clearedArtworks: [],
+    clearedSteps: [],
+    freeCreation: checkpoint.freeCreation === true,
     finished: checkpoint.finished,
   };
 }

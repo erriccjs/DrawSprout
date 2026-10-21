@@ -56,6 +56,17 @@ export interface ClearedArtwork {
   readonly redoStack: readonly Stroke[];
 }
 
+/**
+ * Strokes a `clear-step` took off one step. One undo puts that step back and
+ * leaves every other step alone. Like `ClearedArtwork`, this lives only in the
+ * open session.
+ */
+export interface ClearedStep {
+  readonly stepId: string;
+  readonly strokes: readonly Stroke[];
+  readonly redoStack: readonly Stroke[];
+}
+
 /** How much help the lesson shows (PRD section 3, FR-06..FR-08). */
 export type AssistanceMode = 'visible' | 'temporary' | 'independent';
 
@@ -79,8 +90,8 @@ export interface ToolPreferences {
   readonly colorBoundaryAssist: boolean;
 }
 
-/** PRD section 12 session state machine, minus the deferred `free_creation`. */
-export type SessionPhase = 'not_started' | 'drawing' | 'coloring' | 'completed';
+/** PRD section 12 session state machine, including free drawing after the last step. */
+export type SessionPhase = 'not_started' | 'drawing' | 'coloring' | 'free_creation' | 'completed';
 
 export interface SessionState {
   readonly sessionId: string;
@@ -104,6 +115,14 @@ export interface SessionState {
    * time, and clears stack so a later one never buries an earlier one.
    */
   readonly clearedArtworks: readonly ClearedArtwork[];
+  /** Per-step clears, most recent last. See `ClearedStep`. */
+  readonly clearedSteps: readonly ClearedStep[];
+  /**
+   * After the last guided step the child can keep drawing with no canvas
+   * guide. Strokes from that phase use `FREE_STEP_ID`, so repeating the free
+   * phase does not delete the lesson strokes.
+   */
+  readonly freeCreation: boolean;
   /** Set only by the explicit finish action; never inferred from the drawing (PRD section 12). */
   readonly finished: boolean;
 }
@@ -138,4 +157,9 @@ export type SessionAction =
   | { readonly type: 'set-boundary-assist'; readonly enabled: boolean }
   | { readonly type: 'finish' }
   | { readonly type: 'reopen' }
-  | { readonly type: 'restart' };
+  | { readonly type: 'restart' }
+  /** Last step only. Clears `finished` so a completed picture can continue. */
+  | { readonly type: 'enter-free-creation' }
+  | { readonly type: 'leave-free-creation' }
+  /** Removes the active step's strokes as one undoable action. Other steps stay. */
+  | { readonly type: 'clear-step' };

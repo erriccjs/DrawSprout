@@ -18,6 +18,7 @@ import {
   activeStep,
   canRedo,
   canUndo,
+  drawingStepId,
   effectiveToolPreset,
   guideOverlayMode,
   reduceSession,
@@ -49,7 +50,7 @@ import { exitDocumentFullscreen, isDocumentFullscreen, requestDocumentFullscreen
 import { RESUME_NOTICE, RESUME_TOAST_MS } from './resume-notice';
 import { FinishScreen } from './FinishScreen';
 import { GuideOverlay } from './GuideOverlay';
-import { StepControls, StepNavigation, StepPanel } from './StepPanel';
+import { LessonEdits, StepControls, StepNavigation, StepPanel } from './StepPanel';
 import { StepReference } from './StepReference';
 import { BrushSlider } from './BrushSlider';
 import { ColorWell } from './ColorWell';
@@ -124,8 +125,17 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     return () => window.clearTimeout(timer);
   }, [notice]);
   const step = activeStep(lesson, state);
+  const shownStep = state.freeCreation
+    ? {
+        ...step,
+        instruction: 'Gambar bebas.',
+        hint: 'Semua alat dan warna bisa dipakai. Tidak ada garis panduan.',
+        guidePaths: [],
+        colorRegionIds: [],
+      }
+    : step;
   const preset = effectiveToolPreset(lesson, state);
-  const isColorStep = step.phase === 'color';
+  const isColorStep = !state.freeCreation && step.phase === 'color';
 
   const { assistanceMode, hintDurationMs, inputMode, toolPreferences } = state;
   const preferences = useMemo<SessionPreferences>(
@@ -373,8 +383,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         // An eraser is never confined to a colour region: the child has to be
         // able to take back anything they drew.
         clipPathIds: resolved.tool === 'eraser' ? [] : activeClipRegionIds(lesson, state),
+        eraseAll: state.freeCreation && resolved.tool === 'eraser',
       };
-      pendingRef.current = { spec, stepId: step.id, tool: resolved.tool };
+      pendingRef.current = { spec, stepId: drawingStepId(lesson, state), tool: resolved.tool };
       surface.beginStroke(spec, point);
       schedulePaint();
     },
@@ -476,6 +487,11 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           setRestartError(null);
           dispatch({ type: 'reopen' });
         }}
+        onDrawFreely={() => {
+          if (restartingRef.current) return;
+          setRestartError(null);
+          dispatch({ type: 'enter-free-creation' });
+        }}
         onChoosePicture={choosePicture}
         onStartFresh={startOver}
         restartError={restartError}
@@ -516,13 +532,13 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
             ref={setCanvas}
             className="stage__canvas"
             role="img"
-            aria-label={`Kanvas gambar. ${step.instruction}`}
+            aria-label={`Kanvas gambar. ${shownStep.instruction}`}
           />
           {viewport && (
             <GuideOverlay
               space={lesson.coordinateSpace}
-              paths={step.guidePaths}
-              visible={guidesVisible}
+              paths={shownStep.guidePaths}
+              visible={guidesVisible && !state.freeCreation}
               widthCss={viewport.cssWidth}
               heightCss={viewport.cssHeight}
             />
@@ -585,9 +601,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           dispatch={dispatch}
         />
 
-        <StepReference lesson={lesson} step={step} />
+        <StepReference lesson={lesson} step={shownStep} />
         <div className="step-card">
-          <StepPanel lesson={lesson} state={state} step={step} startCollapsed={layout !== 'tablet'} />
+          <StepPanel lesson={lesson} state={state} step={shownStep} startCollapsed={layout !== 'tablet'} />
         </div>
         <div className="step-nav">
           <StepNavigation
@@ -641,6 +657,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
               onShowHint={showHint}
               dispatch={dispatch}
             />
+            <LessonEdits lesson={lesson} state={state} dispatch={dispatch} onRestart={startOver} />
           </div>
         </aside>
       </div>

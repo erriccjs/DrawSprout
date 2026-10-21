@@ -31,6 +31,7 @@ describe('the finish celebration', () => {
         state={createSession(CAT_LESSON, 'finish')}
         clipPaths={{}}
         onKeepDrawing={() => undefined}
+        onDrawFreely={() => undefined}
         onChoosePicture={() => undefined}
         onStartFresh={() => undefined}
         restartError={null}

@@ -190,7 +190,7 @@ describe('starting a lesson', () => {
   it('starts with nothing to undo or redo', () => {
     setup();
     expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: /Ulangi/ }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Ulangi' }).hasAttribute('disabled')).toBe(true);
   });
 });
 
@@ -301,7 +301,7 @@ describe('drawing', () => {
     act(() => undo.click());
     await waitFor(() => expect(undo.hasAttribute('disabled')).toBe(true));
 
-    const redo = screen.getByRole('button', { name: /Ulangi/ });
+    const redo = screen.getByRole('button', { name: 'Ulangi' });
     expect(redo.hasAttribute('disabled')).toBe(false);
     act(() => redo.click());
     await waitFor(() => expect(undo.hasAttribute('disabled')).toBe(false));
@@ -457,6 +457,51 @@ describe('drawing', () => {
   });
 });
 
+describe('in-lesson edits and free drawing', () => {
+  it('clears only this step from the help sheet, and undo puts the strokes back', () => {
+    const { canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 80, y: 80 }, { x: 160, y: 140 }]));
+    act(() => screen.getByRole('button', { name: 'Bantuan' }).click());
+    const repeat = screen.getByRole('button', { name: 'Ulangi langkah ini' });
+    expect(repeat.hasAttribute('disabled')).toBe(false);
+    act(() => repeat.click());
+    expect(screen.getByRole('button', { name: 'Ulangi langkah ini' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    act(() => screen.getByRole('button', { name: /Batalkan/ }).click());
+    expect(screen.getByRole('button', { name: 'Ulangi langkah ini' }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('asks before Mulai ulang and leaves the drawing when the child declines', () => {
+    const { canvas } = setup();
+    act(() => drawStroke(canvas, [{ x: 80, y: 80 }, { x: 160, y: 140 }]));
+    act(() => screen.getByRole('button', { name: 'Bantuan' }).click());
+    act(() => screen.getByRole('button', { name: 'Mulai ulang karya' }).click());
+    expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
+    expect(screen.queryByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('offers free drawing on the last step with no canvas guide and every tool', () => {
+    let state = createSession(CAT_LESSON, 'test-session');
+    for (let index = 1; index < CAT_LESSON.steps.length; index += 1) {
+      state = reduceSession(CAT_LESSON, state, { type: 'next-step' });
+    }
+    setup({ initialState: state });
+    expect(document.querySelector('.guide-overlay')?.getAttribute('data-visible')).toBe('true');
+    act(() => screen.getByRole('button', { name: 'Bantuan' }).click());
+    act(() => screen.getByRole('button', { name: 'Gambar bebas' }).click());
+    expect(screen.getByRole('heading', { name: 'Gambar bebas.' })).toBeTruthy();
+    expect(document.querySelector('.guide-overlay')?.getAttribute('data-visible')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Pen' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Kuas' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Penghapus' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Pilih warna/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Gambar bebas' })).toBeNull();
+  });
+});
+
 describe('resume toast', () => {
   it('lets the child keep drawing while the toast is up, then hides it', () => {
     vi.useFakeTimers();
@@ -557,7 +602,7 @@ describe('finger gestures', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
     });
-    expect(screen.getByRole('button', { name: /Ulangi/ }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Ulangi' }).hasAttribute('disabled')).toBe(false);
 
     tapFingers(canvas, 3);
     await waitFor(() => {
@@ -566,7 +611,7 @@ describe('finger gestures', () => {
 
     act(() => screen.getByRole('button', { name: /Batalkan/ }).click());
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Ulangi/ }).hasAttribute('disabled')).toBe(false);
+      expect(screen.getByRole('button', { name: 'Ulangi' }).hasAttribute('disabled')).toBe(false);
     });
   });
 

@@ -30,6 +30,11 @@ export interface RenderStroke {
   /** `true` cuts out of the layer instead of adding to it. */
   readonly erase: boolean;
   /**
+   * When set, an eraser cuts both the ink layer and the colour layer. Used for
+   * free drawing, where a stroke is not tied to one lesson phase.
+   */
+  readonly eraseAll?: boolean;
+  /**
    * Ids registered via `setClipPaths`. When non-empty the stroke is confined to
    * the union of those paths. Empty means unconstrained.
    */
