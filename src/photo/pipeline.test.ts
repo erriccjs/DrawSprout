@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { lessonPieces } from './lesson-build';
 import type { ImageEditor, InstructionRequest, InstructionWriter } from './openai';
 import { decodePng, encodePng, type RgbaImage } from './png';
 import { runPhotoPipeline } from './pipeline';
+import { traceInk } from './trace';
 
 function frame(): RgbaImage {
   const width = 48;
@@ -107,4 +109,76 @@ describe('photo pipeline wiring', () => {
     expect(decoded.data[1]).toBe(255);
     expect(decoded.data[2]).toBe(255);
   });
+
+  it('erases one planned part when the harness asks, and does not call that a redraw', async () => {
+    const full = marked(true);
+    const bare = marked(false);
+    const fullPng = await encodePng(full);
+    const barePng = await encodePng(bare);
+    const pieces = lessonPieces(traceInk(full), full.width, full.height);
+    const body = pieces.reduce((best, piece) => (piece.width * piece.height > best.width * best.height ? piece : best));
+    const eye = pieces.find((piece) => piece !== body);
+    if (!eye) throw new Error('expected a separate eye');
+    const keys: string[] = [];
+    const images: ImageEditor = {
+      edit(input) {
+        keys.push(input.idempotencyKey);
+        if (input.instruction) {
+          expect(input.quality).toBe('low');
+          expect(input.instruction).toContain('Erase only');
+          return Promise.resolve({ png: barePng, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } });
+        }
+        return Promise.resolve({ png: fullPng, usage: null });
+      },
+    };
+    const instructions: InstructionWriter = {
+      write() {
+        return Promise.resolve({
+          sameSubject: true,
+          subject: 'Wajah',
+          title: 'Wajah',
+          parts: [
+            { name: 'wajah', pair: false, x: body.x, y: body.y, width: body.width, height: body.height, points: [], colorName: 'abu-abu', pieceIds: [], count: 1, shape: 'oval', order: 1 },
+            { name: 'mata', pair: false, x: eye.x - 8, y: eye.y - 8, width: eye.width + 16, height: eye.height + 16, points: [], colorName: 'hitam', pieceIds: [], count: 1, shape: 'circle', order: 2, dependsOn: 'wajah' },
+          ],
+          usage: null,
+        });
+      },
+    };
+    const result = await runPhotoPipeline({
+      png: fullPng,
+      variant: 'simple',
+      idempotencyKey: 'reverse-key',
+      signal: AbortSignal.timeout(5_000),
+      textModel: 'gpt-4.1-mini',
+      lessonId: 'photo-reverse',
+      stepMode: 'both',
+    }, { images, instructions });
+    expect(result.regenerated).toBe(false);
+    expect(result.stepMode).toBe('both');
+    expect(keys.some((key) => key.endsWith('-erase-1'))).toBe(true);
+    expect(result.imageCalls).toBe(3);
+    expect(result.reverseStages.length).toBeGreaterThanOrEqual(2);
+    expect(result.lesson.steps.some((step) => step.instruction.includes('mata'))).toBe(true);
+    expect(result.reverseLesson?.steps.some((step) => step.instruction.includes('mata'))).toBe(true);
+  });
 });
+
+function marked(eye: boolean): RgbaImage {
+  const width = 80;
+  const height = 64;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const border = x >= 8 && x < 72 && y >= 8 && y < 56 && (x < 12 || x >= 68 || y < 12 || y >= 52);
+      const mark = eye && x >= 34 && x < 48 && y >= 26 && y < 40;
+      const on = border || mark;
+      const index = (y * width + x) * 4;
+      data[index] = on ? 0 : 255;
+      data[index + 1] = on ? 0 : 255;
+      data[index + 2] = on ? 0 : 255;
+      data[index + 3] = 255;
+    }
+  }
+  return { width, height, data };
+}

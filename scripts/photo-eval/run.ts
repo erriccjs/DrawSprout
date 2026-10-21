@@ -5,6 +5,14 @@
  *   OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --out <directory>
  *   REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --provider replicate --model <id>
  *   npm run photo-eval -- <photo-directory> --compare
+ *   npm run photo-eval -- <photo-directory> --steps strokes
+ *   npm run photo-eval -- <photo-directory> --steps reverse --out <directory>
+ *   npm run photo-eval -- <photo-directory> --steps both --out <directory>
+ *
+ * `--steps` defaults to `strokes` (call A's ink, two image calls). `reverse`
+ * erases one part at a time at low quality. `both` keeps the stroke lesson and
+ * adds the reverse images on the sheet. A v10 run and a v11 run are different
+ * paid jobs; write v11 to its own `--out` directory.
  *
  * `--compare` runs OpenAI and flux-kontext-pro. flux-1.1-pro is unsuitable.
  *
@@ -31,7 +39,7 @@ import { applyOrientation, downscaleLongEdge } from '../../src/photo/image-ops';
 import { readJpegOrientation } from '../../src/photo/jpeg-orientation';
 import type { TokenUsage } from '../../src/photo/openai';
 import { openAiClients } from '../../src/photo/openai';
-import { runPhotoPipeline } from '../../src/photo/pipeline';
+import { runPhotoPipeline, type PhotoStepMode } from '../../src/photo/pipeline';
 import { imageProvider, replicateApiKey, type ImageProvider } from '../../src/photo/provider';
 import { DEFAULT_REPLICATE_MODEL, replicateEditor } from '../../src/photo/replicate';
 import { encodePng, decodePng, type RgbaImage } from '../../src/photo/png';
@@ -41,7 +49,7 @@ import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../
 import { composeContactSheet } from '../../src/photo/sheet';
 
 /** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
-const EVAL_KEY_REVISION = 'v10';
+const EVAL_KEY_REVISION = 'v11';
 
 interface Args {
   readonly score?: string;
@@ -50,6 +58,7 @@ interface Args {
   readonly provider?: ImageProvider;
   readonly model?: string;
   readonly compare?: boolean;
+  readonly steps?: PhotoStepMode;
 }
 
 interface Job {
@@ -69,7 +78,7 @@ async function main(): Promise<void> {
     return;
   }
   if (!args.dir) {
-    console.error('Usage: OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> [--out <directory>] [--provider replicate --model <id>] [--compare]');
+    console.error('Usage: OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> [--out <directory>] [--provider replicate --model <id>] [--compare] [--steps strokes|reverse|both]');
     process.exit(1);
   }
   const jobs = resolveJobs(args);
@@ -94,7 +103,8 @@ async function main(): Promise<void> {
   const htmlRows: string[] = [];
   const metrics: PhotoMetric[] = [];
   let failures = 0;
-  console.log(`Photo eval: ${names.length} file(s), variant ${variant}, jobs ${jobs.map((job) => job.label).join(', ')}, output ${outDir}`);
+  const stepMode = args.steps ?? 'strokes';
+  console.log(`Photo eval: ${names.length} file(s), variant ${variant}, steps ${stepMode}, jobs ${jobs.map((job) => job.label).join(', ')}, output ${outDir}`);
 
   for (const name of names) {
     if (name.toLowerCase().endsWith('.webp')) {
@@ -135,16 +145,31 @@ async function main(): Promise<void> {
         variant,
         provider: job.provider,
         idempotencyKey: evalKey(name, photo.png, job),
-        signal: AbortSignal.timeout(180_000),
+        signal: AbortSignal.timeout(stepMode === 'strokes' ? 180_000 : 420_000),
         ...(job.model ? { configuredImageModel: job.model } : {}),
         textModel,
         lessonId: `photo-eval-${slug(name)}`,
+        stepMode,
       }, clients);
       const ms = Date.now() - started;
       const photoImage = await decodePng(photo.png);
       const illustration = await decodePng(result.illustrationPng);
-      const stepImages = result.lesson.steps.map((_, index) => renderCumulativeStep(result.lesson, index + 1, 280));
+      const stepImages = result.lesson.steps.map((_, index) => renderCumulativeStep(result.lesson, index + 1, 280, { r: 255, g: 255, b: 255 }, true));
+      const reverseImages = result.reverseLesson
+        ? result.reverseLesson.steps.map((_, index) => renderCumulativeStep(result.reverseLesson!, index + 1, 280, { r: 255, g: 255, b: 255 }, true))
+        : [];
+      const reverseStageImages = [];
+      for (const png of result.reverseStages) {
+        try {
+          reverseStageImages.push(await decodePng(png));
+        } catch {
+          // A stage that is not a PNG is left off the sheet.
+        }
+      }
       const cells = [photoImage, illustration, ...stepImages];
+      if (reverseImages.length > 0 || reverseStageImages.length > 0) {
+        cells.push(...(reverseStageImages.length > 0 ? reverseStageImages : reverseImages));
+      }
       for (let index = 0; index < cells.length; index += 6) rows.push(cells.slice(index, index + 6));
       const priced = listCostUsd({
         imageModel: result.model,
@@ -161,6 +186,15 @@ async function main(): Promise<void> {
       await writeFile(path.join(outDir, 'illustrations', `${stem}-line.png`), result.lineArtPng);
       if (result.colouredPng) await writeFile(path.join(outDir, 'illustrations', `${stem}-colour.png`), result.colouredPng);
       const stepPngs = await Promise.all(stepImages.map((image) => encodePng(image)));
+      const reversePngs = result.reverseLesson
+        ? await Promise.all(reverseImages.map((image) => encodePng(image)))
+        : result.reverseStages;
+      const reverseSteps = result.reverseLesson
+        ? result.reverseLesson.steps.map((step, index) => ({
+          instruction: step.instruction,
+          png: base64(reversePngs[index] ?? new Uint8Array()),
+        }))
+        : result.reverseStages.map((png, index) => ({ instruction: `erase ${index + 1}`, png: base64(png) }));
       htmlRows.push(htmlRow({
         name: label,
         photo: photoB64,
@@ -180,6 +214,8 @@ async function main(): Promise<void> {
         needsReview: result.needsReview,
         reviewReasons: result.reviewReasons,
         regenerated: result.regenerated,
+        stepMode,
+        reverse: reverseSteps,
       }));
       metrics.push({
         file: name,
@@ -202,8 +238,10 @@ async function main(): Promise<void> {
         reviewReasons: result.reviewReasons,
         regenerated: result.regenerated,
         targetHash: result.targetHash,
+        stepMode,
+        reverseSteps: result.reverseLesson?.steps.length ?? result.reverseStages.length,
       });
-      console.log(`${label}: ${ms} ms, ${result.model} ${result.quality}, image ${tokens(result.imageUsage)}, text ${tokens(result.textUsage)}, usd ${costUsd ?? 'unknown'}, steps ${result.lesson.steps.length}${result.regenerated ? ', regenerated' : ''}`);
+      console.log(`${label}: ${ms} ms, ${result.model} ${result.quality}, image ${tokens(result.imageUsage)}, text ${tokens(result.textUsage)}, usd ${costUsd ?? 'unknown'}, steps ${result.lesson.steps.length}, ${stepMode}${result.regenerated ? ', regenerated' : ''}`);
     } catch (error) {
       failures += 1;
       const message = error instanceof Error ? error.message.slice(0, 300) : 'failed';
@@ -237,6 +275,7 @@ function parseArgs(argv: readonly string[]): Args {
   let provider: ImageProvider | undefined;
   let model: string | undefined;
   let compare = false;
+  let steps: PhotoStepMode | undefined;
   const positional: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index] ?? '';
@@ -260,6 +299,13 @@ function parseArgs(argv: readonly string[]): Args {
       index += 1;
     } else if (token === '--compare') {
       compare = true;
+    } else if (token === '--steps') {
+      const value = argv[index + 1] ?? '';
+      if (value !== 'strokes' && value !== 'reverse' && value !== 'both') {
+        throw new Error('--steps must be strokes, reverse, or both');
+      }
+      steps = value;
+      index += 1;
     } else if (token.startsWith('-')) {
       throw new Error(`Unknown option ${token}`);
     } else {
@@ -274,6 +320,7 @@ function parseArgs(argv: readonly string[]): Args {
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
     ...(compare ? { compare } : {}),
+    ...(steps ? { steps } : {}),
   };
 }
 
@@ -394,6 +441,8 @@ interface PhotoMetric {
   readonly reviewReasons?: readonly string[];
   readonly regenerated?: boolean;
   readonly targetHash?: string;
+  readonly stepMode?: string;
+  readonly reverseSteps?: number;
   readonly error?: string;
 }
 
@@ -413,22 +462,28 @@ function htmlRow(input: {
   readonly needsReview: boolean;
   readonly reviewReasons: readonly string[];
   readonly regenerated: boolean;
+  readonly stepMode?: string;
+  readonly reverse?: readonly { instruction: string; png: string }[];
 }): string {
   const cost = input.costUsd === null ? 'unknown' : input.costUsd.toFixed(4);
-  const steps = input.steps.map((step, index) => (
+  const figures = (items: readonly { instruction: string; png: string }[]) => items.map((step, index) => (
     `<figure><img alt="" src="data:image/png;base64,${step.png}"><figcaption>${index + 1}. ${escapeHtml(step.instruction)}</figcaption></figure>`
   )).join('');
+  const reverse = input.reverse ?? [];
   return `<section><h2>${escapeHtml(input.name)}</h2>`
     + `<p>${input.ms} ms, ${escapeHtml(input.model)} ${escapeHtml(input.quality)}, `
     + `image ${escapeHtml(tokens(input.imageUsage))}, text ${escapeHtml(tokens(input.textUsage))}, usd ${cost}`
     + `${input.needsReview ? ', review' : ''}${input.regenerated ? ', regenerated' : ''}`
+    + (input.stepMode ? `, ${escapeHtml(input.stepMode)}` : '')
     + (input.reviewReasons.length > 0 ? ` — ${escapeHtml(input.reviewReasons.join(' '))}` : '')
     + `</p>`
     + `<div class="pair"><figure><img alt="" src="data:image/png;base64,${input.photo}"><figcaption>photo</figcaption></figure>`
     + `<figure><img alt="" src="data:image/png;base64,${input.lineArt}"><figcaption>line</figcaption></figure>`
     + (input.coloured ? `<figure><img alt="" src="data:image/png;base64,${input.coloured}"><figcaption>colour</figcaption></figure>` : '')
     + `</div>`
-    + `<div class="steps">${steps}</div></section>`;
+    + `<h3>${escapeHtml(input.stepMode === 'reverse' ? 'reverse' : 'strokes')}</h3><div class="steps">${figures(input.steps)}</div>`
+    + (reverse.length > 0 ? `<h3>reverse edits</h3><div class="steps">${figures(reverse)}</div>` : '')
+    + `</section>`;
 }
 
 function htmlPage(sheet: string, rows: string, note: string): string {

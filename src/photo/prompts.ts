@@ -14,11 +14,12 @@ export type PhotoVariant = 'default' | 'faithful' | 'simple';
 
 const SHARED = [
   'Turn this photo into a simple drawing guide for a five-year-old.',
-  'One main subject only. Black line art on a plain white background.',
+  'Draw one kid-book cartoon of that subject: thick, clean, closed black shapes on a plain white background.',
+  'Animals use chibi proportions, with a big round head, a small body, few strokes, and no texture.',
   'No shading, no colour, and no fill. Lines only.',
-  'Draw one closed outer silhouette around the whole subject first, then the interior lines, including open ones: eyes, nose, whiskers, ears, collar, tongue, petals, leaves, wheels, seat, handle.',
+  'The finished picture is the last line-art step: one closed outer silhouette around the whole subject, then the few interior lines a child needs: eyes, nose, whiskers, ears, collar, tongue, petals, leaves, wheels, seat, handle.',
   'A cup and its saucer are two closed outlines, one above the other, that do not share a line. A flower keeps every line between the petals, from the centre out to the edge.',
-  'Keep the pose, the direction the subject faces, the silhouette, the proportions, and the count of visible parts of that subject.',
+  'Keep the pose, the direction the subject faces, the key features, the colours those features will need, and the count of visible parts of that subject.',
   'Keep the same framing and crop as the photo. Do not zoom in. Do not zoom out. A full body stays a full body. A close-up stays a close-up.',
   'Keep distinctive features that identify it: markings, ears, wheels, handle, petals, leaves.',
   'Leave out the background and anything that is not the subject: people, hands, legs, leashes, furniture, ground, sky, and scenery.',
@@ -47,6 +48,17 @@ export function imagePrompt(variant: PhotoVariant, reinforceSilhouette = false, 
   }
   if (reinforceSubject) extra.push('The drawing must be the same object as the photo. Do not turn it into something else.');
   return extra.length === 0 ? base : `${base} ${extra.join(' ')}`;
+}
+
+/** Remove one planned part from a finished line drawing. Low quality, and only for a harness compare. */
+export function erasePrompt(partName: string): string {
+  const name = partName.replace(/[^\p{L}\p{N} '-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  return [
+    `Erase only the ${name || 'last small part'}.`,
+    'Keep every other black line exactly where it is.',
+    'Do not redraw, move, scale, or add a line.',
+    'Plain white background. No colour, no shading, and no text.',
+  ].join(' ');
 }
 
 /** Fill the line drawing. The first image is the line art and the second is the photo. */
@@ -78,8 +90,8 @@ export function replicatePrompt(reinforceSilhouette = false, reinforceSubject = 
   }
   const lines = [
     'Black line drawing of this one subject for a young child.',
-    'One closed outer silhouette and interior outlines that close each part.',
-    'Plain opaque white background. No colour, no shading, no text.',
+    'A simple cartoon with thick clean closed shapes and few interior lines.',
+    'Plain opaque white background. No colour, no shading, no texture, no text.',
     "Keep the photo's framing and crop. Do not zoom in or zoom out.",
   ];
   if (reinforceSilhouette) lines.push('Draw the full subject as one continuous closed outer silhouette.');

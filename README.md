@@ -207,20 +207,17 @@ Worker vars, not secrets: `IMAGE_PROVIDER` (`openai` by default, or
 send `quality=medium` on OpenAI. *Lebih sederhana* stays on `gpt-image-1.5` at
 `quality=low` and ignores `OPENAI_IMAGE_MODEL` (D-67). Set
 `OPENAI_IMAGE_MODEL=gpt-image-1-mini` only for a default or faithful job.
-Lessons follow the traced outline of each named part, and interior lines stay
-on their own part instead of one box around the whole subject (D-71). A circle
-or oval is added first only when it fits that part; it is a light dashed guide
-and it is left out of the finished ink (D-70, D-72). A photo makes two images:
-a black line drawing, then a flat colouring of that drawing. The colour pass
-uses `quality=low`. Drawing steps come from the line drawing, including open
-interior lines, and a cup and saucer stay separate outlines. Colour steps come
-from the enclosed areas of those lines, sampled on the aligned colour image
-(D-74, D-75, D-76). A white area is not a colour step, because the paper is already
-white. The fill is the sampled colour, snapped flat, and a region is named by
-the part that contains it. Drawing steps stay within
-about seven, and the first step names the subject without adjectives. The
-illustration keeps the photo's framing in both directions and is flattened onto white. OpenAI
-stays the default image model.
+A photo makes two images: a kid-book cartoon in black line, then a flat
+colouring of that drawing at `quality=low` (D-74, D-75, D-76, D-77). The
+cartoon keeps the photo's pose, key features, and framing in both directions.
+A vision plan orders the parts from one big shape down to the small details.
+Step 1 is that shape (a circle, an oval, or a dome). Each later step adds one
+part, using the cartoon's own strokes, and the reference draws those new lines
+in red. A faint guide, such as a centre cross, is optional and is left out of
+the finished ink. Colour is last: one flat colour per region, named by the
+part that contains it. A white area is not a colour step. Drawing steps stay
+within about eleven. OpenAI stays the default image model. The earlier
+part-by-part builder is still covered by the regression tests (D-76).
 
 ### Evaluation
 
@@ -228,9 +225,10 @@ On a machine with the key, Node.js 20.16 or newer (`CompressionStream`; this
 repo's tests still need 22.12+), after `npm install`:
 
 ```bash
-OPENAI_API_KEY=... npm run photo-eval -- <photo-directory>
+OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --out photo-eval-out-v11
 REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --provider replicate --model black-forest-labs/flux-kontext-pro
 OPENAI_API_KEY=... REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --compare
+OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --steps both --out photo-eval-out-v11-steps
 ```
 
 `<photo-directory>` is a folder of JPEG or PNG photos. The command writes
@@ -257,8 +255,13 @@ after the first pair. The harness writes `illustrations/<photo>-line.png` and
 one contact sheet and stops if either provider fails. `flux-1.1-pro` is
 unsuitable (it returns near-photos) and is not part of compare. Kontext uses
 its own short prompt and retries HTTP 429. The idempotency key for this
-revision ends in `v10`, so a rerun after the enclosing-part and framing
-change is a new paid job. Each row in `metrics.json` includes `reviewReasons`.
+revision ends in `v11`, so a rerun after the construction-plan change is a
+new paid job. Compare it with a v10 sheet by writing v11 to its own `--out`
+directory; `--steps strokes` (the default) assigns the cartoon's strokes,
+`--steps reverse` erases one part at a time, and `--steps both` puts both on
+the sheet. Reverse adds at most five low-quality edits and stays optional, so
+the default run stays near the previous cost. Each row in `metrics.json`
+includes `reviewReasons`.
 `REPLICATE_API_TOKEN` is read only when `REPLICATE_API_KEY` is unset.
 
 CC0 samples, with credits, are in `scripts/photo-eval/samples/` (`LICENSES.md`).

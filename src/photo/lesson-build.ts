@@ -4,14 +4,16 @@
  * A circle or oval is added first only when it fits that outline. When the
  * vision model names nothing usable, the lesson falls back to one named
  * outline and drops unnamed scraps instead of printing a generic sentence.
- * See D-70, D-71, D-72, D-73, and D-76.
+ * `buildTutorialLesson` is the how-to-draw path: one simple mass, then one
+ * part at a time (D-77). `buildPhotoLesson` stays for the earlier pins.
+ * See D-70, D-71, D-72, D-73, D-76, and D-77.
  */
 
 import { assertValidLessons } from '../lesson-data/validate';
 import { LESSON_SCHEMA_VERSION, type ColorRegion, type GuidePath, type LessonPackage, type LessonStep } from '../lesson-data/schema';
 import { knownColourName } from './colors';
 import { flatColourRegions, type FlatRegion } from './flat-colour';
-import { cleanPartName, type DetectedPart } from './parts';
+import { cleanPartName, type DetectedPart, type PlanShape } from './parts';
 import type { RgbaImage } from './png';
 import type { Contour, Point } from './trace';
 
@@ -27,6 +29,8 @@ const WIDE_PART = 1.08;
 const ENCLOSE = 0.55;
 /** Outline, construction, and details together. Extra details are merged away. */
 const MAX_DRAWING_STEPS = 7;
+/** How-to-draw lessons scale with the subject, up to about eleven drawing steps. */
+export const TUTORIAL_DRAWING_MAX = 11;
 const MASK_W = 160;
 const MASK_H = 120;
 const MIN_NEW_INK = 10;
@@ -37,7 +41,9 @@ export interface BuiltLesson {
   readonly coverage: number;
   /** Same figure as `coverage`: outline box / subject box. */
   readonly subjectFit: number;
-  readonly builder: 'parts' | 'traced';
+  readonly builder: 'parts' | 'traced' | 'tutorial';
+  /** Part names in draw order. Empty on the traced fallback. */
+  readonly planNames: readonly string[];
   readonly needsReview: boolean;
   readonly reviewReason: string | null;
   readonly reviewReasons: readonly string[];
@@ -88,6 +94,57 @@ export function buildPhotoLesson(input: {
   const named = buildFromParts(input, mapped);
   if (named) return named;
   return buildTracedFallback(input, mapped);
+}
+
+/**
+ * How-to-draw lesson. Step 1 is one simple mass. Each later step adds one
+ * part, big to small, from the line art's own strokes. Colour is last.
+ * With no usable parts, this is `buildPhotoLesson`.
+ */
+export function buildTutorialLesson(input: Parameters<typeof buildPhotoLesson>[0]): BuiltLesson {
+  const parts = (input.parts ?? []).filter((part) => cleanPartName(part.name) === part.name);
+  if (parts.length === 0) return buildPhotoLesson(input);
+  const mapped = mapContours(input.contours, input.sourceWidth, input.sourceHeight);
+  if (mapped.length === 0) throw new Error('No drawable shapes were found in the illustration');
+  const subject = unionBox(mapped.map((contour) => boxOf(contour.points)));
+  const main = pickMain(mapped);
+  const coverage = boxOf(main.points).area / Math.max(1, subject.area);
+  const assigned = assignGroups(mapped, orderParts(parts), subject);
+  return assembleTutorial(input, mapped, assigned.groups, coverage, assigned.unnamed);
+}
+
+/**
+ * One traced stage per drawing step, earliest first. Used when a line drawing
+ * was edited to remove parts, so each step's ink is the pixels that came back.
+ */
+export function buildNamedLesson(input: Parameters<typeof buildPhotoLesson>[0] & {
+  readonly stages: readonly { readonly name: string; readonly contours: readonly Contour[] }[];
+}): BuiltLesson | null {
+  const mapped: MappedContour[] = [];
+  const groups: TutorialGroup[] = [];
+  let nextId = 0;
+  for (const stage of input.stages) {
+    const contours = stage.contours
+      .map((contour) => ({ ...mapContour(contour, input.sourceWidth, input.sourceHeight), id: nextId++ }))
+      .filter((contour) => contour.points.length >= 3);
+    if (contours.length === 0) continue;
+    mapped.push(...contours);
+    const name = plainNoun(bareName(stage.name)) || stage.name;
+    groups.push({
+      name,
+      parts: [],
+      contours,
+      guide: false,
+      pair: contours.length === 2,
+      count: contours.length === 2 ? 2 : 1,
+      shape: '',
+    });
+  }
+  if (mapped.length === 0 || groups.length === 0) return null;
+  const subject = unionBox(mapped.map((contour) => boxOf(contour.points)));
+  const main = pickMain(mapped);
+  const coverage = boxOf(main.points).area / Math.max(1, subject.area);
+  return assembleTutorial(input, mapped, groups, coverage, 0);
 }
 
 /** Boxes for the same contours `buildPhotoLesson` numbers, so the model can name each piece. */
@@ -275,10 +332,12 @@ function finish(
   preview: GuidePath[],
   mapped: readonly MappedContour[],
   coverage: number,
-  builder: 'parts' | 'traced',
+  builder: 'parts' | 'traced' | 'tutorial',
   unnamedInteriors: number,
   notes: readonly string[] = [],
   regionNames: readonly string[] = [],
+  maxDrawing = MAX_DRAWING_STEPS,
+  planNames: readonly string[] = [],
 ): BuiltLesson {
   const uniqueSteps = uniquify(steps);
   const drawing = uniqueSteps.filter((step) => step.phase !== 'color');
@@ -286,7 +345,7 @@ function finish(
   const reasons: string[] = [];
   if (coverage < OUTLINE_COVERAGE_MIN) reasons.push('Garis luar hanya menutupi sebagian subjek. Cek dulu sebelum dipakai.');
   if (drawing.length < 3) reasons.push('Terlalu sedikit langkah menggambar. Cek dulu sebelum dipakai.');
-  if (drawing.length > MAX_DRAWING_STEPS) reasons.push('Terlalu banyak langkah menggambar. Cek dulu sebelum dipakai.');
+  if (drawing.length > maxDrawing) reasons.push('Terlalu banyak langkah menggambar. Cek dulu sebelum dipakai.');
   if (uniqueSteps.some((step) => isGenericInstruction(step.instruction))) {
     reasons.push('Ada instruksi yang belum menyebut bagian. Cek dulu sebelum dipakai.');
   }
@@ -335,7 +394,285 @@ function finish(
     reviewReason: needsReview ? reasons.join(' ') : null,
     reviewReasons: reasons,
     unnamedInteriors,
+    planNames,
   };
+}
+
+interface TutorialGroup {
+  name: string;
+  parts: DetectedPart[];
+  contours: MappedContour[];
+  guide: boolean;
+  pair: boolean;
+  count: number;
+  shape: PlanShape | '';
+}
+
+function mapContours(contours: readonly Contour[], sourceWidth: number, sourceHeight: number): MappedContour[] {
+  return contours
+    .map((contour) => mapContour(contour, sourceWidth, sourceHeight))
+    .filter((contour) => contour.points.length >= 3)
+    .map((contour, id) => ({ ...contour, id }));
+}
+
+function orderParts(parts: readonly DetectedPart[]): DetectedPart[] {
+  const ranked = [...parts];
+  const stated = ranked.filter((part) => (part.order ?? 0) > 0).length;
+  if (stated >= Math.ceil(ranked.length / 2)) {
+    ranked.sort((left, right) => (left.order ?? 99) - (right.order ?? 99) || areaOf(right) - areaOf(left));
+  } else {
+    ranked.sort((left, right) => areaOf(right) - areaOf(left));
+  }
+  const names = new Set(ranked.map((part) => plainNoun(bareName(part.name)) || part.name));
+  const done = new Set<string>();
+  const pending = ranked;
+  const ordered: DetectedPart[] = [];
+  let guard = pending.length * pending.length + 1;
+  while (pending.length > 0 && guard > 0) {
+    guard -= 1;
+    const index = pending.findIndex((part) => {
+      const need = plainNoun(bareName(part.dependsOn ?? ''));
+      return !need || !names.has(need) || done.has(need);
+    });
+    const next = pending.splice(index < 0 ? 0 : index, 1)[0];
+    if (!next) break;
+    ordered.push(next);
+    done.add(plainNoun(bareName(next.name)) || next.name);
+  }
+  return ordered;
+}
+
+function groupParts(parts: readonly DetectedPart[]): TutorialGroup[] {
+  const groups: TutorialGroup[] = [];
+  for (const part of parts) {
+    const name = plainNoun(bareName(part.name)) || part.name;
+    const existing = groups.find((group) => group.name === name && group.guide === (part.guide === true));
+    if (existing) {
+      existing.parts.push(part);
+      existing.pair = true;
+      existing.count = Math.max(existing.count, part.count, existing.parts.length);
+      continue;
+    }
+    groups.push({
+      name,
+      parts: [part],
+      contours: [],
+      guide: part.guide === true,
+      pair: part.pair,
+      count: part.count,
+      shape: part.shape ?? '',
+    });
+  }
+  return groups;
+}
+
+function assignGroups(
+  mapped: readonly MappedContour[],
+  parts: readonly DetectedPart[],
+  subject: Box,
+): { groups: TutorialGroup[]; unnamed: number } {
+  const groups = groupParts(parts);
+  const buckets = new Map<string, MappedContour[]>(groups.map((group) => [groupKey(group), []]));
+  let unnamed = 0;
+  for (const contour of mapped) {
+    const owner = smallestGroup(contour, groups, subject);
+    if (!owner) {
+      unnamed += 1;
+      continue;
+    }
+    buckets.get(groupKey(owner))?.push(contour);
+  }
+  const mass = groups.find((group) => !group.guide) ?? groups[0];
+  if (mass) {
+    const main = pickMain(mapped);
+    const key = groupKey(mass);
+    const held = buckets.get(key) ?? [];
+    const claimed = [...buckets.values()].some((contours) => contours.includes(main));
+    const massHolds = mass.parts.length === 0 || mass.parts.some((part) => containment(main, part) >= CONTAIN_MIN);
+    if (!held.includes(main) && (massHolds || !claimed)) {
+      let stole = false;
+      for (const contours of buckets.values()) {
+        const index = contours.indexOf(main);
+        if (index < 0) continue;
+        contours.splice(index, 1);
+        stole = true;
+      }
+      held.push(main);
+      buckets.set(key, held);
+      if (!stole) unnamed = Math.max(0, unnamed - 1);
+    }
+  }
+  return {
+    unnamed,
+    groups: groups
+      .map((group) => ({ ...group, contours: buckets.get(groupKey(group)) ?? [] }))
+      .slice(0, TUTORIAL_DRAWING_MAX),
+  };
+}
+
+function groupKey(group: TutorialGroup): string {
+  return `${group.guide ? 'g' : 'p'}:${group.name}`;
+}
+
+function smallestGroup(contour: MappedContour, groups: readonly TutorialGroup[], subject: Box): TutorialGroup | null {
+  let best: TutorialGroup | null = null;
+  let bestArea = Number.POSITIVE_INFINITY;
+  for (const group of groups) {
+    if (group.guide) continue;
+    for (const part of group.parts) {
+      const fraction = partFraction(part, subject);
+      if (fraction > 0.97) continue;
+      if (fraction > WIDE_PART) continue;
+      if (containment(contour, part) < ENCLOSE) continue;
+      const area = areaOf(part);
+      if (area < bestArea) {
+        best = group;
+        bestArea = area;
+      }
+    }
+  }
+  return best;
+}
+
+function assembleTutorial(
+  input: Parameters<typeof buildPhotoLesson>[0],
+  mapped: readonly MappedContour[],
+  groups: readonly TutorialGroup[],
+  coverage: number,
+  unnamed: number,
+): BuiltLesson {
+  const massAt = groups.findIndex((group) => !group.guide);
+  const leading = massAt > 0 ? groups.slice(0, massAt).filter((group) => group.guide) : [];
+  const steps: LessonStep[] = [];
+  const preview: GuidePath[] = [];
+  const names: string[] = [];
+  const mask = new Uint8Array(MASK_W * MASK_H);
+  const notes: string[] = [];
+  let invisible = false;
+  let dropped = 0;
+  groups.forEach((group, index) => {
+    if (leading.includes(group)) return;
+    const guides: GuidePath[] = [];
+    const isMass = index === massAt;
+    let contours = group.contours;
+    if (isMass && contours.length > 1 && group.parts.length > 0) {
+      const primary = pickMain(contours);
+      dropped += contours.length - 1;
+      contours = [primary];
+    }
+    if (!group.guide && contours.length > 0) {
+      const own = ownInk(contours);
+      const fresh = steps.length === 0 ? own : freshInk(mask, contours);
+      const mostlyThere = own > 0 && fresh / own < 0.3;
+      if (fresh < MIN_NEW_INK || (steps.length > 0 && mostlyThere)) {
+        if (own >= MIN_NEW_INK && fresh < MIN_NEW_INK) invisible = true;
+        return;
+      }
+    }
+    const id = `draw-${steps.length + 1}`;
+    if (group.guide || (isMass && leading.length > 0)) {
+      const extras = group.guide ? [group] : leading;
+      extras.forEach((guide, guideIndex) => {
+        guides.push(...guidePaths(guide, `${id}-g${guideIndex + 1}`));
+      });
+    }
+    if (!group.guide && contours.length > 0) {
+      guides.push(...guidesFor(id, contours).map((path) => ({ ...path, role: 'final-outline' as const })));
+      stampContours(mask, contours);
+      preview.push(...guides.filter((path) => path.role === 'final-outline'));
+      names.push(group.name);
+    }
+    if (guides.length === 0) return;
+    const fit = isMass && contours[0] ? constructionOf(contours[0].points) : null;
+    steps.push(lineStep(
+      id,
+      steps.length === 0 ? 'outline' : 'detail',
+      tutorialInstruction(group, isMass, contours, fit?.kind ?? null),
+      guides,
+    ));
+  });
+  const regions: ColorRegion[] = [];
+  const spoken = headNoun(input.title) || groups.find((group) => !group.guide)?.name || '';
+  const subject = unionBox(mapped.map((contour) => boxOf(contour.points)));
+  const colour = spoken || (input.parts ?? []).length > 0
+    ? appendFlatColours(steps, regions, input, input.parts ?? [], spoken, subject)
+    : { notes: [] as string[], names: [] as string[] };
+  if (invisible) notes.push('Ada langkah yang tidak menambah garis. Cek dulu sebelum dipakai.');
+  return finish(
+    input,
+    steps,
+    regions,
+    preview,
+    mapped,
+    coverage,
+    'tutorial',
+    unnamed + dropped,
+    [...notes, ...colour.notes],
+    colour.names,
+    TUTORIAL_DRAWING_MAX,
+    names,
+  );
+}
+
+function guidePaths(group: TutorialGroup, id: string): GuidePath[] {
+  if (group.contours.length > 0) {
+    return group.contours.map((contour, index) => ({
+      id: `${id}-${index + 1}`,
+      d: contour.path,
+      role: 'construction' as const,
+    }));
+  }
+  const part = group.parts[0];
+  if (!part) return [];
+  const drawn = renderGuide(part, id);
+  return drawn;
+}
+
+function renderGuide(part: DetectedPart, id: string): GuidePath[] {
+  const cx = part.x + part.width / 2;
+  const cy = part.y + part.height / 2;
+  if (part.shape === 'circle' || part.shape === 'oval' || part.shape === 'dome') {
+    const rx = Math.max(8, part.width / 2);
+    const ry = part.shape === 'circle' ? Math.max(8, Math.min(part.width, part.height) / 2) : Math.max(8, part.height / 2);
+    const d = part.shape === 'dome'
+      ? `M ${n(cx - rx)} ${n(cy)} A ${n(rx)} ${n(ry)} 0 0 1 ${n(cx + rx)} ${n(cy)} Z`
+      : ellipsePath(cx, cy, rx, ry);
+    return [{ id: `${id}-1`, d, role: 'construction' }];
+  }
+  if (part.shape === 'triangle') {
+    const d = `M ${n(cx)} ${n(part.y)} L ${n(part.x + part.width)} ${n(part.y + part.height)} L ${n(part.x)} ${n(part.y + part.height)} Z`;
+    return [{ id: `${id}-1`, d, role: 'construction' }];
+  }
+  if (part.shape === 'line') {
+    return [
+      { id: `${id}-h`, d: `M ${n(part.x)} ${n(cy)} L ${n(part.x + part.width)} ${n(cy)}`, role: 'construction' },
+      { id: `${id}-v`, d: `M ${n(cx)} ${n(part.y)} L ${n(cx)} ${n(part.y + part.height)}`, role: 'construction' },
+    ];
+  }
+  return [];
+}
+
+function tutorialInstruction(
+  group: TutorialGroup,
+  isMass: boolean,
+  contours: readonly MappedContour[],
+  fit: 'circle' | 'ellipse' | null,
+): string {
+  if (group.guide) return `Gambar garis bantu untuk ${group.name}.`;
+  if (isMass) {
+    const word = group.shape === 'dome'
+      ? 'kubah'
+      : group.shape === 'circle' || fit === 'circle'
+        ? 'lingkaran'
+        : group.shape === 'oval' || fit === 'ellipse'
+          ? 'oval'
+          : '';
+    if (word) return `Gambar ${word} besar untuk ${group.name}.`;
+  }
+  if (contours.length === 2 && (group.pair || group.count === 2) && group.count !== 1 && !/\bdua\b/.test(group.name)) {
+    return `Tambahkan dua ${group.name}.`;
+  }
+  return `Gambar ${group.name}.`;
 }
 
 interface DetailBundle {

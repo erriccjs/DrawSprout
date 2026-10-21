@@ -7,6 +7,9 @@
 
 import type { Point } from './trace';
 
+/** A how-to-draw primitive. Empty when the model did not choose one. */
+export type PlanShape = 'circle' | 'oval' | 'dome' | 'line' | 'triangle';
+
 export interface DetectedPart {
   readonly name: string;
   readonly pair: boolean;
@@ -20,6 +23,14 @@ export interface DetectedPart {
   readonly pieceIds: readonly number[];
   /** How many of this part one step draws. 0 means the model did not say. */
   readonly count: number;
+  /** Basic shape of this part in the construction plan. */
+  readonly shape?: PlanShape;
+  /** 1-based draw order. 0 means the model did not say, so the box size decides. */
+  readonly order?: number;
+  /** Name of the part this one is drawn onto. Empty when it is the first mass. */
+  readonly dependsOn?: string;
+  /** Faint guide (centre cross, petal oval, torso triangle) that is erased from the finished ink. */
+  readonly guide?: boolean;
 }
 
 const BANNED = /latar belakang|wajah anak|barcode|ventilasi|bagian berikutnya|bentuk utama|bagian kecil|bagian ini|\bbuih\b|\bbusa\b|\buap\b/;
@@ -68,11 +79,40 @@ export function detectedPartFrom(value: unknown): DetectedPart | null {
       if (pieceIds.length === 24) break;
     }
   }
-  return { name, pair: row.pair, x, y, width, height, points, colorName, pieceIds, count: wholeCount(row.count) };
+  const shape = planShape(row.shape);
+  const order = wholeOrder(row.order);
+  const depends = typeof row.dependsOn === 'string' ? cleanPartName(row.dependsOn) : null;
+  return {
+    name,
+    pair: row.pair,
+    x,
+    y,
+    width,
+    height,
+    points,
+    colorName,
+    pieceIds,
+    count: wholeCount(row.count),
+    ...(shape ? { shape } : {}),
+    ...(order ? { order } : {}),
+    ...(depends ? { dependsOn: depends } : {}),
+    ...(row.guide === true ? { guide: true } : {}),
+  };
+}
+
+const PLAN_SHAPES = new Set<PlanShape>(['circle', 'oval', 'dome', 'line', 'triangle']);
+
+function planShape(value: unknown): PlanShape | null {
+  return typeof value === 'string' && PLAN_SHAPES.has(value as PlanShape) ? value as PlanShape : null;
 }
 
 function wholeCount(value: unknown): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 12) return 0;
+  return value;
+}
+
+function wholeOrder(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 11) return 0;
   return value;
 }
 

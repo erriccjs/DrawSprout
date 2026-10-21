@@ -30,6 +30,8 @@ export interface ImageEditRequest {
   readonly reinforceSubject?: boolean;
   /** When set, `png` is the line drawing and this is the photo to match. */
   readonly referencePng?: Uint8Array;
+  /** Replaces the line or colour prompt. Used to erase one part at low quality. */
+  readonly instruction?: string;
 }
 
 export interface ImageEditResult {
@@ -82,9 +84,11 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
       async edit(input) {
         const form = new FormData();
         form.set('model', input.model);
-        form.set('prompt', input.referencePng
-          ? colourPrompt()
-          : imagePrompt(input.variant, input.reinforceSilhouette === true, input.reinforceSubject === true));
+        form.set('prompt', input.instruction
+          ? input.instruction
+          : input.referencePng
+            ? colourPrompt()
+            : imagePrompt(input.variant, input.reinforceSilhouette === true, input.reinforceSubject === true));
         form.set('quality', input.quality);
         form.set('size', imageSize(input.width, input.height));
         form.set('n', '1');
@@ -135,7 +139,10 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                     'sameSubject true hanya bila gambar itu adalah benda yang sama dengan foto. Kucing yang digambar menjadi mobil adalah false.',
                     'subject adalah satu kata benda bahasa Indonesia untuk benda di foto (kucing, cangkir, bunga), tanpa kata sifat.',
                     'title pendek, 2 sampai 4 kata, tanpa kata sifat.',
-                    'parts adalah bagian yang benar-benar terlihat, dari yang terbesar. name adalah satu kata benda saja, tanpa kata sifat dan tanpa warna: "anjing", bukan "anjing hitam lucu"; "bunga", bukan "bunga putih merah". Bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
+                    'parts adalah rencana konstruksi, dari bentuk besar ke detail kecil, seperti buku cara menggambar. name adalah satu kata benda saja, tanpa kata sifat dan tanpa warna: "anjing", bukan "anjing hitam lucu"; "bunga", bukan "bunga putih merah". Bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
+                    'shape adalah circle, oval, dome, line, atau triangle. Kosongkan bila bukan bentuk dasar. Bagian pertama adalah satu bentuk besar untuk massa utama: circle, oval, atau dome.',
+                    'order adalah urutan langkah, mulai dari 1. dependsOn adalah nama bagian yang sudah digambar, atau string kosong.',
+                    'guide true hanya untuk garis bantu yang dihapus nanti, seperti salib tengah wajah, oval panduan kelopak, atau segitiga badan. Garis yang tetap di gambar akhir memakai guide false.',
                     'Jangan memakai "bagian berikutnya", "bentuk utama", "buih", "latar belakang", "wajah anak", "barcode", atau "ventilasi".',
                     'Jangan memasukkan setiap potongan ke dalam satu kotak.',
                     'Sebut bagian yang terlihat: garis luar, telinga, mata, hidung, kumis, kaki, ekor, roda, gagang, kelopak, daun, tengah bunga, kopi, kalung, lidah, kursi.',
@@ -178,7 +185,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                       items: {
                         type: 'object',
                         additionalProperties: false,
-                        required: ['name', 'pair', 'x', 'y', 'width', 'height', 'colorName', 'points', 'pieceIds', 'count'],
+                        required: ['name', 'pair', 'x', 'y', 'width', 'height', 'colorName', 'points', 'pieceIds', 'count', 'shape', 'order', 'dependsOn', 'guide'],
                         properties: {
                           name: { type: 'string' },
                           pair: { type: 'boolean' },
@@ -187,6 +194,10 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                           width: { type: 'number' },
                           height: { type: 'number' },
                           colorName: { type: 'string' },
+                          shape: { type: 'string', enum: ['circle', 'oval', 'dome', 'line', 'triangle', ''] },
+                          order: { type: 'number' },
+                          dependsOn: { type: 'string' },
+                          guide: { type: 'boolean' },
                           pieceIds: { type: 'array', items: { type: 'number' } },
                           count: { type: 'number' },
                           points: {

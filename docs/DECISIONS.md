@@ -1283,4 +1283,20 @@ The v9 run (commit 420b5ef, OpenAI default, five samples) was a regression again
 
 **Review.** `needsReview` is also set when the same part name has two colours (two wheels, one grey and one black), when the largest coloured area is small next to the subject, or when an instruction repeats "garis luar" or adds "yang lain". These flags do not ask for another illustration. A lesson like the car, with a large body colour and matching part colours, is not flagged.
 
-The eval idempotency key ends in `v10`. The gate is still not claimed.
+The eval idempotency key ended in `v10`. D-77 bumps it to `v11`. The gate is still not claimed.
+
+### D-77 — Construction plan, then one part at a time
+
+v8, v9, and v10 each fixed one failure and broke another. They traced a detailed drawing and then tried to cut that drawing into parts. The lessons the owner wants look like a how-to-draw page: one big simple shape, then one part at a time, new lines in a distinct colour, and flat colour last. This is not a pass. `claimedPass` stays false.
+
+**Call A.** The line drawing is a kid-book cartoon of the photo: thick closed shapes, chibi proportions for animals, no texture and no shading. It keeps the pose, the key features, and the framing in both directions. Call B is unchanged: fill that drawing at `quality=low`. A normal photo is still those two image calls.
+
+**Plan.** The vision model returns an ordered construction plan. Each part has a name, a basic shape, a box in the line drawing's coordinates, what it is drawn onto, and whether it is only a guide. The order is big to small. A missing order falls back to the box size.
+
+**Steps.** The default lesson assigns the cartoon's own strokes to those parts. Step 1 is one circle, oval, or dome for the main mass. Each later step adds one part. A centre cross, a guide oval, or a torso triangle is a construction line and is left out of the finished ink. Drawing steps stay within about eleven. Colour is last: one flat colour per region, named by the planned part that contains it. The v10 pins still hold on this path and on `buildPhotoLesson`: cat eyes, nose, whiskers, and ears; dark coffee; a red collar; one brown car seat; flower petals.
+
+**Reverse.** The harness can also edit call A at low quality, removing the last part one at a time, so every step image is still that cartoon. At most five of those edits. They count in `imageCalls` and they do not set `regenerated`. The default, including the app, does not run them, so a photo stays near the v10 cost and under about $0.25. `--steps strokes` is the default, `--steps reverse` uses the erase pass as the lesson, and `--steps both` keeps the stroke lesson and adds the erase images.
+
+**Reference.** The example panel shows lines up to the current step. Lines already drawn are dark. The current step's new lines are red. A guide is a dashed red line and is gone on the next step.
+
+The eval idempotency key ends in `v11`. The gate is still not claimed.

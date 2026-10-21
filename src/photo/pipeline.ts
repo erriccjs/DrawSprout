@@ -9,14 +9,19 @@ import { compareLessonToInk } from './compare';
 import { dominantColors } from './colors';
 import { regionsColouredBy, type FlatRegion } from './flat-colour';
 import { downscaleLongEdge, flattenOnWhite } from './image-ops';
-import { buildPhotoLesson, lessonPieces, outlineCoverage, sanitizeTitle, shouldRedraw } from './lesson-build';
+import { buildNamedLesson, buildTutorialLesson, lessonPieces, outlineCoverage, sanitizeTitle, shouldRedraw, type BuiltLesson } from './lesson-build';
 import { sumUsage, type ImageEditor, type InstructionResult, type InstructionWriter, type TokenUsage } from './openai';
 import { decodePng, encodePng, type RgbaImage } from './png';
 import type { ImageProvider } from './provider';
-import { imageModelFor, imageQualityFor, type ImageQuality, type PhotoVariant } from './prompts';
+import { erasePrompt, imageModelFor, imageQualityFor, type ImageQuality, type PhotoVariant } from './prompts';
 import { replicateModelFor } from './replicate';
+import { MAX_REVERSE_ERASES, subtractInk } from './reverse';
 import type { Contour } from './trace';
 import { traceInk } from './trace';
+import type { LessonPackage } from '../lesson-data/schema';
+
+/** Strokes assign call A's ink. Reverse erases one part at a time. Both keeps strokes as the lesson. */
+export type PhotoStepMode = 'strokes' | 'reverse' | 'both';
 
 export interface PhotoPipelineInput {
   readonly png: Uint8Array;
@@ -27,6 +32,8 @@ export interface PhotoPipelineInput {
   readonly textModel: string;
   readonly lessonId: string;
   readonly provider?: ImageProvider;
+  /** Default is stroke assignment, two image calls. Reverse is a harness compare. */
+  readonly stepMode?: PhotoStepMode;
 }
 
 export interface PhotoPipelineResult {
@@ -36,7 +43,7 @@ export interface PhotoPipelineResult {
   /** Flat colour painted onto the line drawing. Null when that call failed. */
   readonly colouredPng: Uint8Array | null;
   readonly dominantColors: readonly string[];
-  readonly lesson: ReturnType<typeof buildPhotoLesson>['lesson'];
+  readonly lesson: LessonPackage;
   readonly targetHash: string;
   readonly needsReview: boolean;
   readonly reviewReason: string | null;
@@ -47,10 +54,15 @@ export interface PhotoPipelineResult {
   readonly subjectFit: number;
   readonly imageUsage: TokenUsage | null;
   readonly textUsage: TokenUsage | null;
-  /** Successful image edits, including a colour pass and a redraw that was not kept. */
+  /** Successful image edits, including a colour pass, a redraw, and optional reverse erases. */
   readonly imageCalls: number;
-  /** True when a line drawing was requested again after the first pair. */
+  /** True when the line drawing was requested again after the first pair. Reverse erases do not set this. */
   readonly regenerated: boolean;
+  readonly stepMode: PhotoStepMode;
+  /** Present when `stepMode` is `reverse` or `both` and the erase pass produced a lesson. */
+  readonly reverseLesson: LessonPackage | null;
+  /** Cumulative line drawings, simplest first. Empty unless reverse ran. */
+  readonly reverseStages: readonly Uint8Array[];
 }
 
 interface TracedEdit {
@@ -76,16 +88,17 @@ export async function runPhotoPipeline(
     : imageModelFor(input.variant, input.configuredImageModel);
   const quality = imageQualityFor(input.variant);
   const photoPng = await encodePng(downscaleLongEdge(photo, 512));
-  let imageCalls = 0;
+  let pairCalls = 0;
+  let extraCalls = 0;
   let traced = await drawPass(deps.images, input, photo, model, quality, false, false, input.idempotencyKey);
-  imageCalls += traced.calls;
+  pairCalls += traced.calls;
   let imageUsage = traced.usage;
   let retried = false;
   if (shouldRedraw(outlineCoverage(traced.contours))) {
     const second = await drawPass(deps.images, input, photo, model, quality, true, false, `${input.idempotencyKey}-redraw`).catch(() => null);
     retried = true;
     if (second) {
-      imageCalls += second.calls;
+      pairCalls += second.calls;
       imageUsage = sumUsage(imageUsage, second.usage);
       if (outlineCoverage(second.contours) >= outlineCoverage(traced.contours)) traced = second;
     }
@@ -97,7 +110,7 @@ export async function runPhotoPipeline(
     const second = await drawPass(deps.images, input, photo, model, quality, true, true, `${input.idempotencyKey}-redraw`).catch(() => null);
     retried = true;
     if (second) {
-      imageCalls += second.calls;
+      pairCalls += second.calls;
       imageUsage = sumUsage(imageUsage, second.usage);
       const again = await askParts(deps.instructions, input, second, photoPng, '-redraw');
       textUsage = sumUsage(textUsage, again?.usage ?? null);
@@ -120,7 +133,7 @@ export async function runPhotoPipeline(
       `${input.idempotencyKey}-redraw`,
     ).catch(() => null);
     if (second) {
-      imageCalls += second.calls;
+      pairCalls += second.calls;
       imageUsage = sumUsage(imageUsage, second.usage);
       const again = await askParts(deps.instructions, input, second, photoPng, '-redraw');
       textUsage = sumUsage(textUsage, again?.usage ?? null);
@@ -147,6 +160,30 @@ export async function runPhotoPipeline(
     }
   }
 
+  const mode = input.stepMode ?? 'strokes';
+  let reverseLesson: LessonPackage | null = null;
+  let reverseStages: Uint8Array[] = [];
+  if (mode !== 'strokes' && built.planNames.length >= 2) {
+    const erased = await eraseBackwards(
+      deps.images,
+      input,
+      traced,
+      model,
+      built.planNames,
+      built.lesson.title,
+      written?.sameSubject ? written.parts : [],
+    );
+    extraCalls += erased.calls;
+    imageUsage = sumUsage(imageUsage, erased.usage);
+    reverseStages = erased.stages;
+    const staged = erased.lesson;
+    if (staged) reverseLesson = staged.lesson;
+    if (mode === 'reverse' && staged) {
+      built = staged;
+      comparison = compareLessonToInk(staged.lesson, traced.illustration);
+    }
+  }
+
   const subjectMismatch = written?.sameSubject === false;
   const reasons = [...built.reviewReasons];
   if (comparison.reviewReason) reasons.push(comparison.reviewReason);
@@ -168,9 +205,87 @@ export async function runPhotoPipeline(
     subjectFit: built.subjectFit,
     imageUsage,
     textUsage,
-    imageCalls,
-    regenerated: imageCalls > 2,
+    imageCalls: pairCalls + extraCalls,
+    regenerated: pairCalls > 2,
+    stepMode: mode,
+    reverseLesson: mode === 'reverse' ? null : reverseLesson,
+    reverseStages,
   };
+}
+
+async function eraseBackwards(
+  images: ImageEditor,
+  input: PhotoPipelineInput,
+  traced: TracedEdit,
+  model: string,
+  planNames: readonly string[],
+  title: string,
+  parts: InstructionResult['parts'],
+): Promise<{ stages: Uint8Array[]; calls: number; usage: TokenUsage | null; lesson: BuiltLesson | null }> {
+  const tail = planNames.slice(1).slice(-MAX_REVERSE_ERASES);
+  const backward: Uint8Array[] = [traced.png];
+  let current = traced.png;
+  let calls = 0;
+  let usage: TokenUsage | null = null;
+  for (let index = tail.length - 1; index >= 0; index -= 1) {
+    const name = tail[index] ?? '';
+    try {
+      const edited = await images.edit({
+        png: current,
+        variant: input.variant,
+        model,
+        quality: 'low',
+        width: traced.illustration.width,
+        height: traced.illustration.height,
+        idempotencyKey: `${input.idempotencyKey}-erase-${tail.length - index}`,
+        signal: input.signal,
+        instruction: erasePrompt(name),
+      });
+      calls += 1;
+      usage = sumUsage(usage, edited.usage);
+      current = edited.png;
+      backward.push(current);
+    } catch {
+      break;
+    }
+  }
+  const forward = [...backward].reverse();
+  if (forward.length !== tail.length + 1) return { stages: forward, calls, usage, lesson: null };
+  const imagesInOrder: RgbaImage[] = [];
+  for (const png of forward) {
+    try {
+      imagesInOrder.push(flattenOnWhite(await decodePng(png)));
+    } catch {
+      return { stages: forward, calls, usage, lesson: null };
+    }
+  }
+  const labels = [planNames[0] ?? 'bentuk', ...tail];
+  const stages: { name: string; contours: Contour[] }[] = [];
+  for (let index = 0; index < imagesInOrder.length; index += 1) {
+    const image = imagesInOrder[index];
+    const previous = imagesInOrder[index - 1];
+    if (!image) continue;
+    const ink = index === 0 || !previous ? image : subtractInk(previous, image);
+    if (!ink) return { stages: forward, calls, usage, lesson: null };
+    const contours = traceInk(ink).filter((contour) => contour.points.length >= 2);
+    const name = labels[index] ?? 'bagian';
+    if (contours.length === 0) return { stages: forward, calls, usage, lesson: null };
+    stages.push({ name, contours });
+  }
+  const lesson = buildNamedLesson({
+    id: input.lessonId,
+    title,
+    targetHash: traced.targetHash,
+    contours: traced.contours,
+    sourceWidth: traced.illustration.width,
+    sourceHeight: traced.illustration.height,
+    photo: traced.illustration,
+    palette: [],
+    flatRegions: traced.flatRegions,
+    ...(parts.length > 0 ? { parts } : {}),
+    stages,
+  });
+  return { stages: forward, calls, usage, lesson };
 }
 
 async function drawPass(
@@ -259,10 +374,10 @@ function lessonFrom(
   photo: RgbaImage,
   palette: readonly string[],
   written: InstructionResult | null,
-): ReturnType<typeof buildPhotoLesson> {
+): BuiltLesson {
   const title = written ? lessonTitle(written.title, written.subject) : 'Dari foto';
   const parts = written?.sameSubject ? written.parts : undefined;
-  return buildPhotoLesson({
+  return buildTutorialLesson({
     id: input.lessonId,
     title,
     targetHash: traced.targetHash,

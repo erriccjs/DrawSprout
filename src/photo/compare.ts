@@ -50,6 +50,7 @@ export function renderCumulativeStep(
   count: number,
   width: number,
   base: { r: number; g: number; b: number } = { r: 255, g: 255, b: 255 },
+  highlightNew = false,
 ): RgbaImage {
   const height = Math.max(1, Math.round(width * (LESSON_HEIGHT / LESSON_WIDTH)));
   const steps = lesson.steps.slice(0, Math.max(0, count));
@@ -74,13 +75,21 @@ export function renderCumulativeStep(
     ...step,
     guidePaths: step.guidePaths.filter((path) => path.role !== 'construction'),
   }));
-  const lines = rasterizeLesson({ ...lesson, steps: finalSteps, targetPreview: { paths: [] } }, width, height);
+  const sheet = { ...lesson, targetPreview: { paths: [] } };
+  const lines = rasterizeLesson({ ...sheet, steps: finalSteps }, width, height);
+  const prior = highlightNew && finalSteps.length > 1
+    ? rasterizeLesson({ ...sheet, steps: finalSteps.slice(0, -1) }, width, height)
+    : null;
+  const added = highlightNew && finalSteps.length > 0
+    ? rasterizeLesson({ ...sheet, steps: finalSteps.slice(-1) }, width, height)
+    : null;
   for (let i = 0; i < lines.length; i += 1) {
     if (lines[i] !== 1) continue;
+    const fresh = added?.[i] === 1 && prior?.[i] !== 1;
     const offset = i * 4;
-    data[offset] = 30;
-    data[offset + 1] = 30;
-    data[offset + 2] = 30;
+    data[offset] = fresh ? 226 : 30;
+    data[offset + 1] = fresh ? 59 : 30;
+    data[offset + 2] = fresh ? 59 : 30;
     data[offset + 3] = 255;
   }
   if (!hasOutline) {
