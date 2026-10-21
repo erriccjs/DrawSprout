@@ -11,6 +11,7 @@
 import { bytesToBase64 } from './openai';
 import type { ImageEditor, InstructionWriter } from './openai';
 import { runPhotoPipeline } from './pipeline';
+import { imageProvider, replicateApiKey } from './provider';
 import { DEFAULT_TEXT_MODEL, type PhotoVariant } from './prompts';
 import { decodePng } from './png';
 
@@ -20,6 +21,10 @@ export interface PhotoEnv {
   readonly OPENAI_API_KEY?: string;
   readonly OPENAI_IMAGE_MODEL?: string;
   readonly OPENAI_TEXT_MODEL?: string;
+  readonly IMAGE_PROVIDER?: string;
+  readonly REPLICATE_API_KEY?: string;
+  readonly REPLICATE_API_TOKEN?: string;
+  readonly REPLICATE_IMAGE_MODEL?: string;
 }
 
 export interface JobCache {
@@ -44,7 +49,7 @@ const RATE_WINDOW_MS = 10 * 60 * 1000;
 const PNG = [137, 80, 78, 71, 13, 10, 26, 10];
 
 const parentMessages = {
-  missing_key: 'Layanan foto belum dipasang di server (OPENAI_API_KEY).',
+  missing_key: 'Layanan foto belum dipasang di server (OPENAI_API_KEY atau REPLICATE_API_KEY).',
   bad_request: 'Foto tidak dapat dipakai. Pilih gambar lain.',
   too_large: 'Foto terlalu besar. Pilih bagian yang lebih kecil.',
   rate_limited: 'Terlalu banyak permintaan. Coba lagi nanti.',
@@ -113,7 +118,7 @@ export async function handlePhotoLessonRequest(
   cache.inflight.set(idempotencyKey, work);
 
   try {
-    if (!env.OPENAI_API_KEY) throw new PhotoRequestError('missing_key', 500);
+    if (!hasImageSecret(env)) throw new PhotoRequestError('missing_key', 500);
     const file = asBlob(form.get('image'));
     if (!file) throw new PhotoRequestError('bad_request', 400);
     const fileType = 'type' in file && typeof file.type === 'string' ? file.type : '';
@@ -134,12 +139,15 @@ export async function handlePhotoLessonRequest(
     }
     if (!allow(buckets, clientKey(request), now())) throw new PhotoRequestError('rate_limited', 429);
 
+    const provider = imageProvider(env.IMAGE_PROVIDER);
+    const configuredImageModel = provider === 'replicate' ? env.REPLICATE_IMAGE_MODEL : env.OPENAI_IMAGE_MODEL;
     const result = await runPhotoPipeline({
       png,
       variant,
       idempotencyKey,
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(120_000)]),
-      ...(env.OPENAI_IMAGE_MODEL ? { configuredImageModel: env.OPENAI_IMAGE_MODEL } : {}),
+      provider,
+      ...(configuredImageModel ? { configuredImageModel } : {}),
       textModel: env.OPENAI_TEXT_MODEL || DEFAULT_TEXT_MODEL,
       lessonId: deps.newLessonId?.() ?? `photo-${crypto.randomUUID()}`,
     }, {
@@ -170,6 +178,11 @@ export async function handlePhotoLessonRequest(
   } finally {
     cache.inflight.delete(idempotencyKey);
   }
+}
+
+function hasImageSecret(env: PhotoEnv): boolean {
+  if (imageProvider(env.IMAGE_PROVIDER) === 'replicate') return replicateApiKey(env) !== undefined;
+  return Boolean(env.OPENAI_API_KEY);
 }
 
 function allow(buckets: Map<string, number[]>, key: string, nowMs: number): boolean {

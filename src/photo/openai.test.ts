@@ -42,25 +42,27 @@ describe('OpenAI client', () => {
     expect(promptText).toContain('Do not add limbs');
     expect(promptText).toContain('closed outer silhouette');
     expect(promptText).toContain('barcode');
+    expect(form.get('background')).toBe('opaque');
     expect(JSON.stringify([...form.entries()])).not.toContain('sk-test-not-real');
   });
 
   it('asks the text model with the illustration, the step labels, and chat token counts', async () => {
     const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ subject: 'Kucing', title: 'Kucing', steps: [{ id: 'outline-1', instruction: 'Gambar badan kucing.' }] }) } }],
+      choices: [{ message: { content: JSON.stringify({ subject: 'Kucing', title: 'Kucing', parts: [{ primitive: 'circle', name: 'kepala', pair: false, x: 1, y: 2, width: 3, height: 4, rotation: 0 }] }) } }],
       usage: { prompt_tokens: 20, completion_tokens: 9, total_tokens: 29 },
     }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     const written = await openAiClients('sk-test-not-real').instructions.write({
       model: 'gpt-4.1-mini',
-      steps: [{ id: 'outline-1', phase: 'outline', label: 'garis besar subjek', position: 'tengah' }],
+      targets: [{ id: 'part-1', primitive: 'circle', pair: false, x: 1, y: 2, width: 3, height: 4 }],
       illustrationPng: png,
       signal: AbortSignal.timeout(1000),
       idempotencyKey: 'idem-key-1',
     });
     expect(written.subject).toBe('Kucing');
     expect(written.title).toBe('Kucing');
-    expect(written.instructions.get('outline-1')).toBe('Gambar badan kucing.');
+    expect(written.parts[0]?.name).toBe('kepala');
+    expect(written.parts[0]?.primitive).toBe('circle');
     expect(written.usage).toEqual({ inputTokens: 20, outputTokens: 9, totalTokens: 29 });
     const init = fetchMock.mock.calls[0]?.[1];
     expect(new Headers(init?.headers).get('idempotency-key')).toBe('idem-key-1-text');
@@ -68,8 +70,9 @@ describe('OpenAI client', () => {
     const body = JSON.parse(init.body) as { messages: { content: { type: string; text?: string; image_url?: { url: string } }[] }[] };
     const content = body.messages[0]?.content ?? [];
     const text = content.find((part) => part.type === 'text')?.text ?? '';
-    expect(text).toContain('garis besar subjek');
+    expect(text).toContain('circle');
     expect(text).toContain('latar belakang');
+    expect(text).toContain('1000');
     expect(content.some((part) => part.type === 'image_url' && part.image_url?.url.startsWith('data:image/png;base64,'))).toBe(true);
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ImageEditor, InstructionRequest, InstructionWriter } from './openai';
-import { encodePng, type RgbaImage } from './png';
+import { decodePng, encodePng, type RgbaImage } from './png';
 import { runPhotoPipeline } from './pipeline';
 
 function frame(): RgbaImage {
@@ -20,8 +20,25 @@ function frame(): RgbaImage {
   return { width, height, data };
 }
 
+function ghost(): RgbaImage {
+  const width = 24;
+  const height = 18;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const on = x >= 4 && x < 20 && y >= 4 && y < 14;
+      const index = (y * width + x) * 4;
+      data[index] = 0;
+      data[index + 1] = 0;
+      data[index + 2] = 0;
+      data[index + 3] = on ? 255 : 0;
+    }
+  }
+  return { width, height, data };
+}
+
 describe('photo pipeline wiring', () => {
-  it('sends quality, step labels, and the illustration, and drops a mismatched instruction', async () => {
+  it('sends shape targets and the illustration, and drops a mismatched part name', async () => {
     const art = await encodePng(frame());
     const captured: { request: InstructionRequest | null } = { request: null };
     const images: ImageEditor = {
@@ -37,7 +54,7 @@ describe('photo pipeline wiring', () => {
         return Promise.resolve({
           subject: 'Kotak',
           title: 'Wajah anak',
-          instructions: new Map([['outline-1', 'Buat garis besar wajah anak.']]),
+          parts: [{ primitive: 'circle', name: 'wajah anak', pair: false, x: 0, y: 0, width: 4, height: 4, rotation: 0 }],
           usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
         });
       },
@@ -54,12 +71,36 @@ describe('photo pipeline wiring', () => {
     expect(result.model).toBe('gpt-image-1.5');
     expect(result.quality).toBe('low');
     expect(result.lesson.title).toBe('Kotak');
-    expect(result.lesson.steps[0]?.instruction).toBe('Gambar bentuk yang paling besar.');
+    expect(result.lesson.steps[0]?.instruction).toMatch(/bentuk utamanya/);
+    expect(result.lesson.steps[0]?.instruction).not.toMatch(/wajah/);
     expect(result.textUsage).toEqual({ inputTokens: 11, outputTokens: 7, totalTokens: 18 });
     const request = captured.request;
     if (request === null) throw new Error('instruction writer was not called');
-    const firstStep = request.steps[0];
-    expect(firstStep?.label).toBe('garis besar subjek');
+    expect(request.targets.length).toBeGreaterThan(0);
+    expect(request.targets[0]?.primitive).toMatch(/circle|ellipse|rounded-rect|triangle|line/);
     expect(request.illustrationPng[0]).toBe(137);
+  });
+
+  it('flattens a transparent illustration onto white before it is returned', async () => {
+    const art = await encodePng(ghost());
+    const images: ImageEditor = {
+      edit() {
+        return Promise.resolve({ png: art, usage: null });
+      },
+    };
+    const result = await runPhotoPipeline({
+      png: art,
+      variant: 'default',
+      idempotencyKey: 'flatten-key1',
+      signal: AbortSignal.timeout(5_000),
+      textModel: 'gpt-4.1-mini',
+      lessonId: 'photo-flatten',
+    }, { images });
+    const decoded = await decodePng(result.illustrationPng);
+    const corner = decoded.data[3];
+    expect(corner).toBe(255);
+    expect(decoded.data[0]).toBe(255);
+    expect(decoded.data[1]).toBe(255);
+    expect(decoded.data[2]).toBe(255);
   });
 });

@@ -19,24 +19,27 @@ const SHARED = [
   'Keep the pose, the direction the subject faces, the silhouette, the proportions, and the count of visible parts of that subject.',
   'Keep distinctive features that identify it: markings, ears, wheels, handle, petals.',
   'Leave out the background and anything that is not the subject: people, hands, legs, leashes, furniture, ground, sky, and scenery.',
-  'Do not draw letters, numbers, barcodes, logos, or writing, unless the writing itself is the only subject.',
+  'Do not draw letters, numbers, barcodes, logos, racing numbers, or writing, unless the writing itself is the only subject.',
+  'Do not draw rows of short parallel stripes, dashes, or a grille of tick marks. Those are labels, not parts of the subject.',
+  'A toy car keeps its body, wheels, seat, and steering wheel only. Omit the side number and the barcode.',
   'Do not add limbs, clothes, hats, poles, flowers, wheels, vehicles, characters, or any object that is not in the photo.',
   'Do not invent parts that are hidden. No shading, no colour, no background.',
+  'Opaque white background. No transparency.',
 ].join(' ');
 
-export function imagePrompt(variant: PhotoVariant): string {
-  if (variant === 'simple') {
-    return [
+export function imagePrompt(variant: PhotoVariant, reinforceSilhouette = false): string {
+  const base = variant === 'simple'
+    ? [
       SHARED,
       'Same subject and same pose as the photo. Do not redesign it and do not turn it into a character.',
       'Fewer interior lines than a careful copy. One closed outer silhouette, then only the marks a child needs to recognise this exact subject.',
       'Do not add a wheel, flower, vehicle, hat, or any extra object.',
-    ].join(' ');
-  }
-  if (variant === 'faithful') {
-    return `${SHARED} Stay close to the photo of this one subject. Do not drop a feature that identifies it. The outer silhouette must be one closed shape.`;
-  }
-  return SHARED;
+    ].join(' ')
+    : variant === 'faithful'
+      ? `${SHARED} Stay close to the photo of this one subject. Do not drop a feature that identifies it. The outer silhouette must be one closed shape.`
+      : SHARED;
+  if (!reinforceSilhouette) return base;
+  return `${base} The previous drawing was only a fragment. Draw the FULL subject: one continuous closed outer silhouette around all of it, on an opaque white background, with no labels and no row of short parallel lines.`;
 }
 
 /** Simple stays on the default line-art model at low quality. Mini is opt-in for the other variants. */

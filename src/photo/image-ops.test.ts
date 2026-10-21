@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyOrientation, cropImage, downscaleLongEdge } from './image-ops';
+import { applyOrientation, cropImage, downscaleLongEdge, flattenOnWhite } from './image-ops';
 import type { RgbaImage } from './png';
 
 function image(width: number, height: number, fill: (x: number, y: number) => readonly [number, number, number, number]): RgbaImage {
@@ -38,6 +38,15 @@ describe('photo pixels', () => {
     expect(cropped).toMatchObject({ width: 2, height: 2 });
     expect(pixel(cropped, 0, 0)[0]).toBe(40);
     expect(pixel(cropped, 1, 0)[0]).toBe(80);
+  });
+
+  it('composites transparent black onto white', () => {
+    const source = image(1, 1, () => [0, 0, 0, 0]);
+    expect(pixel(flattenOnWhite(source), 0, 0)).toEqual([255, 255, 255, 255]);
+    const red = image(1, 1, () => [255, 0, 0, 128]);
+    const flat = pixel(flattenOnWhite(red), 0, 0);
+    expect(flat[0]).toBeGreaterThan(200);
+    expect(flat[3]).toBe(255);
   });
 
   it('downscales the long edge and keeps the aspect', () => {

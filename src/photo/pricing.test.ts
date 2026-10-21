@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { imageEditUsd, listCostUsd, textEditUsd } from './pricing';
+import { imageEditUsd, listCostUsd, replicateImageUsd, textEditUsd } from './pricing';
 
 describe('list prices', () => {
   it('prices gpt-image-1.5 image tokens and gpt-4.1-mini text tokens', () => {
@@ -36,5 +36,19 @@ describe('list prices', () => {
     expect(cost.textUsd).toBeNull();
     expect(cost.usd).toBe(8);
     expect(imageEditUsd('other-model', { inputTokens: 1, outputTokens: 1, totalTokens: 2 })).toBeNull();
+  });
+
+  it('prices a Replicate official model per image even without token usage', () => {
+    expect(replicateImageUsd('black-forest-labs/flux-kontext-pro')).toBe(0.04);
+    expect(replicateImageUsd('black-forest-labs/flux-1.1-pro')).toBe(0.04);
+    expect(replicateImageUsd('owner/other')).toBeNull();
+    const cost = listCostUsd({
+      imageModel: 'black-forest-labs/flux-kontext-pro',
+      image: null,
+      textModel: 'gpt-4.1-mini',
+      text: null,
+    });
+    expect(cost.imageUsd).toBe(0.04);
+    expect(cost.usd).toBe(0.04);
   });
 });

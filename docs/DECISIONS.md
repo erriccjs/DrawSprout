@@ -980,7 +980,9 @@ What remains is spread big-shapes-first, at most 3 paths per step and at most
 7 drawing steps. Colour steps are at most the 3 largest closed regions that
 are not the same area twice. If the largest shape covers under 35% of the
 subject box, `needsReview` is set. That check is a spike heuristic, not the
-section 8 gate, and a parent can still approve.
+section 8 gate, and a parent can still approve. D-68 replaces this grouping:
+guides are fitted primitives, the step count follows the real parts, and
+colour follows the photo.
 
 **Instructions.** The text call receives each step's phase, label, and
 position, plus a 512px PNG of the illustration, and must name the subject.
@@ -997,10 +999,93 @@ $2. `gpt-4.1-mini` text is $0.40 in and $1.60 out. If the image usage does
 not split text and image input, every input token is priced as image input.
 Cached and batch rates are not applied. `OPENAI_IMAGE_USD`, when set, still
 replaces `costUsd`; `listCostUsd` in the metrics is the computed figure.
-The harness idempotency key ends in `v2`, so this rerun is a new paid job.
-A retry of the same revision is not.
+The harness idempotency key ended in `v2` for that rerun. D-68 bumps it to `v3`.
 
 **Harness.** `PHOTO_EVAL_OUT` or `--out <dir>` chooses the output directory.
 The default is still `./photo-eval-out`. The contact sheet PNG and HTML show
 the photo, the illustration, and a cumulative render of each step with its
 Indonesian line.
+
+### D-68 — Photo steps are basic shapes, like the catalogue
+
+Owner feedback after the second live run: a photo lesson must teach like the
+hand-authored catalogue (`cat-lesson` and the others), not by tracing
+fragments. A child builds the subject from recognisable shapes. D-67's contour
+grouping (largest polyline first, ink-threshold details, at most 7 drawing
+steps and 3 colour steps) is superseded for step geometry. The speck and
+stripe cleaning, the closed-silhouette prompt, explicit quality, list-price
+cost, and the text-token fields from D-67 stay.
+
+**Primitives.** Each drawing step is one circle, ellipse, rounded rectangle,
+triangle, or a single line or curve. The guide is that shape — a circle uses
+the same two-arc form as the catalogue head, dashed as `final-outline` — not
+the marching-squares polyline. Symmetric pairs (two ears, two eyes, two
+wheels) are one step with two paths. The instruction names the shape and the
+part, for example "Gambar lingkaran besar untuk kepala." and "Tambahkan dua
+segitiga untuk telinga." Sentences are templates. A name that says "latar
+belakang", "wajah anak", "ventilasi", or "barcode" is discarded. Duplicate
+sentences are distinguished so two steps never share a line.
+
+**How many steps.** There is no fixed drawing-step cap and no total-step cap.
+A simple cup can be a few steps. A subject with more real parts gets more
+steps. Specks, near-duplicate contours, and near-empty strokes are not steps.
+The count follows the parts that remain.
+
+**Names.** The text model sees the illustration and the fitted parts
+(primitive, pair, bbox in the 1000×750 space) and returns a shape plan:
+Indonesian subject, title, and parts with a primitive, a noun, a pair flag,
+and an approximate bbox and rotation. Each proposal is snapped onto a traced
+part and can rename it, change the primitive, or join a symmetric pair. A
+proposal that does not overlap the ink is dropped. If the call fails, the
+lesson still builds, with names such as "bentuk utamanya".
+
+**Colour.** One colour step per distinct colour of the object in the photo,
+sampled inside each part. Near-white samples are the background and are not
+coloured. Near-identical colours are one step, with one region per part that
+shares that colour. A tiny area is merged into a nearby colour, or dropped
+when it is both tiny and a different colour. The number of colour steps
+follows the photo. It is not capped at 2 or 3.
+
+**Opaque ink.** The image edit asks for `background=opaque`. The returned PNG
+is flattened onto white before it is hashed, traced, previewed, or returned.
+Transparent pixels are often stored as black; flattening is what keeps the
+preview from painting that black.
+
+**Review.** `needsReview` is set when the fitted shapes together cover under
+35% of the ink bbox (`subjectFit`), or when the Dice overlap with the
+illustration is under the existing spike threshold. Two real parts that
+together cover the ink are a lesson, even when each piece is small. A parent
+can still approve. When `subjectFit` is under 35%, the pipeline asks for one
+more illustration with a stronger full-subject prompt and keeps the attempt
+that covers more of the ink. The idempotency key of that second call ends in
+`-silhouette`. Token usage is summed. This is not the section 8 gate.
+
+**Harness.** The eval idempotency key ends in `v3`.
+
+### D-69 — Replicate as a second image provider
+
+The line-art call can use Replicate as well as OpenAI. `IMAGE_PROVIDER` is
+`openai` (the default) or `replicate`. The Worker secret for Replicate is
+`REPLICATE_API_KEY` (`npx wrangler secret put REPLICATE_API_KEY`). The build
+does not read it. `REPLICATE_API_TOKEN` is accepted only when
+`REPLICATE_API_KEY` is absent, so a local `.dev.vars` or the eval harness
+keeps working. The parent-facing error names `REPLICATE_API_KEY`.
+
+The default model is `black-forest-labs/flux-kontext-pro`: an edit with
+`input_image`, `output_format=png`, and `aspect_ratio=match_input_image`.
+`black-forest-labs/flux-1.1-pro` is also supported, as text-to-image with
+`image_prompt` for guidance; it is expected to be less faithful and is there
+for comparison. `--model owner/name` may name another model; unknown ids that
+are not `flux-1.1-pro` use the Kontext input fields. The same line-art prompt
+is used, including the opaque-white rule, and the PNG is still flattened.
+
+The client sends `Prefer: wait=60` and `Idempotency-Key`, then polls
+`GET /v1/predictions/{id}`. Abort and the 110s deadline cancel the prediction.
+Output is downloaded only from `replicate.delivery`. Replicate list prices
+(20 October 2026, per output image): flux-kontext-pro $0.04, flux-1.1-pro
+$0.04. A model that is not in that table is unpriced. `REPLICATE_IMAGE_USD`
+overrides the harness figure the way `OPENAI_IMAGE_USD` does for OpenAI.
+Text names still use OpenAI when `OPENAI_API_KEY` is set; without it the
+shape templates stand. The harness flags are `--provider`, `--model`, and
+`--compare` (OpenAI, Kontext, and flux-1.1-pro on one contact sheet). The
+gate is still not claimed.

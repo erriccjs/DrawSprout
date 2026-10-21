@@ -3,6 +3,8 @@
  *
  *   OPENAI_API_KEY=... npm run photo-eval -- <photo-directory>
  *   OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --out <directory>
+ *   REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --provider replicate --model <id>
+ *   npm run photo-eval -- <photo-directory> --compare
  *
  * `PHOTO_EVAL_OUT` sets the same output directory. The default is
  * ./photo-eval-out/. The contact sheet shows the photo, the illustration,
@@ -27,6 +29,8 @@ import { readJpegOrientation } from '../../src/photo/jpeg-orientation';
 import type { TokenUsage } from '../../src/photo/openai';
 import { openAiClients } from '../../src/photo/openai';
 import { runPhotoPipeline } from '../../src/photo/pipeline';
+import { imageProvider, replicateApiKey, type ImageProvider } from '../../src/photo/provider';
+import { DEFAULT_REPLICATE_MODEL, replicateEditor } from '../../src/photo/replicate';
 import { encodePng, decodePng, type RgbaImage } from '../../src/photo/png';
 import { listCostUsd } from '../../src/photo/pricing';
 import { DEFAULT_TEXT_MODEL, type PhotoVariant } from '../../src/photo/prompts';
@@ -34,12 +38,21 @@ import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../
 import { composeContactSheet } from '../../src/photo/sheet';
 
 /** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
-const EVAL_KEY_REVISION = 'v2';
+const EVAL_KEY_REVISION = 'v3';
 
 interface Args {
   readonly score?: string;
   readonly out?: string;
   readonly dir?: string;
+  readonly provider?: ImageProvider;
+  readonly model?: string;
+  readonly compare?: boolean;
+}
+
+interface Job {
+  readonly provider: ImageProvider;
+  readonly model?: string;
+  readonly label: string;
 }
 
 async function main(): Promise<void> {
@@ -53,13 +66,16 @@ async function main(): Promise<void> {
     return;
   }
   if (!args.dir) {
-    console.error('Usage: OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> [--out <directory>]');
+    console.error('Usage: OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> [--out <directory>] [--provider replicate --model <id>] [--compare]');
     process.exit(1);
   }
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    console.error('OPENAI_API_KEY is not set.');
-    process.exit(1);
+  const jobs = resolveJobs(args);
+  if (!args.compare) {
+    const only = jobs[0];
+    if (!only || !keyFor(only.provider)) {
+      console.error(only?.provider === 'replicate' ? 'REPLICATE_API_KEY is not set.' : 'OPENAI_API_KEY is not set.');
+      process.exit(1);
+    }
   }
 
   const outDir = path.resolve(args.out || process.env.PHOTO_EVAL_OUT || path.join(process.cwd(), 'photo-eval-out'));
@@ -69,15 +85,13 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const clients = openAiClients(apiKey);
   const variant = evalVariant(process.env.PHOTO_EVAL_VARIANT);
   const textModel = process.env.OPENAI_TEXT_MODEL || DEFAULT_TEXT_MODEL;
-  const flatUsd = flatImageUsd(process.env.OPENAI_IMAGE_USD);
   const rows: RgbaImage[][] = [];
   const htmlRows: string[] = [];
   const metrics: PhotoMetric[] = [];
   let failures = 0;
-  console.log(`Photo eval: ${names.length} file(s), variant ${variant}, output ${outDir}`);
+  console.log(`Photo eval: ${names.length} file(s), variant ${variant}, jobs ${jobs.map((job) => job.label).join(', ')}, output ${outDir}`);
 
   for (const name of names) {
     if (name.toLowerCase().endsWith('.webp')) {
@@ -86,16 +100,39 @@ async function main(): Promise<void> {
       metrics.push({ file: name, ok: false, error: 'webp' });
       continue;
     }
-    const started = Date.now();
+    const bytes = new Uint8Array(await readFile(path.join(args.dir, name)));
+    let photo: { png: Uint8Array };
     try {
-      const bytes = new Uint8Array(await readFile(path.join(args.dir, name)));
-      const photo = await toPng(bytes, name);
+      photo = await toPng(bytes, name);
+    } catch (error) {
+      failures += 1;
+      const message = error instanceof Error ? error.message.slice(0, 300) : 'failed';
+      metrics.push({ file: name, ok: false, error: message });
+      htmlRows.push(`<section><h2>${escapeHtml(name)}</h2><p>${escapeHtml(message)}</p></section>`);
+      console.error(`${name}: ${message}`);
+      continue;
+    }
+    for (const job of jobs) {
+    const started = Date.now();
+    const label = jobs.length > 1 ? `${job.label}: ${name}` : name;
+    const clients = clientsFor(job);
+    if (!clients) {
+      failures += 1;
+      const message = job.provider === 'replicate' ? 'REPLICATE_API_KEY is not set.' : 'OPENAI_API_KEY is not set.';
+      metrics.push({ file: name, provider: job.label, ok: false, error: message });
+      htmlRows.push(`<section><h2>${escapeHtml(label)}</h2><p>${escapeHtml(message)}</p></section>`);
+      console.error(`${label}: ${message}`);
+      continue;
+    }
+    try {
+      const flatUsd = flatImageUsd(job.provider === 'replicate' ? process.env.REPLICATE_IMAGE_USD : process.env.OPENAI_IMAGE_USD);
       const result = await runPhotoPipeline({
         png: photo.png,
         variant,
-        idempotencyKey: evalKey(name, photo.png),
+        provider: job.provider,
+        idempotencyKey: evalKey(name, photo.png, job),
         signal: AbortSignal.timeout(120_000),
-        ...(process.env.OPENAI_IMAGE_MODEL ? { configuredImageModel: process.env.OPENAI_IMAGE_MODEL } : {}),
+        ...(job.model ? { configuredImageModel: job.model } : {}),
         textModel,
         lessonId: `photo-eval-${slug(name)}`,
       }, clients);
@@ -116,7 +153,7 @@ async function main(): Promise<void> {
       const illustrationB64 = base64(result.illustrationPng);
       const stepPngs = await Promise.all(stepImages.map((image) => encodePng(image)));
       htmlRows.push(htmlRow({
-        name,
+        name: label,
         photo: photoB64,
         illustration: illustrationB64,
         steps: result.lesson.steps.map((step, index) => ({
@@ -133,6 +170,7 @@ async function main(): Promise<void> {
       }));
       metrics.push({
         file: name,
+        provider: job.label,
         ok: true,
         ms,
         model: result.model,
@@ -150,13 +188,14 @@ async function main(): Promise<void> {
         needsReview: result.needsReview,
         targetHash: result.targetHash,
       });
-      console.log(`${name}: ${ms} ms, ${result.model} ${result.quality}, image ${tokens(result.imageUsage)}, text ${tokens(result.textUsage)}, usd ${costUsd ?? 'unknown'}, steps ${result.lesson.steps.length}`);
+      console.log(`${label}: ${ms} ms, ${result.model} ${result.quality}, image ${tokens(result.imageUsage)}, text ${tokens(result.textUsage)}, usd ${costUsd ?? 'unknown'}, steps ${result.lesson.steps.length}`);
     } catch (error) {
       failures += 1;
       const message = error instanceof Error ? error.message.slice(0, 300) : 'failed';
-      metrics.push({ file: name, ok: false, ms: Date.now() - started, error: message });
-      htmlRows.push(`<section><h2>${escapeHtml(name)}</h2><p>${escapeHtml(message)}</p></section>`);
-      console.error(`${name}: ${message}`);
+      metrics.push({ file: name, provider: job.label, ok: false, ms: Date.now() - started, error: message });
+      htmlRows.push(`<section><h2>${escapeHtml(label)}</h2><p>${escapeHtml(message)}</p></section>`);
+      console.error(`${label}: ${message}`);
+    }
     }
   }
 
@@ -179,6 +218,9 @@ async function main(): Promise<void> {
 function parseArgs(argv: readonly string[]): Args {
   let score: string | undefined;
   let out: string | undefined;
+  let provider: ImageProvider | undefined;
+  let model: string | undefined;
+  let compare = false;
   const positional: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index] ?? '';
@@ -190,6 +232,18 @@ function parseArgs(argv: readonly string[]): Args {
       if (!value) throw new Error('Missing directory after --out');
       out = value;
       index += 1;
+    } else if (token === '--provider') {
+      const value = argv[index + 1] ?? '';
+      if (value !== 'openai' && value !== 'replicate') throw new Error('Provider must be openai or replicate');
+      provider = value;
+      index += 1;
+    } else if (token === '--model') {
+      const value = argv[index + 1];
+      if (!value) throw new Error('Missing model id after --model');
+      model = value;
+      index += 1;
+    } else if (token === '--compare') {
+      compare = true;
     } else if (token.startsWith('-')) {
       throw new Error(`Unknown option ${token}`);
     } else {
@@ -201,7 +255,47 @@ function parseArgs(argv: readonly string[]): Args {
     ...(score !== undefined ? { score } : {}),
     ...(out !== undefined ? { out } : {}),
     ...(dir !== undefined ? { dir } : {}),
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+    ...(compare ? { compare } : {}),
   };
+}
+
+function resolveJobs(args: Args): Job[] {
+  if (args.compare) {
+    return [
+      { provider: 'openai', label: 'openai' },
+      { provider: 'replicate', model: 'black-forest-labs/flux-kontext-pro', label: 'replicate/flux-kontext-pro' },
+      { provider: 'replicate', model: 'black-forest-labs/flux-1.1-pro', label: 'replicate/flux-1.1-pro' },
+    ];
+  }
+  const provider = args.provider ?? imageProvider(process.env.IMAGE_PROVIDER);
+  const model = args.model ?? (provider === 'replicate' ? process.env.REPLICATE_IMAGE_MODEL : process.env.OPENAI_IMAGE_MODEL);
+  const label = provider === 'replicate' ? `replicate/${model || DEFAULT_REPLICATE_MODEL}` : 'openai';
+  return [{ provider, ...(model ? { model } : {}), label }];
+}
+
+function keyFor(provider: ImageProvider): string | undefined {
+  if (provider === 'replicate') {
+    return replicateApiKey({
+      REPLICATE_API_KEY: process.env.REPLICATE_API_KEY,
+      REPLICATE_API_TOKEN: process.env.REPLICATE_API_TOKEN,
+    });
+  }
+  return process.env.OPENAI_API_KEY;
+}
+
+function clientsFor(job: Job): { images: ReturnType<typeof replicateEditor>; instructions?: ReturnType<typeof openAiClients>['instructions'] } | null {
+  const key = keyFor(job.provider);
+  if (!key) return null;
+  if (job.provider === 'replicate') {
+    const textKey = process.env.OPENAI_API_KEY;
+    return {
+      images: replicateEditor(key),
+      ...(textKey ? { instructions: openAiClients(textKey).instructions } : {}),
+    };
+  }
+  return openAiClients(key);
 }
 
 function report(result: ReturnType<typeof computeRubric>): void {
@@ -247,9 +341,10 @@ function flatImageUsd(value: string | undefined): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function evalKey(name: string, bytes: Uint8Array): string {
+function evalKey(name: string, bytes: Uint8Array, job: Job): string {
   const digest = createHash('sha256').update(bytes).digest('hex').slice(0, 16);
-  return `eval-${digest}-${slug(name)}-${EVAL_KEY_REVISION}`.slice(0, 80);
+  const modelBit = job.provider === 'replicate' ? `-r${(job.model ?? 'kontext').replace(/[^a-z0-9]+/gi, '').slice(-10)}` : '';
+  return `eval-${digest}-${slug(name)}${modelBit}-${EVAL_KEY_REVISION}`.slice(0, 80);
 }
 
 function slug(name: string): string {
@@ -264,6 +359,7 @@ function tokens(usage: TokenUsage | null): string {
 
 interface PhotoMetric {
   readonly file: string;
+  readonly provider?: string;
   readonly ok: boolean;
   readonly ms?: number;
   readonly model?: string;

@@ -49,6 +49,50 @@ export function sampleColor(image: RgbaImage, nx: number, ny: number): string {
   return hex(r / n, g / n, b / n);
 }
 
+export interface Rgb {
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+}
+
+/** Average of the non-white pixels around a normalised point. White is background. */
+export function sampleRegionRgb(image: RgbaImage, nx: number, ny: number): Rgb | null {
+  const reach = 0.04;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let coloured = 0;
+  let seen = 0;
+  for (let gy = 0; gy < 5; gy += 1) {
+    for (let gx = 0; gx < 5; gx += 1) {
+      const sx = clamp(Math.round((nx + ((gx - 2) * reach) / 2) * (image.width - 1)), 0, image.width - 1);
+      const sy = clamp(Math.round((ny + ((gy - 2) * reach) / 2) * (image.height - 1)), 0, image.height - 1);
+      const index = (sy * image.width + sx) * 4;
+      const pr = image.data[index] ?? 0;
+      const pg = image.data[index + 1] ?? 0;
+      const pb = image.data[index + 2] ?? 0;
+      const pa = image.data[index + 3] ?? 255;
+      seen += 1;
+      if (pa < 128) continue;
+      if (0.2126 * pr + 0.7152 * pg + 0.0722 * pb > 242) continue;
+      r += pr;
+      g += pg;
+      b += pb;
+      coloured += 1;
+    }
+  }
+  if (coloured < 3 || coloured / seen < 0.2) return null;
+  return { r: r / coloured, g: g / coloured, b: b / coloured };
+}
+
+export function rgbToHex(rgb: Rgb): string {
+  return hex(rgb.r, rgb.g, rgb.b);
+}
+
+export function rgbDistance(left: Rgb, right: Rgb): number {
+  return Math.hypot(left.r - right.r, left.g - right.g, left.b - right.b);
+}
+
 export function nearestColor(color: string, palette: readonly string[]): string {
   const rgb = parseHex(color);
   let best = palette[0] ?? '#e8552d';

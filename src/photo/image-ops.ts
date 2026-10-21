@@ -56,6 +56,20 @@ export function cropImage(image: RgbaImage, crop: CropRect): RgbaImage {
   return { width, height, data };
 }
 
+/** Composite onto white and force opaque alpha. Transparent pixels are often stored as black. */
+export function flattenOnWhite(image: RgbaImage): RgbaImage {
+  const data = new Uint8Array(image.data.length);
+  for (let index = 0; index < data.length; index += 4) {
+    const alpha = image.data[index + 3] ?? 255;
+    const scale = alpha / 255;
+    data[index] = Math.round((image.data[index] ?? 255) * scale + 255 * (1 - scale));
+    data[index + 1] = Math.round((image.data[index + 1] ?? 255) * scale + 255 * (1 - scale));
+    data[index + 2] = Math.round((image.data[index + 2] ?? 255) * scale + 255 * (1 - scale));
+    data[index + 3] = 255;
+  }
+  return { width: image.width, height: image.height, data };
+}
+
 export function downscaleLongEdge(image: RgbaImage, longEdge = PHOTO_LONG_EDGE): RgbaImage {
   const longest = Math.max(image.width, image.height);
   if (longest <= longEdge) return image;

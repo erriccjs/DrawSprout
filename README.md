@@ -189,14 +189,26 @@ production secret:
 npx wrangler secret put OPENAI_API_KEY
 ```
 
-The build does not read the secret. Workers Builds can succeed without it.
-The route then returns a clear error that the key is missing. Optional Worker
-vars, not secrets: `OPENAI_IMAGE_MODEL` (`gpt-image-2`, `gpt-image-1.5`,
-`gpt-image-1`, or `gpt-image-1-mini`; default `gpt-image-1.5`) and
-`OPENAI_TEXT_MODEL` (default `gpt-4.1-mini`). Default and *Lebih mirip foto*
-send `quality=medium`. *Lebih sederhana* stays on `gpt-image-1.5` at
+The Replicate secret's name is `REPLICATE_API_KEY`. A local `.dev.vars` or
+the eval harness may still set `REPLICATE_API_TOKEN`; that name is used only
+when `REPLICATE_API_KEY` is absent (D-69).
+
+```bash
+npx wrangler secret put REPLICATE_API_KEY
+```
+
+The build does not read either secret. Workers Builds can succeed without
+them. The route then returns a clear error that the key is missing. Optional
+Worker vars, not secrets: `IMAGE_PROVIDER` (`openai` by default, or
+`replicate`), `OPENAI_IMAGE_MODEL` (`gpt-image-2`, `gpt-image-1.5`,
+`gpt-image-1`, or `gpt-image-1-mini`; default `gpt-image-1.5`),
+`OPENAI_TEXT_MODEL` (default `gpt-4.1-mini`), and `REPLICATE_IMAGE_MODEL`
+(default `black-forest-labs/flux-kontext-pro`). Default and *Lebih mirip foto*
+send `quality=medium` on OpenAI. *Lebih sederhana* stays on `gpt-image-1.5` at
 `quality=low` and ignores `OPENAI_IMAGE_MODEL` (D-67). Set
 `OPENAI_IMAGE_MODEL=gpt-image-1-mini` only for a default or faithful job.
+Lessons are basic shapes in the catalogue style, then one colour step per
+distinct colour in the photo (D-68). The illustration is flattened onto white.
 
 ### Evaluation
 
@@ -205,6 +217,8 @@ repo's tests still need 22.12+), after `npm install`:
 
 ```bash
 OPENAI_API_KEY=... npm run photo-eval -- <photo-directory>
+REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --provider replicate --model black-forest-labs/flux-kontext-pro
+OPENAI_API_KEY=... REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --compare
 ```
 
 `<photo-directory>` is a folder of JPEG or PNG photos. The command writes
@@ -220,12 +234,15 @@ calling the API:
 npm run photo-eval -- --score photo-eval-out/rubric.csv
 ```
 
-`costUsd` uses OpenAI list prices for the image model and the text model
-(D-67). `OPENAI_IMAGE_USD`, if you set it to a number, replaces that figure;
-`listCostUsd` in `metrics.json` stays the computed one. Optional
-`PHOTO_EVAL_VARIANT` is `default`, `faithful`, or `simple`. The idempotency
-key for this revision ends in `v2`, so a rerun after the prompt change is a
-new paid job.
+`costUsd` uses OpenAI list prices for an OpenAI image model and the text
+model (D-67), or the Replicate per-image price for `flux-kontext-pro` and
+`flux-1.1-pro` (D-69, $0.04). `OPENAI_IMAGE_USD` or `REPLICATE_IMAGE_USD`, if
+you set it to a number, replaces that figure; `listCostUsd` in `metrics.json`
+stays the computed one. Optional `PHOTO_EVAL_VARIANT` is `default`,
+`faithful`, or `simple`. `--compare` runs OpenAI, Kontext, and flux-1.1-pro
+into one contact sheet. The idempotency key for this revision ends in `v3`,
+so a rerun after the shape-step change is a new paid job. `REPLICATE_API_TOKEN`
+is read only when `REPLICATE_API_KEY` is unset.
 
 CC0 samples, with credits, are in `scripts/photo-eval/samples/` (`LICENSES.md`).
 Running them does not pass the gate.

@@ -104,7 +104,7 @@ describe('POST /api/photo-lesson', () => {
     expect(mock.calls[0]?.key).toBe('same-key-01');
     const body = await first.json() as { lesson: { steps: { instruction: string }[] }; targetHash: string };
     expect(body.targetHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(body.lesson.steps[0]?.instruction).toBe('Gambar bentuk yang paling besar.');
+    expect(body.lesson.steps[0]?.instruction).toMatch(/lingkaran|oval|persegi panjang|segitiga|garis/);
 
     const third = await handlePhotoLessonRequest(post(art, 'same-key-01'), { OPENAI_API_KEY: 'test-key' }, shared);
     expect(third.status).toBe(200);
@@ -195,5 +195,32 @@ describe('POST /api/photo-lesson', () => {
     const response = await handlePhotoLessonRequest(post(png, 'too-wide-key'), { OPENAI_API_KEY: 'test-key' }, deps(mock.images));
     expect(response.status).toBe(413);
     expect(mock.calls).toHaveLength(0);
+  });
+
+  it('accepts REPLICATE_API_KEY, and the token name only when the key is absent', async () => {
+    const mock = editor();
+    const missing = await handlePhotoLessonRequest(
+      post(art, 'replicate-missing'),
+      { IMAGE_PROVIDER: 'replicate' },
+      deps(mock.images),
+    );
+    expect(missing.status).toBe(500);
+    const body = await missing.json() as { error: string };
+    expect(body.error).toContain('REPLICATE_API_KEY');
+    expect(mock.calls).toHaveLength(0);
+
+    const tokenOnly = await handlePhotoLessonRequest(
+      post(art, 'replicate-token'),
+      { IMAGE_PROVIDER: 'replicate', REPLICATE_API_TOKEN: 'r8-legacy' },
+      deps(mock.images),
+    );
+    expect(tokenOnly.status).toBe(200);
+
+    const keyWins = await handlePhotoLessonRequest(
+      post(art, 'replicate-key'),
+      { IMAGE_PROVIDER: 'replicate', REPLICATE_API_KEY: 'r8-canonical', REPLICATE_API_TOKEN: 'r8-legacy' },
+      deps(mock.images),
+    );
+    expect(keyWins.status).toBe(200);
   });
 });

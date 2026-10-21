@@ -10,6 +10,15 @@
 import type { TokenUsage } from './openai';
 import { IMAGE_MODELS, type ImageModel } from './prompts';
 
+/**
+ * Replicate official-model list prices, USD per output image, read from
+ * Replicate's pricing page on 20 October 2026. Not a per-second GPU estimate.
+ */
+export const REPLICATE_IMAGE_USD: Readonly<Record<string, number>> = {
+  'black-forest-labs/flux-kontext-pro': 0.04,
+  'black-forest-labs/flux-1.1-pro': 0.04,
+};
+
 interface ImageListPrice {
   readonly textInput: number;
   readonly imageInput: number;
@@ -52,13 +61,18 @@ export function textEditUsd(model: string, usage: TokenUsage): number | null {
 }
 
 /** Image cost plus text cost. Unpriced text is omitted, not treated as free in `textUsd` (that field stays null). */
+export function replicateImageUsd(model: string): number | null {
+  return REPLICATE_IMAGE_USD[model] ?? null;
+}
+
 export function listCostUsd(input: {
   readonly imageModel: string;
   readonly image: TokenUsage | null;
   readonly textModel: string;
   readonly text: TokenUsage | null;
 }): ListCost {
-  const imageUsd = input.image ? imageEditUsd(input.imageModel, input.image) : null;
+  const flat = replicateImageUsd(input.imageModel);
+  const imageUsd = flat !== null ? flat : (input.image ? imageEditUsd(input.imageModel, input.image) : null);
   const textUsd = input.text ? textEditUsd(input.textModel, input.text) : null;
   if (imageUsd === null) return { usd: null, imageUsd: null, textUsd };
   return { usd: money(imageUsd + (textUsd ?? 0)), imageUsd, textUsd };

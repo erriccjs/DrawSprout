@@ -49,9 +49,11 @@ function blitFit(
       const sx = Math.min(image.width - 1, Math.floor((x * image.width) / drawWidth));
       const from = (sy * image.width + sx) * 4;
       const to = ((offsetY + y) * destWidth + (offsetX + x)) * 4;
-      dest[to] = image.data[from] ?? 255;
-      dest[to + 1] = image.data[from + 1] ?? 255;
-      dest[to + 2] = image.data[from + 2] ?? 255;
+      const alpha = image.data[from + 3] ?? 255;
+      const scale = alpha / 255;
+      dest[to] = Math.round((image.data[from] ?? 255) * scale + 255 * (1 - scale));
+      dest[to + 1] = Math.round((image.data[from + 1] ?? 255) * scale + 255 * (1 - scale));
+      dest[to + 2] = Math.round((image.data[from + 2] ?? 255) * scale + 255 * (1 - scale));
       dest[to + 3] = 255;
     }
   }

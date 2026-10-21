@@ -6,6 +6,7 @@
  * billed request on OpenAI's side.
  */
 
+import { knownPrimitive, type ShapeProposal } from './shapes';
 import { imagePrompt, imageSize, type ImageQuality, type PhotoVariant } from './prompts';
 
 export interface TokenUsage {
@@ -25,6 +26,7 @@ export interface ImageEditRequest {
   readonly height: number;
   readonly idempotencyKey: string;
   readonly signal: AbortSignal;
+  readonly reinforceSilhouette?: boolean;
 }
 
 export interface ImageEditResult {
@@ -36,9 +38,19 @@ export interface ImageEditor {
   edit(input: ImageEditRequest): Promise<ImageEditResult>;
 }
 
+export interface ShapeTargetInput {
+  readonly id: string;
+  readonly primitive: string;
+  readonly pair: boolean;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface InstructionRequest {
   readonly model: string;
-  readonly steps: readonly { id: string; phase: string; label: string; position: string }[];
+  readonly targets: readonly ShapeTargetInput[];
   readonly illustrationPng: Uint8Array;
   readonly signal: AbortSignal;
   readonly idempotencyKey: string;
@@ -47,7 +59,7 @@ export interface InstructionRequest {
 export interface InstructionResult {
   readonly subject: string;
   readonly title: string;
-  readonly instructions: ReadonlyMap<string, string>;
+  readonly parts: readonly ShapeProposal[];
   readonly usage: TokenUsage | null;
 }
 
@@ -64,10 +76,11 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
       async edit(input) {
         const form = new FormData();
         form.set('model', input.model);
-        form.set('prompt', imagePrompt(input.variant));
+        form.set('prompt', imagePrompt(input.variant, input.reinforceSilhouette === true));
         form.set('quality', input.quality);
         form.set('size', imageSize(input.width, input.height));
         form.set('n', '1');
+        form.set('background', 'opaque');
         form.set('output_format', 'png');
         form.set('image', new File([toBlobPart(input.png)], 'photo.png', { type: 'image/png' }));
         const response = await fetch(IMAGE_URL, {
@@ -105,20 +118,17 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                 {
                   type: 'text',
                   text: [
-                    'Gambar garis ini adalah panduan menggambar untuk anak.',
-                    'Sebutkan subjek dari gambar garis (kata benda bahasa Indonesia, misalnya kucing, cangkir, bunga).',
+                    'Gambar garis ini adalah panduan menggambar untuk anak, seperti buku how-to-draw.',
+                    'Sebutkan subjek dengan kata benda bahasa Indonesia (kucing, cangkir, bunga, mobil).',
                     'Judul pendek, 2 sampai 4 kata, menyebut subjek itu.',
-                    'Untuk setiap id di daftar, tulis SATU kalimat instruksi bahasa Indonesia yang menyebut subjek dan bagian pada langkah itu.',
-                    'Langkah outline pertama adalah garis besar bentuk utama subjek, bukan wajah anak dan bukan latar.',
-                    'Langkah warna hanya menamai wilayah besar pada subjek. Jangan menulis "latar belakang".',
-                    'Jangan menambah benda, orang, atau bagian yang tidak terlihat pada gambar.',
-                    'Jangan menilai gambar anak.',
-                    JSON.stringify(input.steps.map((step) => ({
-                      id: step.id,
-                      phase: step.phase,
-                      label: step.label,
-                      position: step.position,
-                    }))),
+                    'Usulkan bagian-bagian yang akan digambar anak, dari yang terbesar. Setiap bagian SATU bentuk dasar: circle, ellipse, rounded-rect, triangle, atau line.',
+                    'name adalah kata benda bahasa Indonesia untuk bagian tubuh itu (kepala, badan, telinga, roda, gagang), bukan kalimat, dan tanpa kata "dua".',
+                    'pair true bila bagian itu sepasang yang simetris (dua telinga, dua mata, dua roda) dan digambar dalam satu langkah. Kotak lalu mencakup keduanya.',
+                    'x dan y adalah sudut kiri-atas kotak dalam ruang 1000 kali 750. width dan height ukuran kotak. rotation dalam derajat, biasanya 0.',
+                    'Jangan menamai latar belakang, wajah anak, huruf, barcode, atau ventilasi.',
+                    'Jangan menambah bagian yang tidak ada pada gambar.',
+                    'Wilayah yang sudah ditelusuri ini boleh kamu namai atau gabungkan menjadi pasangan:',
+                    JSON.stringify(input.targets),
                   ].join('\n'),
                 },
                 { type: 'image_url', image_url: { url: `data:image/png;base64,${bytesToBase64(input.illustrationPng)}` } },
@@ -127,24 +137,30 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
             response_format: {
               type: 'json_schema',
               json_schema: {
-                name: 'step_instructions',
+                name: 'shape_plan',
                 strict: true,
                 schema: {
                   type: 'object',
                   additionalProperties: false,
-                  required: ['subject', 'title', 'steps'],
+                  required: ['subject', 'title', 'parts'],
                   properties: {
                     subject: { type: 'string' },
                     title: { type: 'string' },
-                    steps: {
+                    parts: {
                       type: 'array',
                       items: {
                         type: 'object',
                         additionalProperties: false,
-                        required: ['id', 'instruction'],
+                        required: ['primitive', 'name', 'pair', 'x', 'y', 'width', 'height', 'rotation'],
                         properties: {
-                          id: { type: 'string' },
-                          instruction: { type: 'string' },
+                          primitive: { type: 'string', enum: ['circle', 'ellipse', 'rounded-rect', 'triangle', 'line'] },
+                          name: { type: 'string' },
+                          pair: { type: 'boolean' },
+                          x: { type: 'number' },
+                          y: { type: 'number' },
+                          width: { type: 'number' },
+                          height: { type: 'number' },
+                          rotation: { type: 'number' },
                         },
                       },
                     },
@@ -164,17 +180,50 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
         const parsed = asRecord(JSON.parse(content) as unknown);
         const subject = typeof parsed.subject === 'string' ? parsed.subject : '';
         const title = typeof parsed.title === 'string' ? parsed.title : '';
-        const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
-        const instructions = new Map<string, string>();
-        for (const step of steps) {
-          const row = asRecord(step);
-          if (typeof row.id === 'string' && typeof row.instruction === 'string') {
-            instructions.set(row.id, row.instruction);
-          }
+        const rows = Array.isArray(parsed.parts) ? parsed.parts : [];
+        const parts: ShapeProposal[] = [];
+        for (const row of rows) {
+          const part = proposalFrom(row);
+          if (part) parts.push(part);
         }
-        return { subject, title, instructions, usage: usageFrom(record.usage) };
+        return { subject, title, parts, usage: usageFrom(record.usage) };
       },
     },
+  };
+}
+
+function proposalFrom(value: unknown): ShapeProposal | null {
+  const row = asRecord(value);
+  const primitive = typeof row.primitive === 'string' ? knownPrimitive(row.primitive) : null;
+  if (!primitive || typeof row.name !== 'string' || typeof row.pair !== 'boolean') return null;
+  const x = finite(row.x);
+  const y = finite(row.y);
+  const width = finite(row.width);
+  const height = finite(row.height);
+  const rotation = finite(row.rotation);
+  if (x === null || y === null || width === null || height === null || rotation === null) return null;
+  return { primitive, name: row.name, pair: row.pair, x, y, width, height, rotation };
+}
+
+function finite(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+export function sumUsage(left: TokenUsage | null, right: TokenUsage | null): TokenUsage | null {
+  if (!left) return right;
+  if (!right) return left;
+  const text = left.textInputTokens !== undefined || right.textInputTokens !== undefined
+    ? { textInputTokens: (left.textInputTokens ?? 0) + (right.textInputTokens ?? 0) }
+    : {};
+  const image = left.imageInputTokens !== undefined || right.imageInputTokens !== undefined
+    ? { imageInputTokens: (left.imageInputTokens ?? 0) + (right.imageInputTokens ?? 0) }
+    : {};
+  return {
+    inputTokens: left.inputTokens + right.inputTokens,
+    outputTokens: left.outputTokens + right.outputTokens,
+    totalTokens: left.totalTokens + right.totalTokens,
+    ...text,
+    ...image,
   };
 }
 

@@ -10,11 +10,17 @@
 
 import { handlePhotoLessonRequest, PHOTO_API_PATH, type JobCache } from '../photo/api';
 import { openAiClients } from '../photo/openai';
+import { imageProvider, replicateApiKey } from '../photo/provider';
+import { replicateEditor } from '../photo/replicate';
 
 type WorkerEnv = Env & {
   readonly OPENAI_API_KEY?: string;
   readonly OPENAI_IMAGE_MODEL?: string;
   readonly OPENAI_TEXT_MODEL?: string;
+  readonly IMAGE_PROVIDER?: string;
+  readonly REPLICATE_API_KEY?: string;
+  readonly REPLICATE_API_TOKEN?: string;
+  readonly REPLICATE_IMAGE_MODEL?: string;
 };
 
 const cache: JobCache = { success: new Map(), inflight: new Map() };
@@ -25,10 +31,14 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === PHOTO_API_PATH) {
       const started = Date.now();
-      const clients = env.OPENAI_API_KEY ? openAiClients(env.OPENAI_API_KEY) : null;
+      const openai = env.OPENAI_API_KEY ? openAiClients(env.OPENAI_API_KEY) : null;
+      const replicateKey = replicateApiKey(env);
+      const images = imageProvider(env.IMAGE_PROVIDER) === 'replicate'
+        ? (replicateKey ? replicateEditor(replicateKey) : null)
+        : openai?.images;
       const response = await handlePhotoLessonRequest(request, env, {
-        images: clients?.images ?? { edit() { return Promise.reject(new Error('missing key')); } },
-        ...(clients ? { instructions: clients.instructions } : {}),
+        images: images ?? { edit() { return Promise.reject(new Error('missing key')); } },
+        ...(openai ? { instructions: openai.instructions } : {}),
         cache,
         rateBuckets,
       });
