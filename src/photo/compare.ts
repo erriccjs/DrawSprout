@@ -57,7 +57,13 @@ export function renderCumulativeStep(lesson: LessonPackage, count: number, width
       fillPath(data, width, height, region.d, region.suggestedColor);
     }
   }
-  const lines = rasterizeLesson({ ...lesson, steps: steps.filter((step) => step.phase !== 'color'), targetPreview: { paths: [] } }, width, height);
+  const inkSteps = steps.filter((step) => step.phase !== 'color');
+  const hasOutline = inkSteps.some((step) => step.guidePaths.some((path) => path.role === 'final-outline'));
+  const finalSteps = inkSteps.map((step) => ({
+    ...step,
+    guidePaths: step.guidePaths.filter((path) => path.role !== 'construction'),
+  }));
+  const lines = rasterizeLesson({ ...lesson, steps: finalSteps, targetPreview: { paths: [] } }, width, height);
   for (let i = 0; i < lines.length; i += 1) {
     if (lines[i] !== 1) continue;
     const offset = i * 4;
@@ -65,6 +71,10 @@ export function renderCumulativeStep(lesson: LessonPackage, count: number, width
     data[offset + 1] = 30;
     data[offset + 2] = 30;
     data[offset + 3] = 255;
+  }
+  if (!hasOutline) {
+    const guides = inkSteps.flatMap((step) => step.guidePaths.filter((path) => path.role === 'construction'));
+    strokeDashed(data, width, height, guides, 176);
   }
   return { width, height, data };
 }
@@ -209,6 +219,7 @@ function rasterizeLesson(lesson: LessonPackage, width: number, height: number): 
     ...lesson.steps.flatMap((step) => step.guidePaths),
   ];
   for (const path of paths) {
+    if (path.role === 'construction') continue;
     const points = parsePath(path.d);
     for (let index = 1; index < points.length; index += 1) {
       const from = points[index - 1]!;
@@ -391,6 +402,48 @@ function vectorAngle(ux: number, uy: number, vx: number, vy: number): number {
   let angle = Math.acos(Math.max(-1, Math.min(1, dot / (length || 1))));
   if (ux * vy - uy * vx < 0) angle = -angle;
   return angle;
+}
+
+function strokeDashed(
+  data: Uint8Array,
+  width: number,
+  height: number,
+  paths: readonly { d: string }[],
+  grey: number,
+): void {
+  const dash = 4;
+  const gap = 10;
+  const period = dash + gap;
+  for (const path of paths) {
+    const points = parsePath(path.d).map((point) => ({
+      x: scale(point.x, LESSON_WIDTH, width),
+      y: scale(point.y, LESSON_HEIGHT, height),
+    }));
+    let cursor = 0;
+    for (let index = 1; index < points.length; index += 1) {
+      const from = points[index - 1];
+      const to = points[index];
+      if (!from || !to) continue;
+      const length = Math.hypot(to.x - from.x, to.y - from.y);
+      const steps = Math.max(1, Math.ceil(length));
+      for (let step = 0; step <= steps; step += 1) {
+        const t = step / steps;
+        const along = cursor + (length * step) / steps;
+        if (along % period > dash) continue;
+        paintDot(data, width, height, Math.round(from.x + (to.x - from.x) * t), Math.round(from.y + (to.y - from.y) * t), grey);
+      }
+      cursor += length;
+    }
+  }
+}
+
+function paintDot(data: Uint8Array, width: number, height: number, x: number, y: number, grey: number): void {
+  if (x < 0 || y < 0 || x >= width || y >= height) return;
+  const offset = (y * width + x) * 4;
+  data[offset] = grey;
+  data[offset + 1] = grey;
+  data[offset + 2] = grey;
+  data[offset + 3] = 255;
 }
 
 function drawLine(mask: Uint8Array, width: number, height: number, x0: number, y0: number, x1: number, y1: number): void {

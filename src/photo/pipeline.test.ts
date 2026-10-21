@@ -55,7 +55,7 @@ describe('photo pipeline wiring', () => {
           sameSubject: true,
           subject: 'Kotak',
           title: 'Wajah anak',
-          parts: [{ name: 'wajah anak', pair: false, x: 0, y: 0, width: 40, height: 40, points: [], colorName: 'hitam', pieceIds: [] }],
+          parts: [{ name: 'wajah anak', pair: false, x: 0, y: 0, width: 40, height: 40, points: [], colorName: 'hitam', pieceIds: [], count: 0 }],
           usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
         });
       },

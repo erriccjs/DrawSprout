@@ -17,6 +17,7 @@ const SHARED = [
   'One main subject only. Black line art on a plain white background.',
   'Draw one closed outer silhouette around the whole subject first, then a few interior lines.',
   'Keep the pose, the direction the subject faces, the silhouette, the proportions, and the count of visible parts of that subject.',
+  'Keep the same framing and crop as the photo. A close-up stays a close-up. Do not zoom out to show the whole body if the photo only shows the head.',
   'Keep distinctive features that identify it: markings, ears, wheels, handle, petals.',
   'Leave out the background and anything that is not the subject: people, hands, legs, leashes, furniture, ground, sky, and scenery.',
   'Do not draw letters, numbers, barcodes, logos, racing numbers, or writing, unless the writing itself is the only subject.',
@@ -55,6 +56,7 @@ export function replicatePrompt(reinforceSilhouette = false, reinforceSubject = 
     'Black line drawing of this one subject for a young child.',
     'One closed outer silhouette and a few interior lines.',
     'Plain opaque white background. No colour, no shading, no text.',
+    "Keep the photo's framing and crop.",
   ];
   if (reinforceSilhouette) lines.push('Draw the full subject as one continuous closed outer silhouette.');
   if (reinforceSubject) lines.push('The drawing must be the same object as the photo.');

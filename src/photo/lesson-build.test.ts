@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { findLessonProblems } from '../lesson-data/validate';
 import { compareLessonToInk, renderCumulativeStep, renderLessonPreview, REVIEW_DICE_BELOW } from './compare';
-import { indonesianColourName } from './colors';
+import { colourHex, indonesianColourName } from './colors';
 import { buildPhotoLesson, isGenericInstruction, lessonPieces, OUTLINE_COVERAGE_MIN, shouldRedraw, uniquifyInstructions } from './lesson-build';
 import type { DetectedPart } from './parts';
 import { decodePng, encodePng, type RgbaImage } from './png';
@@ -134,6 +134,11 @@ describe('named traced parts', () => {
     expect(colour?.toolPreset.color).toMatch(/^#[0-9a-f]{6}$/i);
     const filled = renderCumulativeStep(built.lesson, built.lesson.steps.length, 80);
     expect(hasOrange(filled)).toBe(true);
+    const guideOnly = renderCumulativeStep(built.lesson, 1, 160);
+    expect(countTone(guideOnly, (red, green, blue) => red < 80 && green < 80 && blue < 80)).toBe(0);
+    expect(countTone(guideOnly, (red, green, blue) => red > 150 && red < 210 && Math.abs(red - green) < 12 && Math.abs(green - blue) < 12)).toBeGreaterThan(8);
+    expect(built.lesson.targetPreview.paths.every((path) => path.role === 'final-outline')).toBe(true);
+    expect(built.reviewReason ?? '').not.toContain('Bentuk bantu ikut gambar akhir');
     const image = renderLessonPreview(built.lesson, 200);
     expect(nearInk(image, 100, 40, 8)).toBe(true);
     expect(nearInk(image, 100, 100, 3)).toBe(false);
@@ -345,6 +350,200 @@ describe('named traced parts', () => {
     expect(built.lesson.steps.some((step) => isGenericInstruction(step.instruction))).toBe(false);
     expect(built.lesson.steps.find((step) => step.id === 'outline-1')?.guidePaths).toHaveLength(1);
     expect(built.lesson.steps.some((step) => step.instruction === 'Gambar kopi.')).toBe(true);
+    const white = built.lesson.steps.find((step) => step.instruction.includes('putih'));
+    expect(white?.toolPreset.color).toBe('#ffffff');
+    const paintedCup = renderCumulativeStep(built.lesson, built.lesson.steps.length, 200);
+    expect(windowHas(paintedCup, 51, 44, 4, (red, green, blue) => red > 250 && green > 250 && blue > 250)).toBe(true);
+    expect(windowHas(paintedCup, 87, 74, 6, (red, green, blue) => red > green + 20 && red > blue + 20 && green < 90)).toBe(true);
+    expect(nearInk(paintedCup, 93, 37, 8)).toBe(true);
+  });
+
+  it('fills each part and keeps the earlier colour', () => {
+    const body = square(150, 120, 640);
+    const eye = square(430, 250, 90);
+    const photo = painted(40, 30, (x, y) => {
+      const nx = x / 39;
+      const ny = y / 29;
+      if (nx < 0.08 || nx > 0.92 || ny < 0.08 || ny > 0.92) return [40, 150, 50];
+      if (nx > 0.4 && nx < 0.56 && ny > 0.3 && ny < 0.5) return [200, 40, 40];
+      return [150, 150, 150];
+    });
+    const built = buildPhotoLesson({
+      id: 'photo-eye-colour',
+      title: 'Wajah',
+      targetHash: 'abcdef1234567890',
+      contours: [body, eye],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      parts: [
+        { ...part('wajah', false, 'hijau'), ...cover(150, 120, 640, 640) },
+        { ...part('mata', false, 'kuning'), ...cover(430, 250, 90, 90) },
+      ],
+    });
+    const colours = built.lesson.steps.filter((step) => step.phase === 'color');
+    expect(colours.map((step) => step.instruction).join(' ')).not.toMatch(/hijau|kuning/);
+    expect(colours.some((step) => step.instruction.includes('abu-abu'))).toBe(true);
+    expect(colours.some((step) => step.instruction.includes('merah'))).toBe(true);
+    const frame = renderCumulativeStep(built.lesson, built.lesson.steps.length, 200);
+    expect(windowHas(frame, 56, 48, 5, (red, green, _blue) => Math.abs(red - green) < 18 && red > 90 && red < 190)).toBe(true);
+    expect(windowHas(frame, 96, 68, 5, (red, green, blue) => red > 150 && green < 80 && blue < 80)).toBe(true);
+  });
+
+  it('does not double garis luar and does not say dua for one part or five petals', () => {
+    const cup = buildPhotoLesson({
+      id: 'photo-label',
+      title: 'Cangkir',
+      targetHash: 'abcdef1234567890',
+      contours: [square(180, 160, 500)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [part('garis luar cangkir', false, 'oranye')],
+    });
+    expect(cup.lesson.steps.find((step) => step.id === 'outline-1')?.instruction).toBe('Gambar garis luar cangkir.');
+    const flower = buildPhotoLesson({
+      id: 'photo-flower-name',
+      title: 'Bunga',
+      targetHash: 'abcdef1234567890',
+      contours: [square(120, 120, 400)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [part('garis luar', false, 'oranye')],
+    });
+    expect(flower.lesson.steps[0]?.instruction).toBe('Gambar garis luar bunga.');
+    const handle = buildPhotoLesson({
+      id: 'photo-handle',
+      title: 'Cangkir',
+      targetHash: 'abcdef1234567890',
+      contours: [square(120, 120, 420), square(500, 220, 70)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [
+        { ...part('cangkir', false, 'oranye'), ...cover(120, 120, 420, 420), pieceIds: [0] },
+        { ...part('pegangan', true, 'oranye'), ...cover(500, 220, 70, 70), pieceIds: [1] },
+      ],
+    });
+    expect(handle.lesson.steps.some((step) => step.instruction === 'Gambar pegangan.')).toBe(true);
+    expect(handle.lesson.steps.some((step) => /dua pegangan/.test(step.instruction))).toBe(false);
+    const petalContours = [square(80, 80, 520)];
+    for (let index = 0; index < 5; index += 1) {
+      petalContours.push(square(160 + (index % 3) * 110, 160 + Math.floor(index / 3) * 110, 46));
+    }
+    const petals = buildPhotoLesson({
+      id: 'photo-petals',
+      title: 'Bunga',
+      targetHash: 'abcdef1234567890',
+      contours: petalContours,
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [
+        { ...part('bunga', false, 'oranye'), ...cover(80, 80, 520, 520), pieceIds: [0], count: 1 },
+        { ...part('kelopak', true, 'oranye'), ...cover(150, 150, 340, 280), pieceIds: [1, 2, 3, 4, 5], count: 5 },
+      ],
+    });
+    const petalStep = petals.lesson.steps.find((step) => step.instruction.includes('kelopak'));
+    expect(petalStep?.instruction).toBe('Gambar kelopak.');
+    expect(petalStep?.guidePaths.length).toBe(5);
+    expect(petals.reviewReason ?? '').not.toContain('Jumlah bagian tidak sesuai');
+  });
+
+  it('flags repeated words, too many colours, and leaves grass out', () => {
+    const repeated = buildPhotoLesson({
+      id: 'photo-repeat',
+      title: 'Kucing',
+      targetHash: 'abcdef1234567890',
+      contours: [square(80, 80, 500)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [part('kepala kepala', false, 'oranye')],
+    });
+    expect(repeated.needsReview).toBe(true);
+    expect(repeated.reviewReason).toContain('Ada instruksi yang mengulang kata');
+    const swatches: ReadonlyArray<readonly [number, number, number]> = [
+      [200, 40, 40],
+      [40, 80, 200],
+      [40, 160, 60],
+      [220, 190, 40],
+      [140, 50, 180],
+    ];
+    const bands = painted(50, 40, (x, y) => {
+      const nx = x / 49;
+      const ny = y / 39;
+      if (nx < 0.08 || nx > 0.92 || ny < 0.08 || ny > 0.92) return [248, 248, 248];
+      const hit = swatches.findIndex((_, index) => nx > 0.16 + index * 0.14 && nx < 0.26 + index * 0.14 && ny > 0.35 && ny < 0.6);
+      const swatch = swatches[hit];
+      return swatch ?? [150, 150, 150];
+    });
+    const bandNames = ['kiri', 'tengah kiri', 'tengah', 'tengah kanan', 'kanan'];
+    const bandContours = [square(80, 80, 820)];
+    const bandParts = [{ ...part('badan', false, 'abu-abu'), ...cover(80, 80, 820, 820), pieceIds: [0] }];
+    bandNames.forEach((name, index) => {
+      const x = 160 + index * 140;
+      bandContours.push(square(x, 260, 80));
+      bandParts.push({ ...part(name, false, 'abu-abu'), ...cover(x, 260, 80, 80), pieceIds: [index + 1] });
+    });
+    const manyColours = buildPhotoLesson({
+      id: 'photo-many-colours',
+      title: 'Balok',
+      targetHash: 'abcdef1234567890',
+      contours: bandContours,
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo: bands,
+      palette: ['#cc3333'],
+      parts: bandParts,
+    });
+    expect(manyColours.lesson.steps.filter((step) => step.phase === 'color').length).toBeGreaterThan(4);
+    expect(manyColours.needsReview).toBe(true);
+    expect(manyColours.reviewReason).toContain('Terlalu banyak langkah warna');
+    const grass = painted(40, 40, (x, y) => {
+      const nx = x / 39;
+      const ny = y / 39;
+      if (nx < 0.1 || nx > 0.9 || ny < 0.1 || ny > 0.9) return [40, 160, 50];
+      return [150, 150, 150];
+    });
+    const cat = buildPhotoLesson({
+      id: 'photo-grass',
+      title: 'Kucing',
+      targetHash: 'abcdef1234567890',
+      contours: [square(200, 150, 500)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo: grass,
+      palette: ['#888888'],
+      parts: [{ ...part('badan', false, 'hijau'), ...cover(200, 150, 500, 500) }],
+    });
+    const grassText = cat.lesson.steps.filter((step) => step.phase === 'color').map((step) => step.instruction).join(' ');
+    expect(grassText).not.toMatch(/hijau/);
+    expect(grassText).toMatch(/abu-abu/);
+    const foreign = buildPhotoLesson({
+      id: 'photo-foreign',
+      title: 'Kepala',
+      targetHash: 'abcdef1234567890',
+      contours: [square(200, 160, 400)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#cc3333'],
+      parts: [
+        { ...part('kepala', false, 'oranye'), ...cover(200, 160, 400, 400), pieceIds: [0] },
+        { ...part('kalung', false, 'ungu'), ...cover(20, 20, 40, 40), pieceIds: [] },
+      ],
+    });
+    expect(foreign.lesson.steps.some((step) => step.instruction.includes('ungu'))).toBe(true);
+    expect(foreign.needsReview).toBe(true);
+    expect(foreign.reviewReason).toContain('Ada warna yang tidak ada pada subjek');
   });
 
   it('flags a single colour step when the subject has two colours', () => {
@@ -374,6 +573,7 @@ describe('colour names', () => {
     expect(indonesianColourName({ r: 140, g: 140, b: 140 })).toBe('abu-abu');
     expect(indonesianColourName({ r: 72, g: 42, b: 24 })).toBe('cokelat');
     expect(indonesianColourName({ r: 120, g: 20, b: 30 })).toBe('merah');
+    expect(colourHex('putih')).toBe('#ffffff');
   });
 });
 
@@ -399,10 +599,52 @@ describe('traced ink cleanup', () => {
     expect(silhouette?.closed).toBe(true);
     expect(traced.filter((contour) => !contour.silhouette).length).toBeLessThanOrEqual(1);
   });
+
+  it('merges a doubled stroke and keeps two separated rings', () => {
+    const doubled = traceInk(picture(200, 120, (x, y) => {
+      if (x < 30 || x > 170) return false;
+      const wave = Math.sin(x / 12);
+      return Math.abs(y - (52 + wave)) < 1.4 || Math.abs(y - (56 + wave)) < 1.4;
+    }));
+    expect(doubled.filter((contour) => !contour.silhouette).length).toBeLessThanOrEqual(1);
+    const apart = traceInk(picture(160, 100, (x, y) => {
+      const left = Math.hypot(x - 40, y - 50);
+      const right = Math.hypot(x - 120, y - 50);
+      return (left > 12 && left < 16) || (right > 12 && right < 16);
+    }));
+    expect(apart.length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 function part(name: string, pair: boolean, colorName: string, x = 0, y = 0, width = 1000, height = 750): DetectedPart {
-  return { name, pair, x, y, width, height, points: [], colorName, pieceIds: [] };
+  return { name, pair, x, y, width, height, points: [], colorName, pieceIds: [], count: 0 };
+}
+
+function countTone(image: RgbaImage, match: (red: number, green: number, blue: number) => boolean): number {
+  let count = 0;
+  for (let index = 0; index < image.data.length; index += 4) {
+    if (match(image.data[index] ?? 0, image.data[index + 1] ?? 0, image.data[index + 2] ?? 0)) count += 1;
+  }
+  return count;
+}
+
+function windowHas(
+  image: RgbaImage,
+  x: number,
+  y: number,
+  radius: number,
+  match: (red: number, green: number, blue: number) => boolean,
+): boolean {
+  for (let dy = -radius; dy <= radius; dy += 1) {
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      const sx = x + dx;
+      const sy = y + dy;
+      if (sx < 0 || sy < 0 || sx >= image.width || sy >= image.height) continue;
+      const index = (sy * image.width + sx) * 4;
+      if (match(image.data[index] ?? 0, image.data[index + 1] ?? 0, image.data[index + 2] ?? 0)) return true;
+    }
+  }
+  return false;
 }
 
 function cover(x: number, y: number, w: number, h: number): { x: number; y: number; width: number; height: number } {

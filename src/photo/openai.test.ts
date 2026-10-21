@@ -42,13 +42,14 @@ describe('OpenAI client', () => {
     expect(promptText).toContain('Do not add limbs');
     expect(promptText).toContain('closed outer silhouette');
     expect(promptText).toContain('barcode');
+    expect(promptText).toContain('close-up');
     expect(form.get('background')).toBe('opaque');
     expect(JSON.stringify([...form.entries()])).not.toContain('sk-test-not-real');
   });
 
   it('asks the text model with the illustration, the step labels, and chat token counts', async () => {
     const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ sameSubject: true, subject: 'Kucing', title: 'Kucing', parts: [{ name: 'kepala', pair: false, x: 10, y: 20, width: 30, height: 40, colorName: 'oranye', points: [], pieceIds: [1] }] }) } }],
+      choices: [{ message: { content: JSON.stringify({ sameSubject: true, subject: 'Kucing', title: 'Kucing', parts: [{ name: 'kepala', pair: false, x: 10, y: 20, width: 30, height: 40, colorName: 'oranye', points: [], pieceIds: [1], count: 1 }] }) } }],
       usage: { prompt_tokens: 20, completion_tokens: 9, total_tokens: 29 },
     }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
@@ -66,6 +67,7 @@ describe('OpenAI client', () => {
     expect(written.parts[0]?.name).toBe('kepala');
     expect(written.parts[0]?.colorName).toBe('oranye');
     expect(written.parts[0]?.pieceIds).toEqual([1]);
+    expect(written.parts[0]?.count).toBe(1);
     expect(written.usage).toEqual({ inputTokens: 20, outputTokens: 9, totalTokens: 29 });
     const init = fetchMock.mock.calls[0]?.[1];
     expect(new Headers(init?.headers).get('idempotency-key')).toBe('idem-key-1-text');
@@ -78,6 +80,10 @@ describe('OpenAI client', () => {
     expect(text).toContain('1000');
     expect(text).toContain('colorName');
     expect(text).toContain('pieceIds');
+    expect(text).toContain('count');
+    expect(text).toContain('kalung');
+    expect(text).toContain('lidah');
+    expect(text).toContain('kursi');
     expect(text).toContain('0. x=10');
     expect(content.filter((part) => part.type === 'image_url' && part.image_url?.url.startsWith('data:image/png;base64,')).length).toBe(2);
   });

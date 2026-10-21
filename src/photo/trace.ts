@@ -37,14 +37,87 @@ export function traceInk(image: RgbaImage, threshold = INK_LUMINANCE): Contour[]
   const details = collapseNested(contoursFrom(detailMask, width, height, epsilon, filled)
     .filter((contour) => !bothSidesShorterThan(contour.points, Math.max(4, Math.min(width, height) * 0.02))));
   const outerLoop = largestLoop(marchingSquares(filled, width, height));
-  if (!outerLoop) return dedupeContours(details);
+  if (!outerLoop) return dedupeContours(mergeNearParallel(details, width, height));
   const outer = finishLoop(outerLoop, epsilon, null, width, height);
-  if (outer.length < 4) return dedupeContours(details);
+  if (outer.length < 4) return dedupeContours(mergeNearParallel(details, width, height));
   const silhouette: Contour = { points: outer, closed: true, silhouette: true };
-  return dedupeContours([
+  return dedupeContours(mergeNearParallel([
     silhouette,
     ...details.filter((contour) => iouBoxes(bounds(contour.points), bounds(outer)) < 0.82),
-  ]);
+  ], width, height));
+}
+
+/** Two strokes of one line. A shorter copy close to a kept line is dropped. The silhouette stays. */
+function mergeNearParallel(contours: readonly Contour[], width: number, height: number): Contour[] {
+  const gap = Math.max(3, Math.min(width, height) * 0.035);
+  const silhouette = contours.find((contour) => contour.silhouette === true);
+  const rest = contours
+    .filter((contour) => contour !== silhouette)
+    .sort((left, right) => polylineLength(right.points) - polylineLength(left.points));
+  const kept: Contour[] = silhouette ? [silhouette] : [];
+  for (const contour of rest) {
+    const duplicate = kept.some((other) => nearParallel(contour, other, gap));
+    if (!duplicate) kept.push(contour);
+  }
+  return kept;
+}
+
+function nearParallel(left: Contour, right: Contour, gap: number): boolean {
+  const ratio = polylineLength(left.points) / Math.max(1, polylineLength(right.points));
+  if (ratio < 0.55 || ratio > 1.8) return false;
+  return meanGap(left.points, right.points) <= gap && meanGap(right.points, left.points) <= gap;
+}
+
+function meanGap(from: readonly Point[], to: readonly Point[]): number {
+  const samples = samplePoints(from, 20);
+  if (samples.length === 0 || to.length < 2) return Number.POSITIVE_INFINITY;
+  let total = 0;
+  for (const point of samples) total += nearestSegment(point, to);
+  return total / samples.length;
+}
+
+function nearestSegment(point: Point, line: readonly Point[]): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < line.length; index += 1) {
+    const start = line[index - 1];
+    const end = line[index];
+    if (!start || !end) continue;
+    const gap = pointSegmentDistance(point, start, end);
+    if (gap < best) best = gap;
+  }
+  return best;
+}
+
+function pointSegmentDistance(point: Point, start: Point, end: Point): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length2 = dx * dx + dy * dy;
+  if (length2 < 1e-6) return Math.hypot(point.x - start.x, point.y - start.y);
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / length2));
+  return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+}
+
+function samplePoints(points: readonly Point[], count: number): Point[] {
+  if (points.length === 0) return [];
+  if (points.length <= count) return [...points];
+  const out: Point[] = [];
+  for (let step = 0; step < count; step += 1) {
+    const index = Math.min(points.length - 1, Math.round((step / (count - 1)) * (points.length - 1)));
+    const point = points[index];
+    if (point) out.push(point);
+  }
+  return out;
+}
+
+function polylineLength(points: readonly Point[]): number {
+  let length = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    if (!previous || !current) continue;
+    length += Math.hypot(current.x - previous.x, current.y - previous.y);
+  }
+  return length;
 }
 
 function bothSidesShorterThan(points: readonly Point[], minSpan: number): boolean {

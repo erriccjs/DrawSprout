@@ -187,6 +187,47 @@ export function coloursInRegion(
   return clusters.sort((left, right) => right.share - left.share);
 }
 
+const FRAME_GRID = 36;
+
+/**
+ * Colours that sit on the photo's frame and not in the middle.
+ * Grass and sky match this. A white cup does not: its centre is white too.
+ */
+export function backgroundColours(image: RgbaImage): ReadonlySet<string> {
+  const border = new Map<string, number>();
+  const centre = new Map<string, number>();
+  let borderTotal = 0;
+  let centreTotal = 0;
+  for (let gy = 0; gy < FRAME_GRID; gy += 1) {
+    for (let gx = 0; gx < FRAME_GRID; gx += 1) {
+      const nx = (gx + 0.5) / FRAME_GRID;
+      const ny = (gy + 0.5) / FRAME_GRID;
+      const onBorder = nx < 0.08 || nx > 0.92 || ny < 0.08 || ny > 0.92;
+      const inCentre = nx >= 0.28 && nx <= 0.72 && ny >= 0.28 && ny <= 0.72;
+      if (!onBorder && !inCentre) continue;
+      const rgb = opaquePixel(image, nx, ny);
+      if (!rgb) continue;
+      const name = indonesianColourName(rgb);
+      if (onBorder) {
+        border.set(name, (border.get(name) ?? 0) + 1);
+        borderTotal += 1;
+      }
+      if (inCentre) {
+        centre.set(name, (centre.get(name) ?? 0) + 1);
+        centreTotal += 1;
+      }
+    }
+  }
+  const names = new Set<string>();
+  if (borderTotal === 0) return names;
+  for (const [name, count] of border) {
+    const borderShare = count / borderTotal;
+    const centreShare = centreTotal === 0 ? 0 : (centre.get(name) ?? 0) / centreTotal;
+    if (borderShare >= 0.22 && centreShare < 0.12) names.add(name);
+  }
+  return names;
+}
+
 /** An all-white frame is a blank plate, not a white object. */
 export function photoIsBlankPlate(image: RgbaImage): boolean {
   const step = Math.max(1, Math.floor(Math.sqrt(image.width * image.height) / 80));
@@ -218,7 +259,7 @@ const COLOUR_HEX: Readonly<Record<string, string>> = {
   cokelat: '#8a5a32',
   hitam: '#2a2a2a',
   'abu-abu': '#8a8a8a',
-  putih: '#f2f2f2',
+  putih: '#ffffff',
 };
 
 export function colourHex(name: string): string {

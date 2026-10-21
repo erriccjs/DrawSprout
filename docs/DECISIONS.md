@@ -1177,5 +1177,52 @@ filled subject. A solid rectangle is not thinned into a spine.
 
 **Cost.** A Replicate regeneration adds another $0.04. OpenAI token totals
 already include a redraw, so they are not multiplied again. The harness records
-`regenerated`. The eval idempotency key ends in `v5`. The gate is still not
-claimed.
+`regenerated`. The eval idempotency key ended in `v5` for that run. D-72 bumps
+it to `v6`. The gate is still not claimed.
+
+### D-72 — Colour stays inside the part
+
+The v5 run (commit 5095e28, OpenAI only) finally drew a real lesson: a cat was
+outline, head, ears, eyes, whiskers; a dog was outline, head, ears, eyes,
+nose, tongue; a car was outline, wheels, steering wheel, seat. Those drawing
+steps stay. Colour did not. Each colour step filled the whole silhouette, so
+the last step painted over the earlier ones. The palette also picked up the
+background (grass, sky, leaves). A contact sheet showed the flower's
+construction circle as heavy ink, "Gambar garis luar garis luar", and "dua"
+on a single handle and on five petals. The review gate flagged none of the
+five. This is not a pass. `claimedPass` stays false.
+
+**Colour.** One part gets one colour. The fill is that part's closed region,
+not the whole silhouette. The body is painted first and smaller parts paint
+on top, so the colours accumulate. A colour that dominates the photo's frame
+and not its centre is background and is dropped. A strong sample inside the
+part beats a wrong name from the model, which is why a white cup stays
+`putih` and the coffee stays `cokelat`. Tiny grey patches are dropped once
+there are already more than four colours. A saturated named part, such as a
+collar, is kept. If the subject really has more than four colours, the steps
+stay and `needsReview` is set. `putih` fills as `#ffffff`, and the dark
+outline is drawn after the fill.
+
+**Words.** A part already called "garis luar …" is not prefixed again. A name
+that is only "garis luar" is dropped and the title is used. "Dua" is used
+only when the model counted two and the step has two lines. Five petals stay
+"Gambar kelopak."
+
+**Construction.** The filled overlap has to be at least 0.9. The contact sheet
+draws that guide as a light dashed grey, and only before the outline exists.
+It is not part of the final ink and it is not scored as ink.
+
+**Prompt.** The image edit is told to keep the photo's framing and crop, so a
+close-up stays a close-up. The text model is asked for `count`, and for a
+collar, tongue, and seat as their own parts when they are visible.
+
+**Ink.** A second stroke that runs next to a similar line is dropped. Two
+separated parts, such as two wheels, stay.
+
+**Review.** `needsReview` is also set when there are more than four colour
+steps, when a colour is not inside the subject, when an instruction repeats a
+word, when a construction guide is in the final drawing, or when "tambahkan
+dua" does not match two lines. A parent can still approve. These flags do not
+ask for another illustration. This is not the section 8 gate.
+
+The eval idempotency key ends in `v6`. The gate is still not claimed.

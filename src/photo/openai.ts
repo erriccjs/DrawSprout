@@ -129,9 +129,11 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                     'parts adalah bagian yang benar-benar terlihat, dari yang terbesar. name adalah kata benda bahasa Indonesia (kepala, badan, telinga, gagang, kelopak), bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
                     'Jangan memakai "bagian berikutnya", "bentuk utama", "buih", "latar belakang", "wajah anak", "barcode", atau "ventilasi".',
                     'Jangan memasukkan setiap potongan ke dalam satu kotak.',
-                    'Sebut bagian yang terlihat: garis luar, telinga, mata, hidung, kumis, kaki, ekor, roda, gagang, kelopak, tengah bunga, kopi.',
+                    'Sebut bagian yang terlihat: garis luar, telinga, mata, hidung, kumis, kaki, ekor, roda, gagang, kelopak, tengah bunga, kopi, kalung, lidah, kursi.',
+                    'Kalung, lidah, kursi, gagang, kopi, dan tengah bunga masing-masing bagian sendiri bila terlihat. Jangan menggabungkan kalung ke badan.',
                     'pieceIds adalah nomor potongan yang termasuk bagian itu. Bagian garis luar hanya berisi potongan siluet, bukan detail di dalamnya.',
                     'pair true bila satu langkah menggambar sepasang simetris (dua telinga, dua mata, dua roda). pair true boleh berisi dua pieceIds.',
+                    'count adalah jumlah yang digambar dalam satu langkah: 1 untuk gagang, permukaan kopi, kalung, atau lidah; 2 hanya untuk sepasang yang memang dua (dua telinga, dua mata, dua roda). Kelopak yang banyak bukan 2.',
                     'x, y, width, height adalah kotak dalam ruang 1000 kali 750. points adalah polygon bagian itu dalam ruang yang sama, paling banyak 8 titik. Kotak harus ketat di bagian itu, bukan seluruh gambar.',
                     'colorName adalah warna bagian itu pada foto: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, hitam, abu-abu, atau putih. Putih untuk benda yang putih, bukan abu-abu.',
                     'Jangan menambah bagian yang tidak ada.',
@@ -165,7 +167,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                       items: {
                         type: 'object',
                         additionalProperties: false,
-                        required: ['name', 'pair', 'x', 'y', 'width', 'height', 'colorName', 'points', 'pieceIds'],
+                        required: ['name', 'pair', 'x', 'y', 'width', 'height', 'colorName', 'points', 'pieceIds', 'count'],
                         properties: {
                           name: { type: 'string' },
                           pair: { type: 'boolean' },
@@ -175,6 +177,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                           height: { type: 'number' },
                           colorName: { type: 'string' },
                           pieceIds: { type: 'array', items: { type: 'number' } },
+                          count: { type: 'number' },
                           points: {
                             type: 'array',
                             items: {

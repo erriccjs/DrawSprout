@@ -40,7 +40,7 @@ import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../
 import { composeContactSheet } from '../../src/photo/sheet';
 
 /** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
-const EVAL_KEY_REVISION = 'v5';
+const EVAL_KEY_REVISION = 'v6';
 
 interface Args {
   readonly score?: string;

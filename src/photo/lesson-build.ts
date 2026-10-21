@@ -4,12 +4,12 @@
  * A circle or oval is added first only when it fits that outline. When the
  * vision model names nothing usable, the lesson falls back to one named
  * outline and drops unnamed scraps instead of printing a generic sentence.
- * See D-70 and D-71.
+ * See D-70, D-71, and D-72.
  */
 
 import { assertValidLessons } from '../lesson-data/validate';
 import { LESSON_SCHEMA_VERSION, type ColorRegion, type GuidePath, type LessonPackage, type LessonStep } from '../lesson-data/schema';
-import { colourHex, coloursInRegion, knownColourName, photoIsBlankPlate, rgbToHex, type Rgb } from './colors';
+import { backgroundColours, colourHex, coloursInRegion, knownColourName, photoIsBlankPlate, rgbToHex, type ColourCluster, type Rgb } from './colors';
 import { cleanPartName, type DetectedPart } from './parts';
 import type { RgbaImage } from './png';
 import type { Contour, Point } from './trace';
@@ -19,7 +19,7 @@ export const LESSON_HEIGHT = 750;
 /** Largest closed outline / subject box. Below this, the drawing is asked for again. */
 export const OUTLINE_COVERAGE_MIN = 0.6;
 /** Filled overlap required before a circle or oval may introduce a part. */
-export const CONSTRUCTION_IOU_MIN = 0.8;
+export const CONSTRUCTION_IOU_MIN = 0.9;
 /** A box larger than this fraction of the subject cannot claim an interior piece. */
 const HUGE_PART = 0.72;
 const CONTAIN_MIN = 0.45;
@@ -154,6 +154,7 @@ function buildFromParts(input: {
   const outlinePart = outlineOwner(main, parts);
   const outlineName = outlinePart?.name ?? subjectNoun(input.title);
   if (!outlineName) return null;
+  const spokenOutline = bareName(outlineName) || outlineName;
 
   const groups = new Map<DetectedPart, MappedContour[]>();
   let unnamed = 0;
@@ -175,11 +176,11 @@ function buildFromParts(input: {
   if (fit) {
     const id = 'construct-1';
     const guide: GuidePath = { id: `${id}-1`, d: fit.d, role: 'construction' };
-    steps.push(lineStep(id, 'outline', constructionInstruction(fit.kind, outlineName), [guide]));
+    steps.push(lineStep(id, 'outline', constructionInstruction(fit.kind, spokenOutline), [guide]));
   }
   const outlineGuides = guidesFor('outline-1', [main]);
   preview.push(...outlineGuides);
-  steps.push(lineStep('outline-1', 'outline', `Gambar garis luar ${outlineName}.`, outlineGuides));
+  steps.push(lineStep('outline-1', 'outline', outlineInstruction(outlineName, input.title), outlineGuides));
 
   const details = [...groups.entries()].sort((left, right) => areaOf(right[0]) - areaOf(left[0]));
   details.forEach(([part, contours], index) => {
@@ -188,8 +189,7 @@ function buildFromParts(input: {
     if (inks.length === 0) return;
     const guides = guidesFor(id, inks);
     preview.push(...guides);
-    const pair = part.pair || (inks.length > 1 && mirrored(inks));
-    steps.push(lineStep(id, 'detail', pair ? `Tambahkan dua ${part.name}.` : `Gambar ${part.name}.`, guides));
+    steps.push(lineStep(id, 'detail', detailInstruction(part, inks), guides));
   });
 
   const regions: ColorRegion[] = [];
@@ -235,25 +235,27 @@ function buildTracedFallback(input: {
   const regions: ColorRegion[] = [];
   const outline = guidesFor('outline-1', [main]);
   preview.push(...outline);
-  steps.push(lineStep('outline-1', 'outline', noun ? `Gambar garis luar ${noun}.` : 'Gambar garis luar.', outline));
+  steps.push(lineStep('outline-1', 'outline', outlineInstruction(noun ?? '', input.title), outline));
   if (noun && !photoIsBlankPlate(input.photo)) {
-    const clusters = coloursInRegion(input.photo, (nx, ny) => {
+    const backdrop = backgroundColours(input.photo);
+    const cluster = coloursInRegion(input.photo, (nx, ny) => {
       const point = normToLesson(nx, ny, input.sourceWidth, input.sourceHeight);
       return pointInPolygon(point.x, point.y, main.points);
-    });
-    clusters.forEach((cluster, index) => {
-      const regionId = `color-region-${index + 1}`;
-      regions.push({ id: regionId, label: noun, d: main.path, suggestedColor: rgbToHex(cluster.rgb) });
+    }).find((item) => !backdrop.has(item.name));
+    if (cluster) {
+      const hex = fillHex(cluster.name, cluster.rgb);
+      const regionId = 'color-region-1';
+      regions.push({ id: regionId, label: noun, d: main.path, suggestedColor: hex });
       steps.push({
-        id: `color-${index + 1}`,
+        id: 'color-1',
         phase: 'color',
         instruction: `Warnai ${noun} dengan ${cluster.name}.`,
         guidePaths: [],
         colorRegionIds: [regionId],
-        toolPreset: { tool: 'brush', color: rgbToHex(cluster.rgb), widthViewbox: 28 },
+        toolPreset: { tool: 'brush', color: hex, widthViewbox: 28 },
         completionPolicy: { manualAllowed: true, automaticEnabled: false },
       });
-    });
+    }
   }
   return finish(input, steps, regions, preview, mapped, coverage, 'traced', main, interiors.length);
 }
@@ -285,8 +287,23 @@ function finish(
   if (uniqueSteps.some((step) => isGenericInstruction(step.instruction))) {
     reasons.push('Ada instruksi yang belum menyebut bagian. Cek dulu sebelum dipakai.');
   }
-  const subjectColours = subjectColourCount(input.photo, main, input.sourceWidth, input.sourceHeight);
-  if (colours.length < 2 && subjectColours >= 2) reasons.push('Warna subjek lebih dari satu. Cek dulu sebelum dipakai.');
+  const subjectColours = subjectColourNames(input.photo, main, input.sourceWidth, input.sourceHeight);
+  if (colours.length < 2 && subjectColours.length >= 2) reasons.push('Warna subjek lebih dari satu. Cek dulu sebelum dipakai.');
+  if (colours.length > 4) reasons.push('Terlalu banyak langkah warna. Cek dulu sebelum dipakai.');
+  if (subjectColours.length > 0 && colours.some((step) => {
+    const name = colourWord(step.instruction);
+    return name !== null && !subjectColours.includes(name);
+  })) reasons.push('Ada warna yang tidak ada pada subjek. Cek dulu sebelum dipakai.');
+  if (uniqueSteps.some((step) => repeatsWords(step.instruction))) {
+    reasons.push('Ada instruksi yang mengulang kata. Cek dulu sebelum dipakai.');
+  }
+  const construction = new Set(uniqueSteps.flatMap((step) => step.guidePaths.filter((path) => path.role === 'construction').map((path) => path.d)));
+  if (preview.some((path) => path.role === 'construction' || construction.has(path.d))) {
+    reasons.push('Bentuk bantu ikut gambar akhir. Cek dulu sebelum dipakai.');
+  }
+  if (uniqueSteps.some((step) => /\btambahkan dua\b/.test(normalizeInstruction(step.instruction)) && step.guidePaths.length !== 2)) {
+    reasons.push('Jumlah bagian tidak sesuai instruksi. Cek dulu sebelum dipakai.');
+  }
   const needsReview = reasons.length > 0;
   const lesson: LessonPackage = {
     id: input.id,
@@ -318,6 +335,14 @@ interface ColourGroup {
   readonly paths: string[];
 }
 
+interface ColourPick {
+  readonly colour: string;
+  readonly rgb: Rgb | null;
+  readonly name: string;
+  readonly paths: readonly string[];
+  readonly area: number;
+}
+
 function colourGroups(
   parts: readonly DetectedPart[],
   outlinePart: DetectedPart | null,
@@ -329,6 +354,7 @@ function colourGroups(
   subject: Box,
 ): ColourGroup[] {
   if (photoIsBlankPlate(photo)) return [];
+  const backdrop = backgroundColours(photo);
   const targets: DetectedPart[] = [];
   if (outlinePart) targets.push(outlinePart);
   for (const part of parts) {
@@ -336,42 +362,131 @@ function colourGroups(
     if (partFraction(part, subject) > HUGE_PART) continue;
     targets.push(part);
   }
-  const grouped = new Map<string, { hexes: Rgb[]; names: string[]; paths: string[] }>();
+  const picks: ColourPick[] = [];
   for (const part of targets) {
-    const owned = part === outlinePart ? [main] : [...(groups.get(part) ?? [])];
-    const closed = owned.filter((contour) => contour.closed);
-    const paths = (closed.length > 0 ? closed : owned).map((contour) => contour.path);
-    if (paths.length === 0) paths.push(part.points.length >= 3 ? smoothPath(part.points, true) : rectPath(part));
-    const clusters = coloursInRegion(photo, (nx, ny) => insidePart(nx, ny, part, targets, main, sourceWidth, sourceHeight));
-    if (clusters.length === 0) {
-      const named = knownColourName(part.colorName);
-      if (named) addColour(grouped, named, null, part.name, paths);
-      continue;
-    }
-    for (const cluster of clusters) addColour(grouped, cluster.name, cluster.rgb, part.name, paths);
+    const outline = part === outlinePart;
+    const owned = outline ? [main] : [...(groups.get(part) ?? [])];
+    const paths = fillPaths(part, owned, outline, main, subject);
+    if (paths.length === 0) continue;
+    const clusters = coloursInRegion(photo, (nx, ny) => insidePart(nx, ny, part, targets, main, sourceWidth, sourceHeight))
+      .filter((cluster) => !backdrop.has(cluster.name));
+    const chosen = chooseColour(clusters, part, backdrop);
+    if (!chosen) continue;
+    const name = bareName(part.name) || part.name;
+    const inkArea = owned.reduce((sum, contour) => sum + boxOf(contour.points).area, 0);
+    picks.push({
+      colour: chosen.colour,
+      rgb: chosen.rgb,
+      name,
+      paths,
+      area: outline ? boxOf(main.points).area : Math.max(areaOf(part), inkArea),
+    });
   }
-  return [...grouped.entries()].map(([colour, group]) => ({
+  const subjectArea = Math.max(1, boxOf(main.points).area);
+  const grouped = new Map<string, ColourPick[]>();
+  for (const pick of picks) {
+    const list = grouped.get(pick.colour) ?? [];
+    list.push(pick);
+    grouped.set(pick.colour, list);
+  }
+  let rows = [...grouped.entries()].map(([colour, list]) => ({
     colour,
-    hex: group.hexes.length > 0 ? rgbToHex(average(group.hexes)) : colourHex(colour),
-    names: group.names,
-    paths: group.paths,
+    area: list.reduce((sum, pick) => sum + pick.area, 0),
+    saturated: colour !== 'putih' && colour !== 'abu-abu' && colour !== 'hitam',
+    hex: fillHex(colour, averageRgb(list)),
+    names: uniqueNames(list.map((pick) => pick.name)),
+    paths: uniquePaths(list.flatMap((pick) => pick.paths)),
   }));
+  if (rows.length > 4) {
+    rows = rows.filter((row) => row.area / subjectArea >= 0.08 || row.saturated);
+  }
+  return rows
+    .sort((left, right) => right.area - left.area)
+    .map((row) => ({ colour: row.colour, hex: row.hex, names: row.names, paths: row.paths }));
 }
 
-function addColour(
-  groups: Map<string, { hexes: Rgb[]; names: string[]; paths: string[] }>,
-  colour: string,
-  rgb: Rgb | null,
-  name: string,
-  paths: readonly string[],
-): void {
-  const group = groups.get(colour) ?? { hexes: [], names: [], paths: [] };
-  if (rgb) group.hexes.push(rgb);
-  if (!group.names.includes(name)) group.names.push(name);
-  for (const path of paths) {
-    if (!group.paths.includes(path)) group.paths.push(path);
+function chooseColour(
+  clusters: readonly ColourCluster[],
+  part: DetectedPart,
+  backdrop: ReadonlySet<string>,
+): { colour: string; rgb: Rgb | null } | null {
+  const top = clusters[0];
+  const marked = clusters.find((cluster) => cluster.share >= 0.12 && !neutralColour(cluster.name));
+  if (marked && top && neutralColour(top.name)) return { colour: marked.name, rgb: marked.rgb };
+  if (top && top.share >= 0.2) return { colour: top.name, rgb: top.rgb };
+  const named = knownColourName(part.colorName);
+  if (named && !backdrop.has(named)) return { colour: named, rgb: null };
+  if (top) return { colour: top.name, rgb: top.rgb };
+  return null;
+}
+
+function neutralColour(name: string): boolean {
+  return name === 'putih' || name === 'abu-abu' || name === 'hitam';
+}
+
+function fillPaths(
+  part: DetectedPart,
+  owned: readonly MappedContour[],
+  outline: boolean,
+  main: MappedContour,
+  subject: Box,
+): string[] {
+  const closed = owned.filter((contour) => contour.closed);
+  const fromInk = (closed.length > 0 ? closed : owned).map((contour) => contour.path);
+  if (fromInk.length > 0) return fromInk;
+  if (outline) return [main.path];
+  if (partFraction(part, subject) > 0.45) return [];
+  return [part.points.length >= 3 ? smoothPath(part.points, true) : rectPath(part)];
+}
+
+function fillHex(colour: string, rgb: Rgb | null): string {
+  if (colour === 'putih') return '#ffffff';
+  return rgb ? rgbToHex(rgb) : colourHex(colour);
+}
+
+function averageRgb(picks: readonly ColourPick[]): Rgb | null {
+  const colours = picks.flatMap((pick) => (pick.rgb ? [pick.rgb] : []));
+  return colours.length > 0 ? average(colours) : null;
+}
+
+function uniqueNames(names: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const name of names) {
+    if (!out.includes(name)) out.push(name);
   }
-  groups.set(colour, group);
+  return out;
+}
+
+function uniquePaths(paths: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const path of paths) {
+    if (!out.includes(path)) out.push(path);
+  }
+  return out;
+}
+
+function bareName(name: string): string {
+  let text = name.trim();
+  while (text.startsWith('garis luar')) text = text.slice('garis luar'.length).trim();
+  return text;
+}
+
+function outlineInstruction(name: string, title: string): string {
+  const cleaned = bareName(name) || subjectNoun(title) || '';
+  if (!cleaned) return 'Gambar garis luar.';
+  return `Gambar garis luar ${cleaned}.`;
+}
+
+function detailInstruction(part: DetectedPart, inks: readonly MappedContour[]): string {
+  const name = bareName(part.name) || part.name;
+  return isPairStep(part, inks) ? `Tambahkan dua ${name}.` : `Gambar ${name}.`;
+}
+
+function isPairStep(part: DetectedPart, inks: readonly MappedContour[]): boolean {
+  if (/\bdua\b/.test(part.name)) return false;
+  if (part.count === 2 && inks.length === 2) return true;
+  if (part.count > 0 && part.count !== 2) return false;
+  return part.pair && inks.length === 2 && part.pieceIds.length !== 1 && part.pieceIds.length <= 2;
 }
 
 function constructionInstruction(kind: 'circle' | 'ellipse', name: string): string {
@@ -492,17 +607,38 @@ function partFraction(part: DetectedPart, subject: Box): number {
   return areaOf(part) / Math.max(1, subject.area);
 }
 
-function subjectColourCount(
+function subjectColourNames(
   photo: RgbaImage,
   silhouette: MappedContour,
   sourceWidth: number,
   sourceHeight: number,
-): number {
-  if (photoIsBlankPlate(photo)) return 0;
+): string[] {
+  if (photoIsBlankPlate(photo)) return [];
+  const backdrop = backgroundColours(photo);
   return coloursInRegion(photo, (nx, ny) => {
     const point = normToLesson(nx, ny, sourceWidth, sourceHeight);
     return pointInPolygon(point.x, point.y, silhouette.points);
-  }).length;
+  }).map((cluster) => cluster.name).filter((name) => !backdrop.has(name));
+}
+
+function colourWord(instruction: string): string | null {
+  const match = /dengan (.+)$/.exec(normalizeInstruction(instruction));
+  const word = match?.[1]?.trim() ?? '';
+  if (!word) return null;
+  return knownColourName(word);
+}
+
+function repeatsWords(text: string): boolean {
+  const words = normalizeInstruction(text).split(' ').filter((word) => word.length >= 2);
+  for (let index = 1; index < words.length; index += 1) {
+    if (words[index] === words[index - 1]) return true;
+    const previous = words[index - 1];
+    const current = words[index];
+    const older = words[index - 3];
+    const mid = words[index - 2];
+    if (index >= 3 && previous === older && current === mid) return true;
+  }
+  return false;
 }
 
 function insidePart(
@@ -579,15 +715,6 @@ function uniqueContours(contours: readonly MappedContour[]): MappedContour[] {
     if (!kept.includes(contour)) kept.push(contour);
   }
   return kept;
-}
-
-function mirrored(contours: readonly MappedContour[]): boolean {
-  if (contours.length !== 2) return false;
-  const left = contours[0];
-  const right = contours[1];
-  if (!left || !right) return false;
-  const ratio = left.area / Math.max(1, right.area);
-  return ratio > 0.55 && ratio < 1.82 && Math.abs(left.cy - right.cy) < 80 && Math.abs(left.cx - right.cx) > 40;
 }
 
 function pickMain(contours: readonly MappedContour[]): MappedContour {

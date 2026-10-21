@@ -18,6 +18,8 @@ export interface DetectedPart {
   readonly colorName: string;
   /** Traced piece indexes that belong to this part. Empty when the model only drew a box. */
   readonly pieceIds: readonly number[];
+  /** How many of this part one step draws. 0 means the model did not say. */
+  readonly count: number;
 }
 
 const BANNED = /latar belakang|wajah anak|barcode|ventilasi|bagian berikutnya|bentuk utama|bagian kecil|bagian ini|\bbuih\b|\bbusa\b|\buap\b/;
@@ -32,7 +34,7 @@ export function cleanPartName(raw: string): string | null {
     .replace(/^dua\s+/, '');
   if (text.length < 2 || text.length > 40) return null;
   if (BANNED.test(text) || /\buntuk\b/.test(text)) return null;
-  if (/^(lingkaran|oval|persegi panjang|persegi|segitiga|garis)$/.test(text)) return null;
+  if (/^(lingkaran|oval|persegi panjang|persegi|segitiga|garis|garis luar)$/.test(text)) return null;
   return text;
 }
 
@@ -66,7 +68,12 @@ export function detectedPartFrom(value: unknown): DetectedPart | null {
       if (pieceIds.length === 24) break;
     }
   }
-  return { name, pair: row.pair, x, y, width, height, points, colorName, pieceIds };
+  return { name, pair: row.pair, x, y, width, height, points, colorName, pieceIds, count: wholeCount(row.count) };
+}
+
+function wholeCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 12) return 0;
+  return value;
 }
 
 function finite(value: unknown): number | null {

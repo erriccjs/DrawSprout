@@ -51,6 +51,7 @@ describe('Replicate editor', () => {
     expect(body.input.aspect_ratio).toBe('match_input_image');
     expect(body.input.input_image.startsWith('data:image/png;base64,')).toBe(true);
     expect(body.input.prompt).toContain('opaque white');
+    expect(body.input.prompt).toContain('framing');
     expect(body.input.prompt).not.toMatch(/vehicle|wheel|\bcar\b|toy/i);
     expect(init.body).not.toContain('r8-secret');
   });
