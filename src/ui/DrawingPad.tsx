@@ -109,7 +109,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const { status: saveStatus, flush, clearSession } = useAutosave(store, state, !restorePending, pendingSave);
   const [restartError, setRestartError] = useState<string | null>(null);
   const restartingRef = useRef(false);
-  const fullscreenRequestedRef = useRef(false);
+  const remeasureRef = useRef<() => void>(() => {});
   const [paletteSignal, setPaletteSignal] = useState(0);
   const [resumeToastHidden, setResumeToastHidden] = useState(false);
   // Leaving never waits on storage: the child reaches the picker immediately
@@ -212,6 +212,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         ),
       );
     };
+    remeasureRef.current = measure;
     measure();
 
     const blockTouch = (event: TouchEvent) => {
@@ -220,18 +221,17 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     stage.addEventListener('touchstart', blockTouch, { passive: false });
     stage.addEventListener('touchmove', blockTouch, { passive: false });
 
-    if (typeof ResizeObserver === 'undefined') {
-      return () => {
-        stage.removeEventListener('touchstart', blockTouch);
-        stage.removeEventListener('touchmove', blockTouch);
-      };
-    }
+    const release = () => {
+      remeasureRef.current = () => {};
+      stage.removeEventListener('touchstart', blockTouch);
+      stage.removeEventListener('touchmove', blockTouch);
+    };
+    if (typeof ResizeObserver === 'undefined') return release;
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
     return () => {
       observer.disconnect();
-      stage.removeEventListener('touchstart', blockTouch);
-      stage.removeEventListener('touchmove', blockTouch);
+      release();
     };
   }, [stage, lesson.coordinateSpace, layout, tabletNoticeOpen]);
 
@@ -279,7 +279,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const [rejection, setRejection] = useState<string | null>(null);
   const [controlTab, setControlTab] = useState<'drawing' | 'help'>('drawing');
 
-  const discardLiveStroke = () => {
+  const discardLiveStroke = useCallback(() => {
     // A multi-finger gesture must not leave the dot the first finger started.
     // Replay the committed strokes only — no session update, so this stays off
     // the React path the same way a pointermove does.
@@ -289,7 +289,36 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     surface.endStroke();
     surface.replay(toRenderStrokes(stateRef.current.strokes));
     paint();
-  };
+  }, [paint, surfaceRef]);
+
+  useEffect(() => {
+    // A fullscreen or rotation change moves the canvas under the finger.
+    // Samples taken before and after that change are not in the same mapping,
+    // so the line in progress is thrown away instead of saved crooked.
+    let frame = 0;
+    const onViewportChange = () => {
+      if (pendingRef.current || surfaceRef.current?.hasLiveStroke()) {
+        discardLiveStroke();
+      }
+      remeasureRef.current();
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        remeasureRef.current();
+      });
+    };
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', onViewportChange);
+    document.addEventListener('fullscreenchange', onViewportChange);
+    const visual = window.visualViewport;
+    visual?.addEventListener('resize', onViewportChange);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('orientationchange', onViewportChange);
+      document.removeEventListener('fullscreenchange', onViewportChange);
+      visual?.removeEventListener('resize', onViewportChange);
+    };
+  }, [discardLiveStroke, surfaceRef]);
 
   useStrokeInput(canvas, lesson.coordinateSpace, {
     accepts: (pointerType) => acceptsPointerType(state.inputMode, pointerType),
@@ -328,10 +357,6 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     },
 
     begin: (point) => {
-      if (!fullscreenRequestedRef.current) {
-        fullscreenRequestedRef.current = true;
-        requestDocumentFullscreen();
-      }
       const surface = surfaceRef.current;
       if (!surface) return;
       // Guarded: calling setState with the value it already holds still costs a

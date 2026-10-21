@@ -718,11 +718,15 @@ in the edge margin. The viewport meta tag still does not set `maximum-scale`
 or `user-scalable` (PRD section 10). The picture list is not under those
 rules, so it can still scroll.
 
-The first stroke calls the Fullscreen API. *Layar penuh* asks again, and
-leaves fullscreen when it is already on. The manifest `display` is
-`fullscreen`, and `display_override` is `fullscreen` then `standalone`. A
-browser that does not implement fullscreen display uses standalone. A copy
-that is already installed keeps the display mode it was installed with.
+Opening a picture from the picker calls the Fullscreen API, while that tap
+is still a user gesture. A stroke does not. *Layar penuh* asks again, and
+leaves fullscreen when it is already on. If fullscreen, rotation, or the
+browser chrome changes the screen while a stroke is in progress, that stroke
+is discarded and the canvas is measured again before the next one. The
+manifest `display` is `fullscreen`, and `display_override` is `fullscreen`
+then `standalone`. A browser that does not implement fullscreen display uses
+standalone. A copy that is already installed keeps the display mode it was
+installed with.
 
 **What the page cannot do.** Android gesture navigation is handled by the
 system. `preventDefault`, `touch-action`, and a dead zone do not cancel a

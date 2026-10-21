@@ -174,6 +174,95 @@ describe('starting a lesson', () => {
   });
 });
 
+function fittedBacking(width: number, height: number) {
+  const chrome = drawingChrome(layoutTier(window.innerWidth, window.innerHeight), false);
+  return backingSize(
+    fitViewport(
+      CAT_LESSON.coordinateSpace,
+      Math.max(1, width - chrome.side * 2),
+      Math.max(1, height - chrome.top - chrome.bottom),
+      window.devicePixelRatio || 1,
+    ),
+  );
+}
+
+describe('fullscreen and a resizing screen', () => {
+  const originalRequest = document.documentElement.requestFullscreen;
+  const originalViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+
+  beforeEach(() => {
+    if (window.visualViewport) return;
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: new EventTarget(),
+    });
+  });
+
+  afterEach(() => {
+    document.documentElement.requestFullscreen = originalRequest;
+    if (originalViewport) Object.defineProperty(window, 'visualViewport', originalViewport);
+    else Reflect.deleteProperty(window, 'visualViewport');
+  });
+
+  it('draws without asking for fullscreen, and Layar penuh still asks', () => {
+    document.documentElement.requestFullscreen = vi.fn(() => Promise.resolve());
+    const { canvas } = setup();
+
+    act(() =>
+      drawStroke(canvas, [
+        { x: 40, y: 40 },
+        { x: 90, y: 70 },
+      ]),
+    );
+
+    expect(document.documentElement.requestFullscreen).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+
+    act(() => screen.getByRole('button', { name: 'Layar penuh' }).click());
+    expect(document.documentElement.requestFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['resize', () => window.dispatchEvent(new Event('resize'))],
+    ['orientationchange', () => window.dispatchEvent(new Event('orientationchange'))],
+    ['fullscreenchange', () => document.dispatchEvent(new Event('fullscreenchange'))],
+    ['visualViewport resize', () => window.visualViewport?.dispatchEvent(new Event('resize'))],
+  ])('drops the stroke in progress when %s fires and fits the canvas again', async (_label, fire) => {
+    const { store, canvas } = setup();
+    const before = canvas.width;
+
+    act(() => {
+      pointerDown(canvas, { x: 100, y: 100 });
+      pointerMove(canvas, { x: 180, y: 140 });
+    });
+
+    stubLayoutBox(800, 600);
+    act(() => {
+      fire();
+    });
+    act(() => pointerUp(canvas, { x: 220, y: 180 }));
+
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
+    const expected = fittedBacking(800, 600);
+    expect(canvas.width).toBe(expected.width);
+    expect(canvas.height).toBe(expected.height);
+    expect(canvas.width).not.toBe(before);
+
+    act(() =>
+      drawStroke(canvas, [
+        { x: 80, y: 60 },
+        { x: 160, y: 120 },
+      ]),
+    );
+    await waitFor(async () => {
+      const restored = await store.loadSession('test-session');
+      expect(restored?.strokes).toHaveLength(1);
+    });
+    const restored = await store.loadSession('test-session');
+    expect(fromRestoredSession(restored!).strokes[0]!.points[0]).toEqual({ x: 100, y: 75 });
+  });
+});
+
 describe('drawing', () => {
   it('commits a stroke and makes it undoable, then redoable (AT-07)', async () => {
     const { canvas } = setup();

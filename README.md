@@ -63,9 +63,10 @@ export containing only the child's drawing.
   sits below the tools, above *Lanjut*.
 - In finger mode, a touch in the outer 28px of the screen does not start a
   stroke, and a very large reported contact is ignored. The paper stays inset
-  from the side edges (8px on a portrait phone, 28px otherwise). *Layar penuh*
-  asks the browser to go fullscreen, and
-  the first stroke asks once. An installed copy prefers fullscreen and falls
+  from the side edges (8px on a portrait phone, 28px otherwise). Opening a
+  picture asks the browser to go fullscreen, and *Layar penuh* asks again. A
+  stroke does not. If the screen changes size during a stroke, that stroke is
+  dropped. An installed copy prefers fullscreen and falls
   back to standalone. None of this disables Android's own edge gestures
   (back, home, recents, the notification shade). See D-57.
 - Three assistance levels: dashed guides always visible, guides that fade after

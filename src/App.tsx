@@ -9,6 +9,7 @@ import type { SessionCheckpoint } from './persistence/types';
 import { gateUpdate } from './offline/update-policy';
 import { useOfflineSupport } from './offline/useOffline';
 import { DrawingPad } from './ui/DrawingPad';
+import { requestDocumentFullscreen } from './ui/fullscreen';
 import { RESUME_NOTICE } from './ui/resume-notice';
 import { LessonPicker } from './ui/LessonPicker';
 import { TabletNotice } from './ui/TabletNotice';
@@ -92,6 +93,9 @@ export function App() {
   }
 
   const selectLesson = (lessonId: string) => {
+    // This runs inside the picker's click. Fullscreen has to be asked for
+    // here, not on the first stroke: the resize would smear that line (D-57).
+    requestDocumentFullscreen();
     setUpdateDismissed(false);
     const selection = ++selectionRef.current;
     const handoff = handoffRef.current?.state.lessonId === lessonId ? handoffRef.current : null;

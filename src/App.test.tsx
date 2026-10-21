@@ -69,6 +69,30 @@ async function returnToPicker() {
 }
 
 describe('lesson picker', () => {
+  it('asks for fullscreen when a picture is opened, not when the first stroke starts', async () => {
+    const requestFullscreen = vi.fn(() => Promise.resolve());
+    const host = document.documentElement;
+    const original = host.requestFullscreen;
+    host.requestFullscreen = requestFullscreen;
+    try {
+      render(<App />);
+      await open('Kucing');
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+
+      const canvas = document.querySelector('canvas');
+      expect(canvas).toBeTruthy();
+      act(() =>
+        drawStroke(canvas!, [
+          { x: 40, y: 40 },
+          { x: 90, y: 70 },
+        ]),
+      );
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    } finally {
+      host.requestFullscreen = original;
+    }
+  });
+
   it('lists the exposed lessons with pictures and opens the chosen one', async () => {
     render(<App />);
     await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
