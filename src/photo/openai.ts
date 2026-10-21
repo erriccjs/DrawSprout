@@ -39,12 +39,24 @@ export interface ImageEditor {
   edit(input: ImageEditRequest): Promise<ImageEditResult>;
 }
 
+export interface InstructionPiece {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface InstructionRequest {
   readonly model: string;
   readonly photoPng: Uint8Array;
   readonly illustrationPng: Uint8Array;
   readonly signal: AbortSignal;
   readonly idempotencyKey: string;
+  /** Numbered traced pieces, in the same order as the lesson builder. */
+  readonly pieces?: readonly InstructionPiece[];
+  /** A second text call after the first left interior pieces unnamed. */
+  readonly relabel?: boolean;
 }
 
 export interface InstructionResult {
@@ -116,11 +128,20 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                     'title pendek, 2 sampai 4 kata.',
                     'parts adalah bagian yang benar-benar terlihat, dari yang terbesar. name adalah kata benda bahasa Indonesia (kepala, badan, telinga, gagang, kelopak), bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
                     'Jangan memakai "bagian berikutnya", "bentuk utama", "buih", "latar belakang", "wajah anak", "barcode", atau "ventilasi".',
-                    'pair true bila kotak mencakup sepasang simetris (dua telinga, dua mata, dua roda) yang digambar dalam satu langkah.',
-                    'x, y, width, height adalah kotak dalam ruang 1000 kali 750. points adalah polygon bagian itu dalam ruang yang sama, paling banyak 8 titik. Kosongkan points bila kotak sudah cukup.',
-                    'colorName adalah warna bagian itu pada foto: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, hitam, abu-abu, atau putih.',
+                    'Jangan memasukkan setiap potongan ke dalam satu kotak.',
+                    'Sebut bagian yang terlihat: garis luar, telinga, mata, hidung, kumis, kaki, ekor, roda, gagang, kelopak, tengah bunga, kopi.',
+                    'pieceIds adalah nomor potongan yang termasuk bagian itu. Bagian garis luar hanya berisi potongan siluet, bukan detail di dalamnya.',
+                    'pair true bila satu langkah menggambar sepasang simetris (dua telinga, dua mata, dua roda). pair true boleh berisi dua pieceIds.',
+                    'x, y, width, height adalah kotak dalam ruang 1000 kali 750. points adalah polygon bagian itu dalam ruang yang sama, paling banyak 8 titik. Kotak harus ketat di bagian itu, bukan seluruh gambar.',
+                    'colorName adalah warna bagian itu pada foto: merah, oranye, kuning, hijau, biru, ungu, merah muda, cokelat, hitam, abu-abu, atau putih. Putih untuk benda yang putih, bukan abu-abu.',
                     'Jangan menambah bagian yang tidak ada.',
-                  ].join('\n'),
+                    input.relabel === true
+                      ? 'Beberapa potongan dalam belum punya nama sendiri. Beri tiap potongan dalam sebuah bagian yang lebih kecil dari garis luar.'
+                      : '',
+                    (input.pieces ?? []).length > 0
+                      ? `Potongan garis yang sudah dinomori:\n${(input.pieces ?? []).map((piece) => `${piece.id}. x=${Math.round(piece.x)} y=${Math.round(piece.y)} width=${Math.round(piece.width)} height=${Math.round(piece.height)}`).join('\n')}`
+                      : '',
+                  ].filter((line) => line.length > 0).join('\n'),
                 },
                 { type: 'image_url', image_url: { url: `data:image/png;base64,${bytesToBase64(input.photoPng)}` } },
                 { type: 'image_url', image_url: { url: `data:image/png;base64,${bytesToBase64(input.illustrationPng)}` } },
@@ -144,7 +165,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                       items: {
                         type: 'object',
                         additionalProperties: false,
-                        required: ['name', 'pair', 'x', 'y', 'width', 'height', 'colorName', 'points'],
+                        required: ['name', 'pair', 'x', 'y', 'width', 'height', 'colorName', 'points', 'pieceIds'],
                         properties: {
                           name: { type: 'string' },
                           pair: { type: 'boolean' },
@@ -153,6 +174,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                           width: { type: 'number' },
                           height: { type: 'number' },
                           colorName: { type: 'string' },
+                          pieceIds: { type: 'array', items: { type: 'number' } },
                           points: {
                             type: 'array',
                             items: {

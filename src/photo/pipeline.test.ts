@@ -55,7 +55,7 @@ describe('photo pipeline wiring', () => {
           sameSubject: true,
           subject: 'Kotak',
           title: 'Wajah anak',
-          parts: [{ name: 'wajah anak', pair: false, x: 0, y: 0, width: 40, height: 40, points: [], colorName: 'hitam' }],
+          parts: [{ name: 'wajah anak', pair: false, x: 0, y: 0, width: 40, height: 40, points: [], colorName: 'hitam', pieceIds: [] }],
           usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
         });
       },
@@ -72,9 +72,11 @@ describe('photo pipeline wiring', () => {
     expect(result.model).toBe('gpt-image-1.5');
     expect(result.quality).toBe('low');
     expect(result.lesson.title).toBe('Kotak');
-    expect(result.lesson.steps[0]?.instruction).toBe('Gambar bentuk yang paling besar.');
+    expect(result.lesson.steps[0]?.instruction).toBe('Gambar garis luar kotak.');
     expect(result.lesson.steps[0]?.instruction).not.toMatch(/wajah/);
     expect(result.textUsage).toEqual({ inputTokens: 11, outputTokens: 7, totalTokens: 18 });
+    expect(result.imageCalls).toBe(1);
+    expect(result.regenerated).toBe(false);
     const request = captured.request;
     if (request === null) throw new Error('instruction writer was not called');
     expect(request.photoPng[0]).toBe(137);

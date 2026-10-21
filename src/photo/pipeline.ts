@@ -8,7 +8,7 @@
 import { compareLessonToInk } from './compare';
 import { dominantColors } from './colors';
 import { downscaleLongEdge, flattenOnWhite } from './image-ops';
-import { buildPhotoLesson, outlineCoverage, sanitizeTitle, shouldRedraw } from './lesson-build';
+import { buildPhotoLesson, lessonPieces, outlineCoverage, sanitizeTitle, shouldRedraw } from './lesson-build';
 import { sumUsage, type ImageEditor, type InstructionResult, type InstructionWriter, type TokenUsage } from './openai';
 import { decodePng, encodePng, type RgbaImage } from './png';
 import type { ImageProvider } from './provider';
@@ -41,6 +41,9 @@ export interface PhotoPipelineResult {
   readonly subjectFit: number;
   readonly imageUsage: TokenUsage | null;
   readonly textUsage: TokenUsage | null;
+  /** Successful image edits, including a redraw that was not kept. */
+  readonly imageCalls: number;
+  readonly regenerated: boolean;
 }
 
 interface TracedEdit {
@@ -63,13 +66,16 @@ export async function runPhotoPipeline(
     : imageModelFor(input.variant, input.configuredImageModel);
   const quality = imageQualityFor(input.variant);
   const photoPng = await encodePng(downscaleLongEdge(photo, 512));
+  let imageCalls = 0;
   let traced = await editTraced(deps.images, input, photo, model, quality, false, false, input.idempotencyKey);
+  imageCalls += 1;
   let imageUsage = traced.usage;
   let retried = false;
   if (shouldRedraw(outlineCoverage(traced.contours))) {
     const second = await editTraced(deps.images, input, photo, model, quality, true, false, `${input.idempotencyKey}-redraw`).catch(() => null);
     retried = true;
     if (second) {
+      imageCalls += 1;
       imageUsage = sumUsage(imageUsage, second.usage);
       if (outlineCoverage(second.contours) >= outlineCoverage(traced.contours)) traced = second;
     }
@@ -81,6 +87,7 @@ export async function runPhotoPipeline(
     const second = await editTraced(deps.images, input, photo, model, quality, true, true, `${input.idempotencyKey}-redraw`).catch(() => null);
     retried = true;
     if (second) {
+      imageCalls += 1;
       imageUsage = sumUsage(imageUsage, second.usage);
       const again = await askParts(deps.instructions, input, second, photoPng, '-redraw');
       textUsage = sumUsage(textUsage, again?.usage ?? null);
@@ -91,7 +98,7 @@ export async function runPhotoPipeline(
 
   let built = lessonFrom(input, traced, photo, palette, written);
   let comparison = compareLessonToInk(built.lesson, traced.illustration);
-  if (!retried && (comparison.needsReview || built.needsReview)) {
+  if (!retried && (comparison.needsReview || shouldRedraw(built.coverage))) {
     const second = await editTraced(
       deps.images,
       input,
@@ -103,6 +110,7 @@ export async function runPhotoPipeline(
       `${input.idempotencyKey}-redraw`,
     ).catch(() => null);
     if (second) {
+      imageCalls += 1;
       imageUsage = sumUsage(imageUsage, second.usage);
       const again = await askParts(deps.instructions, input, second, photoPng, '-redraw');
       textUsage = sumUsage(textUsage, again?.usage ?? null);
@@ -113,6 +121,18 @@ export async function runPhotoPipeline(
         built = rebuilt;
         comparison = recompared;
         if (again) written = again;
+      }
+    }
+  }
+
+  if (deps.instructions && built.unnamedInteriors > 0 && interiorContours(traced.contours) >= 2) {
+    const labeled = await askParts(deps.instructions, input, traced, photoPng, '-labels', true);
+    if (labeled) {
+      textUsage = sumUsage(textUsage, labeled.usage);
+      const rebuilt = lessonFrom(input, traced, photo, palette, labeled);
+      if (rebuilt.unnamedInteriors < built.unnamedInteriors) {
+        built = rebuilt;
+        written = labeled;
       }
     }
   }
@@ -134,6 +154,8 @@ export async function runPhotoPipeline(
     subjectFit: built.subjectFit,
     imageUsage,
     textUsage,
+    imageCalls,
+    regenerated: imageCalls > 1,
   };
 }
 
@@ -169,20 +191,28 @@ async function askParts(
   traced: TracedEdit,
   photoPng: Uint8Array,
   suffix: string,
+  relabel = false,
 ): Promise<InstructionResult | null> {
   if (!instructions) return null;
   try {
     const preview = await encodePng(downscaleLongEdge(traced.illustration, 512));
+    const pieces = lessonPieces(traced.contours, traced.illustration.width, traced.illustration.height);
     return await instructions.write({
       model: input.textModel,
       photoPng,
       illustrationPng: preview,
       signal: input.signal,
       idempotencyKey: `${input.idempotencyKey}${suffix}`,
+      ...(pieces.length > 0 ? { pieces } : {}),
+      ...(relabel ? { relabel: true } : {}),
     });
   } catch {
     return null;
   }
+}
+
+function interiorContours(contours: readonly Contour[]): number {
+  return contours.filter((contour) => contour.silhouette !== true).length;
 }
 
 function lessonFrom(

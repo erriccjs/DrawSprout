@@ -207,10 +207,12 @@ Worker vars, not secrets: `IMAGE_PROVIDER` (`openai` by default, or
 send `quality=medium` on OpenAI. *Lebih sederhana* stays on `gpt-image-1.5` at
 `quality=low` and ignores `OPENAI_IMAGE_MODEL` (D-67). Set
 `OPENAI_IMAGE_MODEL=gpt-image-1-mini` only for a default or faithful job.
-Lessons follow the traced outline of each named part. A circle or oval is
-added first only when it fits that part; it does not replace the outline
-(D-70). Colour steps name the colour and the parts. The illustration is
-flattened onto white. OpenAI stays the default image model.
+Lessons follow the traced outline of each named part, and interior lines stay
+on their own part instead of one box around the whole subject (D-71). A circle
+or oval is added first only when it fits that part; it does not replace the
+outline (D-70). Colour steps name the part and a colour sampled from the
+subject, including white. The illustration is flattened onto white. OpenAI
+stays the default image model.
 
 ### Evaluation
 
@@ -237,15 +239,16 @@ npm run photo-eval -- --score photo-eval-out/rubric.csv
 ```
 
 `costUsd` uses OpenAI list prices for an OpenAI image model and the text
-model (D-67), or $0.04 for `flux-kontext-pro` (D-69). `OPENAI_IMAGE_USD` or
-`REPLICATE_IMAGE_USD`, if you set it to a number, replaces that figure;
-`listCostUsd` in `metrics.json` stays the computed one. Optional
-`PHOTO_EVAL_VARIANT` is `default`, `faithful`, or `simple`. `--compare` runs
-OpenAI and Kontext on one contact sheet and stops if either provider fails.
-`flux-1.1-pro` is unsuitable (it returns near-photos) and is not part of
-compare. Kontext uses its own short prompt and retries HTTP 429. The
-idempotency key for this revision ends in `v4`, so a rerun after the traced
-outline change is a new paid job. `REPLICATE_API_TOKEN` is read only when
+model (D-67), or $0.04 per image for `flux-kontext-pro`, including a
+regeneration (D-69, D-71). `OPENAI_IMAGE_USD` or `REPLICATE_IMAGE_USD`, if you
+set it to a number, replaces that figure; `listCostUsd` in `metrics.json`
+stays the computed one. Metrics include `regenerated` when a second image was
+made. Optional `PHOTO_EVAL_VARIANT` is `default`, `faithful`, or `simple`.
+`--compare` runs OpenAI and Kontext on one contact sheet and stops if either
+provider fails. `flux-1.1-pro` is unsuitable (it returns near-photos) and is
+not part of compare. Kontext uses its own short prompt and retries HTTP 429.
+The idempotency key for this revision ends in `v5`, so a rerun after the
+step-split change is a new paid job. `REPLICATE_API_TOKEN` is read only when
 `REPLICATE_API_KEY` is unset.
 
 CC0 samples, with credits, are in `scripts/photo-eval/samples/` (`LICENSES.md`).

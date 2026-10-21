@@ -16,6 +16,8 @@ export interface DetectedPart {
   readonly height: number;
   readonly points: readonly Point[];
   readonly colorName: string;
+  /** Traced piece indexes that belong to this part. Empty when the model only drew a box. */
+  readonly pieceIds: readonly number[];
 }
 
 const BANNED = /latar belakang|wajah anak|barcode|ventilasi|bagian berikutnya|bentuk utama|bagian kecil|bagian ini|\bbuih\b|\bbusa\b|\buap\b/;
@@ -56,7 +58,15 @@ export function detectedPartFrom(value: unknown): DetectedPart | null {
     }
   }
   const colorName = typeof row.colorName === 'string' ? row.colorName : '';
-  return { name, pair: row.pair, x, y, width, height, points, colorName };
+  const pieceIds: number[] = [];
+  if (Array.isArray(row.pieceIds)) {
+    for (const item of row.pieceIds) {
+      if (typeof item !== 'number' || !Number.isInteger(item) || item < 0) continue;
+      pieceIds.push(item);
+      if (pieceIds.length === 24) break;
+    }
+  }
+  return { name, pair: row.pair, x, y, width, height, points, colorName, pieceIds };
 }
 
 function finite(value: unknown): number | null {

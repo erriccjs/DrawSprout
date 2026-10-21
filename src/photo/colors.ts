@@ -117,20 +117,94 @@ export function indonesianColourName(rgb: Rgb): string {
   const min = Math.min(r, g, b);
   const lum = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
   const sat = max === 0 ? 0 : (max - min) / max;
-  if (lum < 45) return 'hitam';
-  if (sat < 0.18) return lum > 200 ? 'putih' : 'abu-abu';
+  if (sat < 0.16) {
+    if (lum >= 168) return 'putih';
+    if (lum < 48) return 'hitam';
+    return 'abu-abu';
+  }
+  if (lum < 48 && sat < 0.22) return 'hitam';
   const delta = max - min || 1;
   const sector = max === r ? ((g - b) / delta) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
   let hue = sector * 60;
   if (hue < 0) hue += 360;
-  if (lum < 85 && hue >= 10 && hue < 50) return 'cokelat';
+  if (hue >= 8 && hue < 50 && lum < 100) return 'cokelat';
   if (hue < 15 || hue >= 345) return 'merah';
   if (hue < 45) return 'oranye';
   if (hue < 70) return 'kuning';
   if (hue < 170) return 'hijau';
   if (hue < 255) return 'biru';
   if (hue < 320) return 'ungu';
-  return 'merah muda';
+  return lum > 155 ? 'merah muda' : 'merah';
+}
+
+export interface ColourCluster {
+  readonly name: string;
+  readonly rgb: Rgb;
+  readonly share: number;
+}
+
+const REGION_GRID = 48;
+
+/**
+ * Colours inside a normalised mask. Near-white subject pixels stay `putih`.
+ * A small saturated patch (a red collar) is kept; a small grey patch is not.
+ */
+export function coloursInRegion(
+  image: RgbaImage,
+  inside: (nx: number, ny: number) => boolean,
+): ColourCluster[] {
+  const buckets = new Map<string, { n: number; r: number; g: number; b: number }>();
+  let total = 0;
+  for (let gy = 0; gy < REGION_GRID; gy += 1) {
+    for (let gx = 0; gx < REGION_GRID; gx += 1) {
+      const nx = (gx + 0.5) / REGION_GRID;
+      const ny = (gy + 0.5) / REGION_GRID;
+      if (!inside(nx, ny)) continue;
+      const rgb = opaquePixel(image, nx, ny);
+      if (!rgb) continue;
+      const name = indonesianColourName(rgb);
+      const bucket = buckets.get(name) ?? { n: 0, r: 0, g: 0, b: 0 };
+      bucket.n += 1;
+      bucket.r += rgb.r;
+      bucket.g += rgb.g;
+      bucket.b += rgb.b;
+      buckets.set(name, bucket);
+      total += 1;
+    }
+  }
+  if (total === 0) return [];
+  const clusters: ColourCluster[] = [];
+  for (const [name, bucket] of buckets) {
+    const share = bucket.n / total;
+    const saturated = name !== 'putih' && name !== 'abu-abu' && name !== 'hitam';
+    if (share < 0.12 && !(saturated && share >= 0.05)) continue;
+    clusters.push({
+      name,
+      rgb: { r: bucket.r / bucket.n, g: bucket.g / bucket.n, b: bucket.b / bucket.n },
+      share,
+    });
+  }
+  return clusters.sort((left, right) => right.share - left.share);
+}
+
+/** An all-white frame is a blank plate, not a white object. */
+export function photoIsBlankPlate(image: RgbaImage): boolean {
+  const step = Math.max(1, Math.floor(Math.sqrt(image.width * image.height) / 80));
+  let seen = 0;
+  for (let y = 0; y < image.height; y += step) {
+    for (let x = 0; x < image.width; x += step) {
+      const index = (y * image.width + x) * 4;
+      if ((image.data[index + 3] ?? 255) < 128) continue;
+      seen += 1;
+      const rgb = {
+        r: image.data[index] ?? 0,
+        g: image.data[index + 1] ?? 0,
+        b: image.data[index + 2] ?? 0,
+      };
+      if (indonesianColourName(rgb) !== 'putih') return false;
+    }
+  }
+  return seen > 0;
 }
 
 const COLOUR_HEX: Readonly<Record<string, string>> = {
@@ -179,6 +253,18 @@ function parseHex(color: string): { r: number; g: number; b: number } {
     r: Number.parseInt(color.slice(1, 3), 16),
     g: Number.parseInt(color.slice(3, 5), 16),
     b: Number.parseInt(color.slice(5, 7), 16),
+  };
+}
+
+function opaquePixel(image: RgbaImage, nx: number, ny: number): Rgb | null {
+  const x = clamp(Math.round(nx * (image.width - 1)), 0, image.width - 1);
+  const y = clamp(Math.round(ny * (image.height - 1)), 0, image.height - 1);
+  const index = (y * image.width + x) * 4;
+  if ((image.data[index + 3] ?? 255) < 128) return null;
+  return {
+    r: image.data[index] ?? 0,
+    g: image.data[index + 1] ?? 0,
+    b: image.data[index + 2] ?? 0,
   };
 }
 

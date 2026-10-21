@@ -2,13 +2,14 @@
  * Traced lines become a lesson. A named part keeps its real outline.
  *
  * A circle or oval is added first only when it fits that outline. When the
- * vision model names nothing usable, the lesson falls back to the traced
- * builder from a19f6f9 (largest closed contour, then details). See D-70.
+ * vision model names nothing usable, the lesson falls back to one named
+ * outline and drops unnamed scraps instead of printing a generic sentence.
+ * See D-70 and D-71.
  */
 
 import { assertValidLessons } from '../lesson-data/validate';
 import { LESSON_SCHEMA_VERSION, type ColorRegion, type GuidePath, type LessonPackage, type LessonStep } from '../lesson-data/schema';
-import { colourHex, indonesianColourName, knownColourName, rgbToHex, sampleRegionRgb, type Rgb } from './colors';
+import { colourHex, coloursInRegion, knownColourName, photoIsBlankPlate, rgbToHex, type Rgb } from './colors';
 import { cleanPartName, type DetectedPart } from './parts';
 import type { RgbaImage } from './png';
 import type { Contour, Point } from './trace';
@@ -19,9 +20,9 @@ export const LESSON_HEIGHT = 750;
 export const OUTLINE_COVERAGE_MIN = 0.6;
 /** Filled overlap required before a circle or oval may introduce a part. */
 export const CONSTRUCTION_IOU_MIN = 0.8;
-const MAX_FALLBACK_DRAWING_STEPS = 7;
-const MAX_FALLBACK_PATHS = 3;
-const MAX_FALLBACK_COLORS = 3;
+/** A box larger than this fraction of the subject cannot claim an interior piece. */
+const HUGE_PART = 0.72;
+const CONTAIN_MIN = 0.45;
 
 export interface BuiltLesson {
   readonly lesson: LessonPackage;
@@ -31,6 +32,16 @@ export interface BuiltLesson {
   readonly builder: 'parts' | 'traced';
   readonly needsReview: boolean;
   readonly reviewReason: string | null;
+  /** Interior contours that were not given their own part name. */
+  readonly unnamedInteriors: number;
+}
+
+export interface LessonPiece {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 export function outlineCoverage(contours: readonly Contour[]): number {
@@ -60,11 +71,33 @@ export function buildPhotoLesson(input: {
 }): BuiltLesson {
   const mapped = input.contours
     .map((contour) => mapContour(contour, input.sourceWidth, input.sourceHeight))
-    .filter((contour) => contour.points.length >= 3);
+    .filter((contour) => contour.points.length >= 3)
+    .map((contour, id) => ({ ...contour, id }));
   if (mapped.length === 0) throw new Error('No drawable shapes were found in the illustration');
   const named = buildFromParts(input, mapped);
   if (named) return named;
   return buildTracedFallback(input, mapped);
+}
+
+/** Boxes for the same contours `buildPhotoLesson` numbers, so the model can name each piece. */
+export function lessonPieces(
+  contours: readonly Contour[],
+  sourceWidth: number,
+  sourceHeight: number,
+): LessonPiece[] {
+  return contours
+    .map((contour) => mapContour(contour, sourceWidth, sourceHeight))
+    .filter((contour) => contour.points.length >= 3)
+    .map((contour, id) => {
+      const box = boxOf(contour.points);
+      return {
+        id,
+        x: round(box.minX),
+        y: round(box.minY),
+        width: round(Math.max(0, box.maxX - box.minX)),
+        height: round(Math.max(0, box.maxY - box.minY)),
+      };
+    });
 }
 
 export function sanitizeTitle(raw: string): string {
@@ -92,6 +125,7 @@ interface MappedContour {
   readonly ny: number;
   readonly silhouette: boolean;
   readonly path: string;
+  readonly id: number;
 }
 
 interface Box {
@@ -107,6 +141,8 @@ function buildFromParts(input: {
   readonly title: string;
   readonly targetHash: string;
   readonly photo: RgbaImage;
+  readonly sourceWidth: number;
+  readonly sourceHeight: number;
   readonly parts?: readonly DetectedPart[];
 }, mapped: readonly MappedContour[]): BuiltLesson | null {
   const parts = (input.parts ?? []).filter((part) => cleanPartName(part.name) === part.name);
@@ -114,56 +150,50 @@ function buildFromParts(input: {
   const main = pickMain(mapped);
   const subject = unionBox(mapped.map((contour) => boxOf(contour.points)));
   const coverage = boxOf(main.points).area / Math.max(1, subject.area);
-  const kept = mapped.filter((contour) => contour === main || !isSpeck(contour, boxOf(main.points)));
+  const kept = mapped.filter((contour) => contour.id === main.id || !isSpeck(contour, boxOf(main.points)));
+  const outlinePart = outlineOwner(main, parts);
+  const outlineName = outlinePart?.name ?? subjectNoun(input.title);
+  if (!outlineName) return null;
+
   const groups = new Map<DetectedPart, MappedContour[]>();
+  let unnamed = 0;
   for (const contour of kept) {
-    const part = ownerOf(contour, parts);
-    if (!part) continue;
-    const list = groups.get(part) ?? [];
+    if (contour.id === main.id) continue;
+    const owner = interiorOwner(contour, parts, subject);
+    if (!owner || owner === outlinePart) {
+      unnamed += 1;
+      continue;
+    }
+    const list = groups.get(owner) ?? [];
     list.push(contour);
-    groups.set(part, list);
+    groups.set(owner, list);
   }
-  if (groups.size === 0) return null;
 
   const steps: LessonStep[] = [];
   const preview: GuidePath[] = [];
-  const outlinePart = ownerOf(main, parts);
-  const outlineName = outlinePart?.name;
-  if (!outlineName) return null;
   const fit = constructionOf(main.points);
   if (fit) {
     const id = 'construct-1';
     const guide: GuidePath = { id: `${id}-1`, d: fit.d, role: 'construction' };
     steps.push(lineStep(id, 'outline', constructionInstruction(fit.kind, outlineName), [guide]));
   }
-  const outlineInks = uniqueContours(outlinePart ? (groups.get(outlinePart) ?? [main]) : [main]);
-  if (!outlineInks.includes(main)) outlineInks.unshift(main);
-  const outlineGuides = guidesFor('outline-1', outlineInks);
+  const outlineGuides = guidesFor('outline-1', [main]);
   preview.push(...outlineGuides);
-  const outlinePair = outlinePart?.pair === true && outlineInks.length > 1;
-  steps.push(lineStep(
-    'outline-1',
-    'outline',
-    outlinePair ? `Tambahkan dua ${outlineName}.` : `Gambar garis luar ${outlineName}.`,
-    outlineGuides,
-  ));
+  steps.push(lineStep('outline-1', 'outline', `Gambar garis luar ${outlineName}.`, outlineGuides));
 
-  const details = [...groups.entries()]
-    .filter(([part]) => part !== outlinePart)
-    .sort((left, right) => areaOf(right[0]) - areaOf(left[0]));
+  const details = [...groups.entries()].sort((left, right) => areaOf(right[0]) - areaOf(left[0]));
   details.forEach(([part, contours], index) => {
     const id = `detail-${index + 1}`;
     const inks = uniqueContours(contours);
     if (inks.length === 0) return;
     const guides = guidesFor(id, inks);
     preview.push(...guides);
-    const pair = part.pair || inks.length > 1 && mirrored(inks);
+    const pair = part.pair || (inks.length > 1 && mirrored(inks));
     steps.push(lineStep(id, 'detail', pair ? `Tambahkan dua ${part.name}.` : `Gambar ${part.name}.`, guides));
   });
-  if (steps.every((step) => step.phase === 'color')) return null;
 
   const regions: ColorRegion[] = [];
-  colourGroups([...groups.entries()], input.photo).forEach((group, index) => {
+  colourGroups(parts, outlinePart, groups, main, input.photo, input.sourceWidth, input.sourceHeight, subject).forEach((group, index) => {
     const id = `color-${index + 1}`;
     const regionIds: string[] = [];
     group.paths.forEach((path, pathIndex) => {
@@ -183,7 +213,7 @@ function buildFromParts(input: {
     });
   });
 
-  return finish(input, steps, regions, preview, mapped, coverage, 'parts');
+  return finish(input, steps, regions, preview, mapped, coverage, 'parts', main, unnamed);
 }
 
 function buildTracedFallback(input: {
@@ -191,59 +221,73 @@ function buildTracedFallback(input: {
   readonly title: string;
   readonly targetHash: string;
   readonly photo: RgbaImage;
+  readonly sourceWidth: number;
+  readonly sourceHeight: number;
 }, mapped: readonly MappedContour[]): BuiltLesson {
   const main = pickMain(mapped);
   const mainBox = boxOf(main.points);
-  const unique = [main, ...dedupe(mapped.filter((shape) => shape !== main && !isSpeck(shape, mainBox)))];
+  const interiors = dedupe(mapped.filter((shape) => shape.id !== main.id && !isSpeck(shape, mainBox)));
   const subject = unionBox(mapped.map((shape) => boxOf(shape.points)));
   const coverage = mainBox.area / Math.max(1, subject.area);
+  const noun = subjectNoun(input.title);
   const steps: LessonStep[] = [];
   const preview: GuidePath[] = [];
   const regions: ColorRegion[] = [];
   const outline = guidesFor('outline-1', [main]);
   preview.push(...outline);
-  steps.push(lineStep('outline-1', 'outline', 'Gambar bentuk yang paling besar.', outline));
-  const groups: MappedContour[][] = [];
-  for (const shape of unique.slice(1)) {
-    if (groups.length < MAX_FALLBACK_DRAWING_STEPS - 1) {
-      groups.push([shape]);
-      continue;
-    }
-    const room = groups.find((group) => group.length < MAX_FALLBACK_PATHS);
-    if (room) room.push(shape);
-  }
-  groups.forEach((shapes, index) => {
-    const id = `detail-${index + 1}`;
-    const guides = guidesFor(id, shapes);
-    preview.push(...guides);
-    steps.push(lineStep(id, 'detail', 'Tambahkan bagian kecil ini.', guides));
-  });
-  fallbackColours(unique, input.photo).forEach((entry, index) => {
-    const regionId = `color-region-${index + 1}`;
-    regions.push({ id: regionId, label: entry.colour, d: entry.path, suggestedColor: entry.hex });
-    steps.push({
-      id: `color-${index + 1}`,
-      phase: 'color',
-      instruction: `Warnai dengan ${entry.colour}.`,
-      guidePaths: [],
-      colorRegionIds: [regionId],
-      toolPreset: { tool: 'brush', color: entry.hex, widthViewbox: 28 },
-      completionPolicy: { manualAllowed: true, automaticEnabled: false },
+  steps.push(lineStep('outline-1', 'outline', noun ? `Gambar garis luar ${noun}.` : 'Gambar garis luar.', outline));
+  if (noun && !photoIsBlankPlate(input.photo)) {
+    const clusters = coloursInRegion(input.photo, (nx, ny) => {
+      const point = normToLesson(nx, ny, input.sourceWidth, input.sourceHeight);
+      return pointInPolygon(point.x, point.y, main.points);
     });
-  });
-  return finish(input, steps, regions, preview, unique, coverage, 'traced');
+    clusters.forEach((cluster, index) => {
+      const regionId = `color-region-${index + 1}`;
+      regions.push({ id: regionId, label: noun, d: main.path, suggestedColor: rgbToHex(cluster.rgb) });
+      steps.push({
+        id: `color-${index + 1}`,
+        phase: 'color',
+        instruction: `Warnai ${noun} dengan ${cluster.name}.`,
+        guidePaths: [],
+        colorRegionIds: [regionId],
+        toolPreset: { tool: 'brush', color: rgbToHex(cluster.rgb), widthViewbox: 28 },
+        completionPolicy: { manualAllowed: true, automaticEnabled: false },
+      });
+    });
+  }
+  return finish(input, steps, regions, preview, mapped, coverage, 'traced', main, interiors.length);
 }
 
 function finish(
-  input: { readonly id: string; readonly title: string; readonly targetHash: string },
+  input: {
+    readonly id: string;
+    readonly title: string;
+    readonly targetHash: string;
+    readonly photo: RgbaImage;
+    readonly sourceWidth: number;
+    readonly sourceHeight: number;
+  },
   steps: LessonStep[],
   regions: ColorRegion[],
   preview: GuidePath[],
   mapped: readonly MappedContour[],
   coverage: number,
   builder: 'parts' | 'traced',
+  main: MappedContour,
+  unnamedInteriors: number,
 ): BuiltLesson {
-  const needsReview = coverage < OUTLINE_COVERAGE_MIN;
+  const uniqueSteps = uniquify(steps);
+  const drawing = uniqueSteps.filter((step) => step.phase !== 'color');
+  const colours = uniqueSteps.filter((step) => step.phase === 'color');
+  const reasons: string[] = [];
+  if (coverage < OUTLINE_COVERAGE_MIN) reasons.push('Garis luar hanya menutupi sebagian subjek. Cek dulu sebelum dipakai.');
+  if (drawing.length < 3) reasons.push('Terlalu sedikit langkah menggambar. Cek dulu sebelum dipakai.');
+  if (uniqueSteps.some((step) => isGenericInstruction(step.instruction))) {
+    reasons.push('Ada instruksi yang belum menyebut bagian. Cek dulu sebelum dipakai.');
+  }
+  const subjectColours = subjectColourCount(input.photo, main, input.sourceWidth, input.sourceHeight);
+  if (colours.length < 2 && subjectColours >= 2) reasons.push('Warna subjek lebih dari satu. Cek dulu sebelum dipakai.');
+  const needsReview = reasons.length > 0;
   const lesson: LessonPackage = {
     id: input.id,
     schemaVersion: LESSON_SCHEMA_VERSION,
@@ -251,7 +295,7 @@ function finish(
     title: sanitizeTitle(input.title),
     subtitle: 'Dari foto',
     coordinateSpace: { width: LESSON_WIDTH, height: LESSON_HEIGHT },
-    steps: uniquify(steps),
+    steps: uniqueSteps,
     colorRegions: regions,
     targetPreview: { paths: preview.length > 0 ? preview : [guidesFor('preview', mapped.slice(0, 1))[0] ?? { id: 'preview', d: 'M 0 0', role: 'final-outline' }] },
   };
@@ -262,7 +306,8 @@ function finish(
     subjectFit: coverage,
     builder,
     needsReview,
-    reviewReason: needsReview ? 'Garis luar hanya menutupi sebagian subjek. Cek dulu sebelum dipakai.' : null,
+    reviewReason: needsReview ? reasons.join(' ') : null,
+    unnamedInteriors,
   };
 }
 
@@ -273,26 +318,39 @@ interface ColourGroup {
   readonly paths: string[];
 }
 
-function colourGroups(entries: ReadonlyArray<readonly [DetectedPart, readonly MappedContour[]]>, photo: RgbaImage): ColourGroup[] {
-  const groups = new Map<string, { hexes: Rgb[]; names: string[]; paths: string[] }>();
-  for (const [part, contours] of entries) {
-    const nx = (part.x + part.width / 2) / LESSON_WIDTH;
-    const ny = (part.y + part.height / 2) / LESSON_HEIGHT;
-    const rgb = sampleRegionRgb(photo, nx, ny);
-    const sampled = rgb ? indonesianColourName(rgb) : '';
-    const named = knownColourName(part.colorName) ?? '';
-    const colour = named && (!sampled || named === sampled) ? named : (sampled || named);
-    if (!colour) continue;
-    const closed = contours.filter((contour) => contour.closed);
-    const paths = (closed.length > 0 ? closed : contours).map((contour) => contour.path);
-    if (paths.length === 0) paths.push(part.points.length >= 3 ? smoothPath(part.points, true) : rectPath(part));
-    const group = groups.get(colour) ?? { hexes: [], names: [], paths: [] };
-    if (rgb) group.hexes.push(rgb);
-    if (!group.names.includes(part.name)) group.names.push(part.name);
-    group.paths.push(...paths);
-    groups.set(colour, group);
+function colourGroups(
+  parts: readonly DetectedPart[],
+  outlinePart: DetectedPart | null,
+  groups: ReadonlyMap<DetectedPart, readonly MappedContour[]>,
+  main: MappedContour,
+  photo: RgbaImage,
+  sourceWidth: number,
+  sourceHeight: number,
+  subject: Box,
+): ColourGroup[] {
+  if (photoIsBlankPlate(photo)) return [];
+  const targets: DetectedPart[] = [];
+  if (outlinePart) targets.push(outlinePart);
+  for (const part of parts) {
+    if (part === outlinePart) continue;
+    if (partFraction(part, subject) > HUGE_PART) continue;
+    targets.push(part);
   }
-  return [...groups.entries()].map(([colour, group]) => ({
+  const grouped = new Map<string, { hexes: Rgb[]; names: string[]; paths: string[] }>();
+  for (const part of targets) {
+    const owned = part === outlinePart ? [main] : [...(groups.get(part) ?? [])];
+    const closed = owned.filter((contour) => contour.closed);
+    const paths = (closed.length > 0 ? closed : owned).map((contour) => contour.path);
+    if (paths.length === 0) paths.push(part.points.length >= 3 ? smoothPath(part.points, true) : rectPath(part));
+    const clusters = coloursInRegion(photo, (nx, ny) => insidePart(nx, ny, part, targets, main, sourceWidth, sourceHeight));
+    if (clusters.length === 0) {
+      const named = knownColourName(part.colorName);
+      if (named) addColour(grouped, named, null, part.name, paths);
+      continue;
+    }
+    for (const cluster of clusters) addColour(grouped, cluster.name, cluster.rgb, part.name, paths);
+  }
+  return [...grouped.entries()].map(([colour, group]) => ({
     colour,
     hex: group.hexes.length > 0 ? rgbToHex(average(group.hexes)) : colourHex(colour),
     names: group.names,
@@ -300,24 +358,20 @@ function colourGroups(entries: ReadonlyArray<readonly [DetectedPart, readonly Ma
   }));
 }
 
-function fallbackColours(
-  shapes: readonly MappedContour[],
-  photo: RgbaImage,
-): Array<{ colour: string; hex: string; path: string }> {
-  const largest = shapes.reduce((max, shape) => Math.max(max, shape.area), 0);
-  const floor = Math.max(400, largest * 0.08);
-  const chosen: Array<{ colour: string; hex: string; path: string }> = [];
-  for (const shape of [...shapes].sort((left, right) => right.area - left.area)) {
-    if (!shape.closed || shape.area < floor) continue;
-    const rgb = sampleRegionRgb(photo, shape.nx, shape.ny);
-    if (!rgb) continue;
-    const colour = indonesianColourName(rgb);
-    const hex = rgbToHex(rgb);
-    if (chosen.some((other) => other.colour === colour)) continue;
-    chosen.push({ colour, hex, path: shape.path });
-    if (chosen.length >= MAX_FALLBACK_COLORS) break;
+function addColour(
+  groups: Map<string, { hexes: Rgb[]; names: string[]; paths: string[] }>,
+  colour: string,
+  rgb: Rgb | null,
+  name: string,
+  paths: readonly string[],
+): void {
+  const group = groups.get(colour) ?? { hexes: [], names: [], paths: [] };
+  if (rgb) group.hexes.push(rgb);
+  if (!group.names.includes(name)) group.names.push(name);
+  for (const path of paths) {
+    if (!group.paths.includes(path)) group.paths.push(path);
   }
-  return chosen;
+  groups.set(colour, group);
 }
 
 function constructionInstruction(kind: 'circle' | 'ellipse', name: string): string {
@@ -330,10 +384,21 @@ function colourInstruction(names: readonly string[], colour: string): string {
   const first = unique[0];
   const second = unique[1];
   const third = unique[2];
-  if (!first) return `Warnai dengan ${colour}.`;
+  if (!first) return `Warnai bagian ini dengan ${colour}.`;
   if (!second) return `Warnai ${first} dengan ${colour}.`;
   if (!third) return `Warnai ${first} dan ${second} dengan ${colour}.`;
   return `Warnai ${first}, ${second}, dan ${third} dengan ${colour}.`;
+}
+
+const GENERIC_COLOUR = /^(merah muda|abu-abu|merah|oranye|kuning|hijau|biru|ungu|cokelat|hitam|putih)$/;
+
+/** A sentence that does not name a part. Numbered copies of one still match. */
+export function isGenericInstruction(text: string): boolean {
+  const key = normalizeInstruction(text);
+  if (/bagian kecil ini|bentuk yang paling besar|bagian berikutnya|bentuk utama/.test(key)) return true;
+  if (/^gambar garis luar$/.test(key)) return true;
+  const colourOnly = /^warnai dengan (.+)$/.exec(key);
+  return colourOnly !== null && GENERIC_COLOUR.test(colourOnly[1] ?? '');
 }
 
 function lineStep(id: string, phase: 'outline' | 'detail', text: string, guides: readonly GuidePath[]): LessonStep {
@@ -358,15 +423,20 @@ function guidesFor(id: string, contours: readonly MappedContour[]): GuidePath[] 
 
 function uniquify(steps: LessonStep[]): LessonStep[] {
   const used = new Set<string>();
-  return steps.map((step) => {
+  const cap = steps.length + 2;
+  return steps.map((step, index) => {
     const base = fixVerb(step.instruction);
     let text = base;
     let key = normalizeInstruction(text);
     let extra = 0;
-    while (used.has(key)) {
+    while (used.has(key) && extra < cap) {
       extra += 1;
-      const suffix = extra === 1 ? ' yang lain' : ' lagi';
+      const suffix = extra === 1 ? ' yang lain' : ` lagi (${extra})`;
       text = `${base.replace(/\.$/, '')}${suffix}.`;
+      key = normalizeInstruction(text);
+    }
+    if (used.has(key)) {
+      text = `${base.replace(/\.$/, '')} (${index + 1}).`;
       key = normalizeInstruction(text);
     }
     used.add(key);
@@ -374,17 +444,106 @@ function uniquify(steps: LessonStep[]): LessonStep[] {
   });
 }
 
-function ownerOf(contour: MappedContour, parts: readonly DetectedPart[]): DetectedPart | null {
+/** Distinct sentences for repeated lines. The loop stops even if a suffix stops changing the key. */
+export function uniquifyInstructions(lines: readonly string[]): string[] {
+  return uniquify(lines.map((instruction, index) => lineStep(`dup-${index}`, 'detail', instruction, []))).map((step) => step.instruction);
+}
+
+function subjectNoun(title: string): string | null {
+  const cleaned = sanitizeTitle(title);
+  if (cleaned === 'Dari foto') return null;
+  return cleanPartName(cleaned);
+}
+
+function outlineOwner(contour: MappedContour, parts: readonly DetectedPart[]): DetectedPart | null {
+  const listed = parts.filter((part) => part.pieceIds.includes(contour.id));
+  if (listed.length > 0) return listed.reduce((best, part) => (areaOf(part) > areaOf(best) ? part : best));
   let best: DetectedPart | null = null;
-  let bestScore = 0.4;
+  let bestArea = -1;
   for (const part of parts) {
-    const score = containment(contour, part);
-    if (score > bestScore) {
+    if (containment(contour, part) < CONTAIN_MIN) continue;
+    const area = areaOf(part);
+    if (area > bestArea) {
       best = part;
-      bestScore = score;
+      bestArea = area;
     }
   }
   return best;
+}
+
+function interiorOwner(contour: MappedContour, parts: readonly DetectedPart[], subject: Box): DetectedPart | null {
+  const listed = parts.filter((part) => part.pieceIds.includes(contour.id) && partFraction(part, subject) <= HUGE_PART);
+  if (listed.length > 0) return listed.reduce((best, part) => (areaOf(part) < areaOf(best) ? part : best));
+  let best: DetectedPart | null = null;
+  let bestArea = Number.POSITIVE_INFINITY;
+  for (const part of parts) {
+    if (partFraction(part, subject) > HUGE_PART) continue;
+    if (containment(contour, part) < CONTAIN_MIN) continue;
+    const area = areaOf(part);
+    if (area < bestArea) {
+      best = part;
+      bestArea = area;
+    }
+  }
+  return best;
+}
+
+function partFraction(part: DetectedPart, subject: Box): number {
+  return areaOf(part) / Math.max(1, subject.area);
+}
+
+function subjectColourCount(
+  photo: RgbaImage,
+  silhouette: MappedContour,
+  sourceWidth: number,
+  sourceHeight: number,
+): number {
+  if (photoIsBlankPlate(photo)) return 0;
+  return coloursInRegion(photo, (nx, ny) => {
+    const point = normToLesson(nx, ny, sourceWidth, sourceHeight);
+    return pointInPolygon(point.x, point.y, silhouette.points);
+  }).length;
+}
+
+function insidePart(
+  nx: number,
+  ny: number,
+  part: DetectedPart,
+  targets: readonly DetectedPart[],
+  silhouette: MappedContour,
+  sourceWidth: number,
+  sourceHeight: number,
+): boolean {
+  const point = normToLesson(nx, ny, sourceWidth, sourceHeight);
+  if (!pointInPolygon(point.x, point.y, silhouette.points)) return false;
+  if (!containsPoint(part, point)) return false;
+  for (const other of targets) {
+    if (other === part || areaOf(other) >= areaOf(part)) continue;
+    if (containsPoint(other, point)) return false;
+  }
+  return true;
+}
+
+function containsPoint(part: DetectedPart, point: Point): boolean {
+  const polygon = part.points.length >= 3 ? part.points : rectPoints(part);
+  return pointInPolygon(point.x, point.y, polygon);
+}
+
+function normToLesson(nx: number, ny: number, sourceWidth: number, sourceHeight: number): Point {
+  const place = sourcePlacement(sourceWidth, sourceHeight);
+  const sx = nx * (sourceWidth <= 1 ? 0 : sourceWidth - 1);
+  const sy = ny * (sourceHeight <= 1 ? 0 : sourceHeight - 1);
+  return { x: place.offsetX + sx * place.scale, y: place.offsetY + sy * place.scale };
+}
+
+function sourcePlacement(sourceWidth: number, sourceHeight: number): { scale: number; offsetX: number; offsetY: number } {
+  const pad = 48;
+  const scale = Math.min((LESSON_WIDTH - pad * 2) / Math.max(1, sourceWidth), (LESSON_HEIGHT - pad * 2) / Math.max(1, sourceHeight));
+  return {
+    scale,
+    offsetX: (LESSON_WIDTH - sourceWidth * scale) / 2,
+    offsetY: (LESSON_HEIGHT - sourceHeight * scale) / 2,
+  };
 }
 
 function containment(contour: MappedContour, part: DetectedPart): number {
@@ -621,13 +780,10 @@ function dedupePoints(points: readonly Point[]): Point[] {
 }
 
 function mapContour(contour: Contour, sourceWidth: number, sourceHeight: number): MappedContour {
-  const pad = 48;
-  const scale = Math.min((LESSON_WIDTH - pad * 2) / Math.max(1, sourceWidth), (LESSON_HEIGHT - pad * 2) / Math.max(1, sourceHeight));
-  const offsetX = (LESSON_WIDTH - sourceWidth * scale) / 2;
-  const offsetY = (LESSON_HEIGHT - sourceHeight * scale) / 2;
+  const place = sourcePlacement(sourceWidth, sourceHeight);
   const points = contour.points.map((point) => ({
-    x: round(offsetX + point.x * scale),
-    y: round(offsetY + point.y * scale),
+    x: round(place.offsetX + point.x * place.scale),
+    y: round(place.offsetY + point.y * place.scale),
   }));
   const source = contour.points;
   const sx = source.reduce((sum, point) => sum + point.x, 0) / Math.max(1, source.length);
@@ -643,6 +799,7 @@ function mapContour(contour: Contour, sourceWidth: number, sourceHeight: number)
     ny: sourceHeight <= 1 ? 0 : sy / (sourceHeight - 1),
     silhouette: contour.silhouette === true,
     path: smoothPath(points, contour.closed),
+    id: 0,
   };
 }
 

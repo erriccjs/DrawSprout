@@ -50,5 +50,22 @@ describe('list prices', () => {
     });
     expect(cost.imageUsd).toBe(0.04);
     expect(cost.usd).toBe(0.04);
+    const redrawn = listCostUsd({
+      imageModel: 'black-forest-labs/flux-kontext-pro',
+      image: null,
+      textModel: 'gpt-4.1-mini',
+      text: null,
+      imageCalls: 2,
+    });
+    expect(redrawn.imageUsd).toBe(0.08);
+    expect(redrawn.usd).toBe(0.08);
+    const openaiRedraw = listCostUsd({
+      imageModel: 'gpt-image-1.5',
+      image: { inputTokens: 451, outputTokens: 6514, totalTokens: 6965 },
+      textModel: 'gpt-4.1-mini',
+      text: null,
+      imageCalls: 2,
+    });
+    expect(openaiRedraw.imageUsd).toBe(0.212056);
   });
 });

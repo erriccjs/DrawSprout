@@ -29,11 +29,13 @@ export function traceInk(image: RgbaImage, threshold = INK_LUMINANCE): Contour[]
   const { width, height } = image;
   const ink = inkMask(image, threshold);
   if (ink.every((value) => value === 0)) return [];
-  const cleaned = cleanInk(ink, width, height);
+  const erased = eraseStripeRuns(ink, width, height);
+  const cleaned = cleanInk(erased, width, height);
   const epsilon = Math.max(1.25, Math.min(width, height) * 0.004);
   const filled = filledSubject(cleaned, width, height);
-  const details = contoursFrom(cleaned, width, height, epsilon, filled)
-    .filter((contour) => !bothSidesShorterThan(contour.points, Math.max(4, Math.min(width, height) * 0.02)));
+  const detailMask = shouldThin(cleaned, width, height) ? thinStrokes(cleaned, width, height) : cleaned;
+  const details = collapseNested(contoursFrom(detailMask, width, height, epsilon, filled)
+    .filter((contour) => !bothSidesShorterThan(contour.points, Math.max(4, Math.min(width, height) * 0.02))));
   const outerLoop = largestLoop(marchingSquares(filled, width, height));
   if (!outerLoop) return dedupeContours(details);
   const outer = finishLoop(outerLoop, epsilon, null, width, height);
@@ -254,7 +256,7 @@ function stripeClusters(
     const spanY = stat.maxY - stat.minY;
     const length = Math.max(spanX, spanY);
     const thickness = Math.max(1, Math.min(spanX, spanY));
-    return length >= thickness * 3 && thickness <= maxGap && length < largestSpan * 0.18;
+    return length >= thickness * 3 && thickness <= maxGap && length < largestSpan * 0.55;
   });
   const used = new Set<number>();
   const drop: number[] = [];
@@ -276,7 +278,7 @@ function stripeClusters(
       );
       return gap <= maxGap && overlap > shorter * 0.5;
     });
-    if (group.length >= 4) {
+    if (group.length >= 3) {
       for (const stat of group) {
         used.add(stat.id);
         drop.push(stat.id);
@@ -324,6 +326,236 @@ function label(mask: Uint8Array, width: number, height: number): { ids: Int32Arr
       stack.push(index);
     }
   }
+}
+
+/**
+ * Short parallel bars (a barcode) are erased before components are labelled,
+ * including bars that touch the main drawing. A gap of one to four pixels
+ * separates bars; adjacent pixels of one thick stroke are left alone.
+ */
+function eraseStripeRuns(mask: Uint8Array, width: number, height: number): Uint8Array {
+  const maxLen = Math.max(2, Math.round(Math.max(width, height) * 0.28));
+  const out = mask.slice();
+  clearParallelRuns(out, width, height, maxLen, true);
+  clearParallelRuns(out, width, height, maxLen, false);
+  return out;
+}
+
+function clearParallelRuns(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  maxLen: number,
+  horizontal: boolean,
+): void {
+  const rows = horizontal ? height : width;
+  const cols = horizontal ? width : height;
+  const runs: Array<{ fixed: number; a: number; b: number }> = [];
+  for (let row = 0; row < rows; row += 1) {
+    let col = 0;
+    while (col < cols) {
+      const index = horizontal ? row * width + col : col * width + row;
+      if (!mask[index]) {
+        col += 1;
+        continue;
+      }
+      const start = col;
+      while (col < cols) {
+        const next = horizontal ? row * width + col : col * width + row;
+        if (!mask[next]) break;
+        col += 1;
+      }
+      const length = col - start;
+      if (length >= 2 && length <= maxLen) runs.push({ fixed: row, a: start, b: col - 1 });
+    }
+  }
+  if (runs.length < 3) return;
+  const parent = runs.map((_, index) => index);
+  const find = (index: number): number => {
+    let cursor = index;
+    while (parent[cursor] !== cursor) {
+      const next = parent[cursor] ?? cursor;
+      parent[cursor] = parent[next] ?? next;
+      cursor = parent[cursor] ?? cursor;
+    }
+    return cursor;
+  };
+  const unite = (left: number, right: number) => {
+    const a = find(left);
+    const b = find(right);
+    if (a !== b) parent[a] = b;
+  };
+  const at = new Map<number, number[]>();
+  runs.forEach((run, index) => {
+    const list = at.get(run.fixed) ?? [];
+    list.push(index);
+    at.set(run.fixed, list);
+  });
+  for (const [fixed, indexes] of at) {
+    for (let delta = 2; delta <= 5; delta += 1) {
+      const others = at.get(fixed + delta);
+      if (!others) continue;
+      for (const left of indexes) {
+        const run = runs[left];
+        if (!run) continue;
+        for (const right of others) {
+          const other = runs[right];
+          if (!other) continue;
+          const overlapStart = Math.max(run.a, other.a);
+          const overlapEnd = Math.min(run.b, other.b);
+          const overlap = overlapEnd - overlapStart + 1;
+          const shorter = Math.min(run.b - run.a, other.b - other.a) + 1;
+          if (overlap <= shorter * 0.5) continue;
+          if (!whiteGap(mask, width, horizontal, run.fixed, other.fixed, overlapStart, overlapEnd)) continue;
+          unite(left, right);
+        }
+      }
+    }
+  }
+  const groups = new Map<number, number[]>();
+  runs.forEach((_, index) => {
+    const root = find(index);
+    const list = groups.get(root) ?? [];
+    list.push(index);
+    groups.set(root, list);
+  });
+  for (const indexes of groups.values()) {
+    if (indexes.length < 3) continue;
+    for (const index of indexes) {
+      const run = runs[index];
+      if (!run) continue;
+      for (let col = run.a; col <= run.b; col += 1) {
+        const pixel = horizontal ? run.fixed * width + col : col * width + run.fixed;
+        mask[pixel] = 0;
+      }
+    }
+  }
+}
+
+/** A solid filled blob stays filled. Stroke-like ink is thinned to a midline. */
+function whiteGap(
+  mask: Uint8Array,
+  width: number,
+  horizontal: boolean,
+  from: number,
+  to: number,
+  start: number,
+  end: number,
+): boolean {
+  const first = Math.min(from, to) + 1;
+  const last = Math.max(from, to);
+  if (first >= last) return false;
+  for (let line = first; line < last; line += 1) {
+    for (let col = start; col <= end; col += 1) {
+      const index = horizontal ? line * width + col : col * width + line;
+      if (mask[index]) return false;
+    }
+  }
+  return true;
+}
+
+function shouldThin(mask: Uint8Array, width: number, height: number): boolean {
+  let pixels = 0;
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (!mask[y * width + x]) continue;
+      pixels += 1;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (pixels < 16) return false;
+  const box = Math.max(1, (maxX - minX + 1) * (maxY - minY + 1));
+  return pixels / box < 0.62;
+}
+
+/** Centre line of a thick stroke. A solid fill is not passed here. */
+function thinStrokes(mask: Uint8Array, width: number, height: number): Uint8Array {
+  const ridge = medialAxis(mask, width, height);
+  let pixels = 0;
+  for (const value of ridge) if (value) pixels += 1;
+  if (pixels < 16) return mask;
+  return dilate(ridge, width, height, 1);
+}
+
+function medialAxis(mask: Uint8Array, width: number, height: number): Uint8Array {
+  const dist = new Int16Array(mask.length);
+  const queue = new Int32Array(mask.length);
+  let tail = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (!mask[index]) continue;
+      let edge = x === 0 || y === 0 || x + 1 === width || y + 1 === height;
+      if (!edge) {
+        for (let dy = -1; dy <= 1 && !edge; dy += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            if (dx === 0 && dy === 0) continue;
+            if (!mask[index + dy * width + dx]) edge = true;
+          }
+        }
+      }
+      if (!edge) continue;
+      dist[index] = 1;
+      queue[tail] = index;
+      tail += 1;
+    }
+  }
+  let head = 0;
+  while (head < tail) {
+    const index = queue[head] ?? 0;
+    head += 1;
+    const next = (dist[index] ?? 0) + 1;
+    const x = index % width;
+    const y = (index - x) / width;
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const neighbor = ny * width + nx;
+        if (!mask[neighbor] || dist[neighbor]) continue;
+        dist[neighbor] = next;
+        queue[tail] = neighbor;
+        tail += 1;
+      }
+    }
+  }
+  const out = new Uint8Array(mask.length);
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const index = y * width + x;
+      const here = dist[index] ?? 0;
+      if (here < 2) continue;
+      let peak = true;
+      for (let dy = -1; dy <= 1 && peak; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if (dx === 0 && dy === 0) continue;
+          if ((dist[index + dy * width + dx] ?? 0) > here) peak = false;
+        }
+      }
+      if (peak) out[index] = 1;
+    }
+  }
+  return out;
+}
+
+function collapseNested(contours: Contour[]): Contour[] {
+  const sorted = [...contours].sort((left, right) => bounds(right.points).area - bounds(left.points).area);
+  const kept: Contour[] = [];
+  for (const contour of sorted) {
+    const box = bounds(contour.points);
+    const nested = kept.some((other) => iouBoxes(box, bounds(other.points)) >= 0.7);
+    if (!nested) kept.push(contour);
+  }
+  return kept;
 }
 
 function filledSubject(mask: Uint8Array, width: number, height: number): Uint8Array {

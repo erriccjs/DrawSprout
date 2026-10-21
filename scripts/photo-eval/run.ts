@@ -40,7 +40,7 @@ import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../
 import { composeContactSheet } from '../../src/photo/sheet';
 
 /** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
-const EVAL_KEY_REVISION = 'v4';
+const EVAL_KEY_REVISION = 'v5';
 
 interface Args {
   readonly score?: string;
@@ -150,6 +150,7 @@ async function main(): Promise<void> {
         image: result.imageUsage,
         textModel,
         text: result.textUsage,
+        imageCalls: result.imageCalls,
       });
       const costUsd = flatUsd ?? priced.usd;
       const photoB64 = base64(photo.png);
@@ -170,6 +171,7 @@ async function main(): Promise<void> {
         textUsage: result.textUsage,
         costUsd,
         needsReview: result.needsReview,
+        regenerated: result.regenerated,
       }));
       metrics.push({
         file: name,
@@ -189,9 +191,10 @@ async function main(): Promise<void> {
         imageUsd: priced.imageUsd,
         textUsd: priced.textUsd,
         needsReview: result.needsReview,
+        regenerated: result.regenerated,
         targetHash: result.targetHash,
       });
-      console.log(`${label}: ${ms} ms, ${result.model} ${result.quality}, image ${tokens(result.imageUsage)}, text ${tokens(result.textUsage)}, usd ${costUsd ?? 'unknown'}, steps ${result.lesson.steps.length}`);
+      console.log(`${label}: ${ms} ms, ${result.model} ${result.quality}, image ${tokens(result.imageUsage)}, text ${tokens(result.textUsage)}, usd ${costUsd ?? 'unknown'}, steps ${result.lesson.steps.length}${result.regenerated ? ', regenerated' : ''}`);
     } catch (error) {
       failures += 1;
       const message = error instanceof Error ? error.message.slice(0, 300) : 'failed';
@@ -379,6 +382,7 @@ interface PhotoMetric {
   readonly imageUsd?: number | null;
   readonly textUsd?: number | null;
   readonly needsReview?: boolean;
+  readonly regenerated?: boolean;
   readonly targetHash?: string;
   readonly error?: string;
 }
@@ -395,6 +399,7 @@ function htmlRow(input: {
   readonly textUsage: TokenUsage | null;
   readonly costUsd: number | null;
   readonly needsReview: boolean;
+  readonly regenerated: boolean;
 }): string {
   const cost = input.costUsd === null ? 'unknown' : input.costUsd.toFixed(4);
   const steps = input.steps.map((step, index) => (
@@ -403,7 +408,7 @@ function htmlRow(input: {
   return `<section><h2>${escapeHtml(input.name)}</h2>`
     + `<p>${input.ms} ms, ${escapeHtml(input.model)} ${escapeHtml(input.quality)}, `
     + `image ${escapeHtml(tokens(input.imageUsage))}, text ${escapeHtml(tokens(input.textUsage))}, usd ${cost}`
-    + `${input.needsReview ? ', review' : ''}</p>`
+    + `${input.needsReview ? ', review' : ''}${input.regenerated ? ', regenerated' : ''}</p>`
     + `<div class="pair"><img alt="" src="data:image/png;base64,${input.photo}"><img alt="" src="data:image/png;base64,${input.illustration}"></div>`
     + `<div class="steps">${steps}</div></section>`;
 }

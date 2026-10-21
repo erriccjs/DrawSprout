@@ -1133,4 +1133,49 @@ The contact sheet fills those regions.
 **Replicate.** Kontext gets a short positive prompt that does not mention
 vehicles. Calls are serialised, and HTTP 429 waits and retries. A failed
 provider stops `--compare`. Compare is OpenAI plus Kontext only. The eval
-idempotency key ends in `v4`.
+idempotency key ended in `v4` for that traced-outline run. D-71 bumps it to `v5`.
+
+### D-71 — Named pieces, subject colours, and a loop that stops
+
+The v4 compare (commit 769d890) kept the OpenAI illustrations and the finished
+drawings looked like the objects. The steps did not. A cat, a dog, and a car
+were two or three steps because one part box swallowed every line. A cup and a
+flower fell through to "Gambar bentuk yang paling besar" and "Tambahkan bagian
+kecil ini lagi". The third copy of that sentence hung: the suffix was always
+" lagi", so the duplicate check never saw a new sentence. A Worker request
+would hang the same way. White on the cup was sampled as grey, and the flower
+as pink, because near-white pixels were skipped and the rest were averaged.
+Replicate's $0.04 price did not count a regeneration.
+
+**Duplicates.** Each extra copy gets its own suffix (`yang lain`, then
+`lagi (2)`, `lagi (3)`, …). The loop also stops after a fixed number of tries
+and then uses the step index, so a bad suffix cannot spin. Lessons should not
+need that: unnamed scraps are omitted instead of given a generic sentence.
+
+**Parts.** The vision model returns a box or polygon per part and the piece
+numbers that belong to it (outline, ears, eyes, wheels, handle, petals, coffee,
+and the rest). The outline step is only the silhouette. An interior line goes
+to the smallest part that contains it, and only when that box is at most about
+72% of the subject. A box around the whole subject cannot claim the pieces
+inside it. If interiors stay unnamed, one more text call asks for labels. If
+that still fails, those lines are left out and `needsReview` is set. A parent
+can still approve. This is not the section 8 gate.
+
+**Colour.** Samples come from subject pixels inside the part, not from the
+white page. Near-white is `putih`. An all-white photo is a blank plate and is
+not coloured. A part with two colours gets a step for each (`Warnai cangkir
+dengan putih`, `Warnai kopi dengan cokelat`). The sentence names the part.
+
+**Review.** `needsReview` is also set when there are fewer than three drawing
+steps, when any instruction is still generic, or when a multi-colour subject
+has a single colour step.
+
+**Ink.** Detail lines are thinned before tracing so a thick ring becomes one
+midline. Short parallel bars are erased even when they touch the main drawing,
+which is what was keeping a barcode. The outer silhouette still comes from the
+filled subject. A solid rectangle is not thinned into a spine.
+
+**Cost.** A Replicate regeneration adds another $0.04. OpenAI token totals
+already include a redraw, so they are not multiplied again. The harness records
+`regenerated`. The eval idempotency key ends in `v5`. The gate is still not
+claimed.

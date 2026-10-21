@@ -70,9 +70,12 @@ export function listCostUsd(input: {
   readonly image: TokenUsage | null;
   readonly textModel: string;
   readonly text: TokenUsage | null;
+  /** Successful image responses. Replicate's flat price is per image; OpenAI tokens are already summed. */
+  readonly imageCalls?: number;
 }): ListCost {
+  const calls = Math.max(1, input.imageCalls ?? 1);
   const flat = replicateImageUsd(input.imageModel);
-  const imageUsd = flat !== null ? flat : (input.image ? imageEditUsd(input.imageModel, input.image) : null);
+  const imageUsd = flat !== null ? money(flat * calls) : (input.image ? imageEditUsd(input.imageModel, input.image) : null);
   const textUsd = input.text ? textEditUsd(input.textModel, input.text) : null;
   if (imageUsd === null) return { usd: null, imageUsd: null, textUsd };
   return { usd: money(imageUsd + (textUsd ?? 0)), imageUsd, textUsd };
