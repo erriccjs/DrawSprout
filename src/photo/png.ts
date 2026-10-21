@@ -171,18 +171,31 @@ function paeth(left: number, up: number, upLeft: number): number {
 
 async function inflate(bytes: Uint8Array): Promise<Uint8Array> {
   const stream = new DecompressionStream('deflate');
-  const writer = stream.writable.getWriter();
-  await writer.write(copied(bytes));
-  await writer.close();
-  return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+  return pump(stream, bytes);
 }
 
 async function deflate(bytes: Uint8Array): Promise<Uint8Array> {
   const stream = new CompressionStream('deflate');
+  return pump(stream, bytes);
+}
+
+/**
+ * Read the stream before writing. A large PNG fills the queue, and write()
+ * then never resolves if nothing is pulling from readable (Node 20 and 22,
+ * and the same Web Streams in the Worker). See D-67.
+ */
+async function pump(stream: CompressionStream | DecompressionStream, bytes: Uint8Array): Promise<Uint8Array> {
+  const output = new Response(stream.readable).arrayBuffer();
   const writer = stream.writable.getWriter();
-  await writer.write(copied(bytes));
-  await writer.close();
-  return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+  try {
+    await writer.write(copied(bytes));
+    await writer.close();
+  } catch (error) {
+    await writer.abort(error).catch(() => undefined);
+    await output.catch(() => undefined);
+    throw error;
+  }
+  return new Uint8Array(await output);
 }
 
 function copied(bytes: Uint8Array): Uint8Array<ArrayBuffer> {

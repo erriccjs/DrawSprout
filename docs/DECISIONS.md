@@ -890,8 +890,8 @@ declares the `fetch` method the assets binding actually calls.
 The owner chose OpenAI image models (`gpt-image-2`, `gpt-image-1.5`,
 `gpt-image-1`, `gpt-image-1-mini`). The key is `OPENAI_API_KEY`, set with
 `npx wrangler secret put OPENAI_API_KEY`, never committed. The default edit
-model is `gpt-image-1.5`. *Lebih sederhana* always uses `gpt-image-1-mini`.
-An unknown `OPENAI_IMAGE_MODEL` is ignored. The text model defaults to
+model is `gpt-image-1.5`. *Lebih sederhana* used `gpt-image-1-mini` in this
+decision; D-67 stops that. An unknown `OPENAI_IMAGE_MODEL` is ignored. The text model defaults to
 `gpt-4.1-mini` and may be overridden with `OPENAI_TEXT_MODEL`.
 
 **Choice.** The spike is off until a parent opens `?beta=foto` (cleared with
@@ -945,3 +945,62 @@ this spike does not claim the photo MVP. CC0 samples live in
 `scripts/photo-eval/samples/` with `LICENSES.md`. `OPENAI_IMAGE_USD`, when set,
 is recorded as a flat figure the operator supplied. The harness does not price
 tokens.
+
+The first live run on those five samples contradicted the mini-model choice
+and the flat cost. D-67 replaces both. The gate is still not claimed.
+
+### D-67 — Photo lessons after the first live run
+
+Five CC0 samples were run on another machine (default twice, plus simple).
+That run is not a pass, and `claimedPass` stays false. It did show bugs in
+the spike. The fixes below are still a spike.
+
+**PNG codec.** `deflate` and `inflate` start reading `stream.readable` before
+`writer.write`. On Node 20.19 and 22.23 a real-sized image filled the queue,
+`write()` never resolved, and the harness exited 13 with no message. The same
+functions run in the Worker and the browser. A test round-trips a 720×540
+image and fails if the codec is still stalled after 8 seconds. The harness
+prints `photo-eval failed: ...` and exits non-zero if the process throws.
+
+**Line art.** The edit prompt asks for one subject, one closed outer
+silhouette, no background (people, legs, leashes, scenery), and no letters,
+numbers, or barcodes unless the writing is the subject. `quality` is sent
+explicitly: `medium` for default and faithful, `low` for simple. Leaving it
+on `auto` made the same photo cost about 1.8k or 6.5k output tokens.
+*Lebih sederhana* stays on `gpt-image-1.5` at low quality. `gpt-image-1-mini`
+invented extra objects on the simple run (a wheel, a car, a bicycle) and is
+only used when `OPENAI_IMAGE_MODEL=gpt-image-1-mini` on a default or faithful
+job. That replaces the D-66 rule that simple always used mini.
+
+**Steps.** Step 1 is the closed contour with the largest bounding box, alone.
+Ranking by shoelace area had dropped a thin head outline. Specks smaller than
+about 2% of the short side are removed after tracing, and again in lesson
+space. Near-duplicate contours (the flower's repeated lines) are dropped.
+What remains is spread big-shapes-first, at most 3 paths per step and at most
+7 drawing steps. Colour steps are at most the 3 largest closed regions that
+are not the same area twice. If the largest shape covers under 35% of the
+subject box, `needsReview` is set. That check is a spike heuristic, not the
+section 8 gate, and a parent can still approve.
+
+**Instructions.** The text call receives each step's phase, label, and
+position, plus a 512px PNG of the illustration, and must name the subject.
+A line that says "latar belakang" or "wajah anak" is discarded and the fixed
+sentence is used. Token counts read `input_tokens` or `prompt_tokens`, and
+`output_tokens` or `completion_tokens`. The first run stored text usage as
+0 in / 0 out because chat completions report `prompt_tokens`.
+
+**Cost.** `costUsd` is computed from those counts and OpenAI standard list
+prices (October 2026), per 1M tokens: `gpt-image-1.5` image input $8 and
+image output $32; `gpt-image-2` $8 / $30; `gpt-image-1` $10 / $40;
+`gpt-image-1-mini` $2.50 / $8. Text input on those models is $5, $5, $5, and
+$2. `gpt-4.1-mini` text is $0.40 in and $1.60 out. If the image usage does
+not split text and image input, every input token is priced as image input.
+Cached and batch rates are not applied. `OPENAI_IMAGE_USD`, when set, still
+replaces `costUsd`; `listCostUsd` in the metrics is the computed figure.
+The harness idempotency key ends in `v2`, so this rerun is a new paid job.
+A retry of the same revision is not.
+
+**Harness.** `PHOTO_EVAL_OUT` or `--out <dir>` chooses the output directory.
+The default is still `./photo-eval-out`. The contact sheet PNG and HTML show
+the photo, the illustration, and a cumulative render of each step with its
+Indonesian line.

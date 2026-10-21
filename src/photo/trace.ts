@@ -34,9 +34,25 @@ export function traceInk(image: RgbaImage, threshold = INK_LUMINANCE): Contour[]
   }
   const loops = marchingSquares(mask, image.width, image.height);
   const epsilon = Math.max(1.25, Math.min(image.width, image.height) * 0.004);
+  const minSpan = Math.max(4, Math.min(image.width, image.height) * 0.02);
   return loops
     .map((points) => ({ points: simplify(points, epsilon).slice(0, 80), closed: true }))
-    .filter((contour) => contour.points.length >= 4);
+    .filter((contour) => contour.points.length >= 4)
+    .filter((contour) => !bothSidesShorterThan(contour.points, minSpan));
+}
+
+function bothSidesShorterThan(points: readonly Point[], minSpan: number): boolean {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    if (point.x < minX) minX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y > maxY) maxY = point.y;
+  }
+  return maxX - minX < minSpan && maxY - minY < minSpan;
 }
 
 function marchingSquares(mask: Uint8Array, width: number, height: number): Point[][] {

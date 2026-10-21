@@ -6,18 +6,21 @@
  * billed request on OpenAI's side.
  */
 
-import { imagePrompt, imageSize, type PhotoVariant } from './prompts';
+import { imagePrompt, imageSize, type ImageQuality, type PhotoVariant } from './prompts';
 
 export interface TokenUsage {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly totalTokens: number;
+  readonly textInputTokens?: number;
+  readonly imageInputTokens?: number;
 }
 
 export interface ImageEditRequest {
   readonly png: Uint8Array;
   readonly variant: PhotoVariant;
   readonly model: string;
+  readonly quality: ImageQuality;
   readonly width: number;
   readonly height: number;
   readonly idempotencyKey: string;
@@ -35,12 +38,14 @@ export interface ImageEditor {
 
 export interface InstructionRequest {
   readonly model: string;
-  readonly steps: readonly { id: string; phase: string }[];
+  readonly steps: readonly { id: string; phase: string; label: string; position: string }[];
+  readonly illustrationPng: Uint8Array;
   readonly signal: AbortSignal;
   readonly idempotencyKey: string;
 }
 
 export interface InstructionResult {
+  readonly subject: string;
   readonly title: string;
   readonly instructions: ReadonlyMap<string, string>;
   readonly usage: TokenUsage | null;
@@ -60,6 +65,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
         const form = new FormData();
         form.set('model', input.model);
         form.set('prompt', imagePrompt(input.variant));
+        form.set('quality', input.quality);
         form.set('size', imageSize(input.width, input.height));
         form.set('n', '1');
         form.set('output_format', 'png');
@@ -96,10 +102,27 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
             messages: [{
               role: 'user',
               content: [
-                'Tulis judul pendek dan satu kalimat instruksi bahasa Indonesia untuk setiap langkah.',
-                'Satu tujuan yang mudah diucapkan. Jangan menilai gambar anak. Jangan menambah bagian yang tidak ada.',
-                JSON.stringify(input.steps),
-              ].join('\n'),
+                {
+                  type: 'text',
+                  text: [
+                    'Gambar garis ini adalah panduan menggambar untuk anak.',
+                    'Sebutkan subjek dari gambar garis (kata benda bahasa Indonesia, misalnya kucing, cangkir, bunga).',
+                    'Judul pendek, 2 sampai 4 kata, menyebut subjek itu.',
+                    'Untuk setiap id di daftar, tulis SATU kalimat instruksi bahasa Indonesia yang menyebut subjek dan bagian pada langkah itu.',
+                    'Langkah outline pertama adalah garis besar bentuk utama subjek, bukan wajah anak dan bukan latar.',
+                    'Langkah warna hanya menamai wilayah besar pada subjek. Jangan menulis "latar belakang".',
+                    'Jangan menambah benda, orang, atau bagian yang tidak terlihat pada gambar.',
+                    'Jangan menilai gambar anak.',
+                    JSON.stringify(input.steps.map((step) => ({
+                      id: step.id,
+                      phase: step.phase,
+                      label: step.label,
+                      position: step.position,
+                    }))),
+                  ].join('\n'),
+                },
+                { type: 'image_url', image_url: { url: `data:image/png;base64,${bytesToBase64(input.illustrationPng)}` } },
+              ],
             }],
             response_format: {
               type: 'json_schema',
@@ -109,8 +132,9 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                 schema: {
                   type: 'object',
                   additionalProperties: false,
-                  required: ['title', 'steps'],
+                  required: ['subject', 'title', 'steps'],
                   properties: {
+                    subject: { type: 'string' },
                     title: { type: 'string' },
                     steps: {
                       type: 'array',
@@ -138,6 +162,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
         const message = choice ? asRecord(choice.message) : null;
         const content = typeof message?.content === 'string' ? message.content : '';
         const parsed = asRecord(JSON.parse(content) as unknown);
+        const subject = typeof parsed.subject === 'string' ? parsed.subject : '';
         const title = typeof parsed.title === 'string' ? parsed.title : '';
         const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
         const instructions = new Map<string, string>();
@@ -147,7 +172,7 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
             instructions.set(row.id, row.instruction);
           }
         }
-        return { title, instructions, usage: usageFrom(record.usage) };
+        return { subject, title, instructions, usage: usageFrom(record.usage) };
       },
     },
   };
@@ -155,12 +180,27 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
 
 function usageFrom(value: unknown): TokenUsage | null {
   const usage = asRecord(value);
-  if (typeof usage.total_tokens !== 'number') return null;
+  const input = firstNumber(usage.input_tokens, usage.prompt_tokens);
+  const output = firstNumber(usage.output_tokens, usage.completion_tokens);
+  const total = typeof usage.total_tokens === 'number' ? usage.total_tokens : null;
+  if (input === null && output === null && total === null) return null;
+  const details = asRecord(usage.input_tokens_details);
+  const textInputTokens = typeof details.text_tokens === 'number' ? details.text_tokens : undefined;
+  const imageInputTokens = typeof details.image_tokens === 'number' ? details.image_tokens : undefined;
   return {
-    inputTokens: typeof usage.input_tokens === 'number' ? usage.input_tokens : 0,
-    outputTokens: typeof usage.output_tokens === 'number' ? usage.output_tokens : 0,
-    totalTokens: usage.total_tokens,
+    inputTokens: input ?? 0,
+    outputTokens: output ?? 0,
+    totalTokens: total ?? (input ?? 0) + (output ?? 0),
+    ...(textInputTokens !== undefined ? { textInputTokens } : {}),
+    ...(imageInputTokens !== undefined ? { imageInputTokens } : {}),
   };
+}
+
+function firstNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
 }
 
 async function readJson(response: Response): Promise<unknown> {

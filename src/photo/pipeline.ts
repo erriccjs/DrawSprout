@@ -6,10 +6,11 @@
 
 import { compareLessonToInk } from './compare';
 import { dominantColors } from './colors';
+import { downscaleLongEdge } from './image-ops';
 import { buildPhotoLesson, sanitizeTitle } from './lesson-build';
 import type { ImageEditor, InstructionWriter, TokenUsage } from './openai';
-import { decodePng } from './png';
-import { imageModelFor, type PhotoVariant } from './prompts';
+import { decodePng, encodePng } from './png';
+import { imageModelFor, imageQualityFor, type ImageQuality, type PhotoVariant } from './prompts';
 import { traceInk } from './trace';
 
 export interface PhotoPipelineInput {
@@ -30,6 +31,8 @@ export interface PhotoPipelineResult {
   readonly needsReview: boolean;
   readonly reviewReason: string | null;
   readonly model: string;
+  readonly quality: ImageQuality;
+  readonly coverage: number;
   readonly imageUsage: TokenUsage | null;
   readonly textUsage: TokenUsage | null;
 }
@@ -41,10 +44,12 @@ export async function runPhotoPipeline(
   const photo = await decodePng(input.png);
   const palette = dominantColors(photo);
   const model = imageModelFor(input.variant, input.configuredImageModel);
+  const quality = imageQualityFor(input.variant);
   const edited = await deps.images.edit({
     png: input.png,
     variant: input.variant,
     model,
+    quality,
     width: photo.width,
     height: photo.height,
     idempotencyKey: input.idempotencyKey,
@@ -68,13 +73,15 @@ export async function runPhotoPipeline(
   });
   if (deps.instructions) {
     try {
+      const preview = await encodePng(downscaleLongEdge(illustration, 512));
       const written = await deps.instructions.write({
         model: input.textModel,
-        steps: draft.lesson.steps.map((step) => ({ id: step.id, phase: step.phase })),
+        steps: draft.briefs,
+        illustrationPng: preview,
         signal: input.signal,
         idempotencyKey: input.idempotencyKey,
       });
-      title = sanitizeTitle(written.title);
+      title = lessonTitle(written.title, written.subject);
       instructionMap = new Map(written.instructions);
       textUsage = written.usage;
     } catch {
@@ -96,17 +103,32 @@ export async function runPhotoPipeline(
       instructions: instructionMap,
     });
   const comparison = compareLessonToInk(built.lesson, illustration);
+  const reasons = [comparison.reviewReason, built.reviewReason].filter((reason): reason is string => reason !== null);
   return {
     illustrationPng: edited.png,
     dominantColors: palette,
     lesson: built.lesson,
     targetHash,
-    needsReview: comparison.needsReview,
-    reviewReason: comparison.reviewReason,
+    needsReview: comparison.needsReview || built.needsReview,
+    reviewReason: reasons.length > 0 ? reasons.join(' ') : null,
     model,
+    quality,
+    coverage: built.coverage,
     imageUsage: edited.usage,
     textUsage,
   };
+}
+
+function lessonTitle(title: string, subject: string): string {
+  const fromTitle = sanitizeTitle(title);
+  if (fromTitle !== 'Dari foto' && !rejectsTitle(fromTitle)) return fromTitle;
+  const fromSubject = sanitizeTitle(subject);
+  if (fromSubject !== 'Dari foto' && !rejectsTitle(fromSubject)) return fromSubject;
+  return 'Dari foto';
+}
+
+function rejectsTitle(text: string): boolean {
+  return /latar belakang|wajah anak/i.test(text);
 }
 
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {

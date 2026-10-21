@@ -15,7 +15,44 @@ describe('png re-encode', () => {
     expect(decoded.width).toBe(2);
     expect([...decoded.data]).toEqual([...pixels]);
   });
+
+  it('round-trips a realistically sized image without stalling on backpressure', async () => {
+    const width = 720;
+    const height = 540;
+    const data = new Uint8Array(width * height * 4);
+    let seed = 0x12345678;
+    for (let index = 0; index < data.length; index += 4) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      data[index] = seed & 255;
+      data[index + 1] = (seed >>> 8) & 255;
+      data[index + 2] = (seed >>> 16) & 255;
+      data[index + 3] = 255;
+    }
+    const encoded = await within(8_000, encodePng({ width, height, data }));
+    const decoded = await within(8_000, decodePng(encoded));
+    expect(decoded.width).toBe(width);
+    expect(decoded.height).toBe(height);
+    expect(decoded.data[0]).toBe(data[0]);
+    expect(decoded.data[data.length - 2]).toBe(data[data.length - 2]);
+    expect(decoded.data.length).toBe(data.length);
+  }, 20_000);
 });
+
+function within<T>(ms: number, work: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`PNG codec stalled past ${ms} ms`)), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
 
 function insertText(png: Uint8Array, keyword: string, text: string): Uint8Array {
   const payload = new TextEncoder().encode(`${keyword}\u0000${text}`);

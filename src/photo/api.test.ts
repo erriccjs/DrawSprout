@@ -43,13 +43,13 @@ describe('POST /api/photo-lesson', () => {
     art.set(encoded);
   });
 
-  function editor(png = art, delayMs = 0): { images: ImageEditor; calls: { model: string; key: string }[] } {
-    const calls: { model: string; key: string }[] = [];
+  function editor(png = art, delayMs = 0): { images: ImageEditor; calls: { model: string; key: string; quality: string }[] } {
+    const calls: { model: string; key: string; quality: string }[] = [];
     return {
       calls,
       images: {
         async edit(input) {
-          calls.push({ model: input.model, key: input.idempotencyKey });
+          calls.push({ model: input.model, key: input.idempotencyKey, quality: input.quality });
           if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
           return { png, usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 } };
         },
@@ -134,7 +134,7 @@ describe('POST /api/photo-lesson', () => {
     expect(calls).toEqual(['retry-after-fail', 'retry-after-fail', 'other-key-02']);
   });
 
-  it('uses the cheap model for the simple variant and ignores an unknown configured model', async () => {
+  it('uses gpt-image-1.5 at low quality for simple, and the configured model otherwise', async () => {
     const mock = editor();
     const simple = await handlePhotoLessonRequest(
       post(art, 'simple-key1', 'simple'),
@@ -142,7 +142,8 @@ describe('POST /api/photo-lesson', () => {
       deps(mock.images),
     );
     expect(simple.status).toBe(200);
-    expect(mock.calls[0]?.model).toBe('gpt-image-1-mini');
+    expect(mock.calls[0]?.model).toBe('gpt-image-1.5');
+    expect(mock.calls[0]?.quality).toBe('low');
 
     const unknown = await handlePhotoLessonRequest(
       post(art, 'default-key1', 'default'),
@@ -151,6 +152,16 @@ describe('POST /api/photo-lesson', () => {
     );
     expect(unknown.status).toBe(200);
     expect(mock.calls[1]?.model).toBe('gpt-image-1.5');
+    expect(mock.calls[1]?.quality).toBe('medium');
+
+    const cheap = await handlePhotoLessonRequest(
+      post(art, 'cheap-key001', 'default'),
+      { OPENAI_API_KEY: 'test-key', OPENAI_IMAGE_MODEL: 'gpt-image-1-mini' },
+      deps(mock.images),
+    );
+    expect(cheap.status).toBe(200);
+    expect(mock.calls[2]?.model).toBe('gpt-image-1-mini');
+    expect(mock.calls[2]?.quality).toBe('medium');
   });
 
   it('rate-limits new jobs and still serves a cached retry', async () => {

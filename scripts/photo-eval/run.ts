@@ -2,9 +2,13 @@
  * Photo evaluation harness.
  *
  *   OPENAI_API_KEY=... npm run photo-eval -- <photo-directory>
+ *   OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --out <directory>
  *
- * Writes ./photo-eval-out/ (contact sheet HTML and PNG, time and token counts,
- * rubric.csv). Recompute a filled rubric without calling the API:
+ * `PHOTO_EVAL_OUT` sets the same output directory. The default is
+ * ./photo-eval-out/. The contact sheet shows the photo, the illustration,
+ * and a cumulative render of each lesson step.
+ *
+ * Recompute a filled rubric without calling the API:
  *
  *   npm run photo-eval -- --score photo-eval-out/rubric.csv
  *
@@ -17,32 +21,39 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { decode as decodeJpeg } from 'jpeg-js';
-import { renderLessonPreview } from '../../src/photo/compare';
+import { renderCumulativeStep } from '../../src/photo/compare';
 import { applyOrientation, downscaleLongEdge } from '../../src/photo/image-ops';
 import { readJpegOrientation } from '../../src/photo/jpeg-orientation';
 import type { TokenUsage } from '../../src/photo/openai';
 import { openAiClients } from '../../src/photo/openai';
 import { runPhotoPipeline } from '../../src/photo/pipeline';
 import { encodePng, decodePng, type RgbaImage } from '../../src/photo/png';
+import { listCostUsd } from '../../src/photo/pricing';
 import { DEFAULT_TEXT_MODEL, type PhotoVariant } from '../../src/photo/prompts';
 import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../src/photo/rubric';
 import { composeContactSheet } from '../../src/photo/sheet';
 
-const OUT_DIR = path.join(process.cwd(), 'photo-eval-out');
+/** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
+const EVAL_KEY_REVISION = 'v2';
+
+interface Args {
+  readonly score?: string;
+  readonly out?: string;
+  readonly dir?: string;
+}
 
 async function main(): Promise<void> {
-  const arg = process.argv[2];
-  if (arg === '--score') {
-    const file = process.argv[3];
-    if (!file) {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.score !== undefined) {
+    if (!args.score) {
       console.error('Usage: npm run photo-eval -- --score <rubric.csv>');
       process.exit(1);
     }
-    report(computeRubric(parseRubricCsv(await readFile(file, 'utf8'))));
+    report(computeRubric(parseRubricCsv(await readFile(args.score, 'utf8'))));
     return;
   }
-  if (!arg || arg.startsWith('-')) {
-    console.error('Usage: OPENAI_API_KEY=... npm run photo-eval -- <photo-directory>');
+  if (!args.dir) {
+    console.error('Usage: OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> [--out <directory>]');
     process.exit(1);
   }
   const apiKey = process.env.OPENAI_API_KEY;
@@ -51,19 +62,22 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const names = (await readdir(arg)).filter((name) => /\.(png|jpe?g|webp)$/i.test(name)).sort();
+  const outDir = path.resolve(args.out || process.env.PHOTO_EVAL_OUT || path.join(process.cwd(), 'photo-eval-out'));
+  const names = (await readdir(args.dir)).filter((name) => /\.(png|jpe?g|webp)$/i.test(name)).sort();
   if (names.length === 0) {
-    console.error(`No PNG or JPEG photos in ${arg}`);
+    console.error(`No PNG or JPEG photos in ${args.dir}`);
     process.exit(1);
   }
 
   const clients = openAiClients(apiKey);
   const variant = evalVariant(process.env.PHOTO_EVAL_VARIANT);
+  const textModel = process.env.OPENAI_TEXT_MODEL || DEFAULT_TEXT_MODEL;
   const flatUsd = flatImageUsd(process.env.OPENAI_IMAGE_USD);
   const rows: RgbaImage[][] = [];
   const htmlRows: string[] = [];
   const metrics: PhotoMetric[] = [];
   let failures = 0;
+  console.log(`Photo eval: ${names.length} file(s), variant ${variant}, output ${outDir}`);
 
   for (const name of names) {
     if (name.toLowerCase().endsWith('.webp')) {
@@ -74,7 +88,7 @@ async function main(): Promise<void> {
     }
     const started = Date.now();
     try {
-      const bytes = new Uint8Array(await readFile(path.join(arg, name)));
+      const bytes = new Uint8Array(await readFile(path.join(args.dir, name)));
       const photo = await toPng(bytes, name);
       const result = await runPhotoPipeline({
         png: photo.png,
@@ -82,55 +96,112 @@ async function main(): Promise<void> {
         idempotencyKey: evalKey(name, photo.png),
         signal: AbortSignal.timeout(120_000),
         ...(process.env.OPENAI_IMAGE_MODEL ? { configuredImageModel: process.env.OPENAI_IMAGE_MODEL } : {}),
-        textModel: process.env.OPENAI_TEXT_MODEL || DEFAULT_TEXT_MODEL,
+        textModel,
         lessonId: `photo-eval-${slug(name)}`,
       }, clients);
       const ms = Date.now() - started;
       const photoImage = await decodePng(photo.png);
       const illustration = await decodePng(result.illustrationPng);
-      const render = renderLessonPreview(result.lesson, 320);
-      rows.push([photoImage, illustration, render]);
+      const stepImages = result.lesson.steps.map((_, index) => renderCumulativeStep(result.lesson, index + 1, 280));
+      const cells = [photoImage, illustration, ...stepImages];
+      for (let index = 0; index < cells.length; index += 6) rows.push(cells.slice(index, index + 6));
+      const priced = listCostUsd({
+        imageModel: result.model,
+        image: result.imageUsage,
+        textModel,
+        text: result.textUsage,
+      });
+      const costUsd = flatUsd ?? priced.usd;
       const photoB64 = base64(photo.png);
       const illustrationB64 = base64(result.illustrationPng);
-      const renderPng = await encodePng(render);
-      const renderB64 = base64(renderPng);
-      htmlRows.push(htmlRow(name, photoB64, illustrationB64, renderB64, ms, result.model, result.imageUsage, flatUsd, result.needsReview));
+      const stepPngs = await Promise.all(stepImages.map((image) => encodePng(image)));
+      htmlRows.push(htmlRow({
+        name,
+        photo: photoB64,
+        illustration: illustrationB64,
+        steps: result.lesson.steps.map((step, index) => ({
+          instruction: step.instruction,
+          png: base64(stepPngs[index] ?? new Uint8Array()),
+        })),
+        ms,
+        model: result.model,
+        quality: result.quality,
+        imageUsage: result.imageUsage,
+        textUsage: result.textUsage,
+        costUsd,
+        needsReview: result.needsReview,
+      }));
       metrics.push({
         file: name,
         ok: true,
         ms,
         model: result.model,
+        quality: result.quality,
+        steps: result.lesson.steps.length,
+        drawingSteps: result.lesson.steps.filter((step) => step.phase !== 'color').length,
+        colorSteps: result.lesson.steps.filter((step) => step.phase === 'color').length,
+        coverage: result.coverage,
         imageUsage: result.imageUsage,
         textUsage: result.textUsage,
-        costUsd: flatUsd,
+        costUsd,
+        listCostUsd: priced.usd,
+        imageUsd: priced.imageUsd,
+        textUsd: priced.textUsd,
         needsReview: result.needsReview,
         targetHash: result.targetHash,
       });
-      console.log(`${name}: ${ms} ms, model ${result.model}, image tokens ${result.imageUsage?.totalTokens ?? 'unknown'}`);
+      console.log(`${name}: ${ms} ms, ${result.model} ${result.quality}, image ${tokens(result.imageUsage)}, text ${tokens(result.textUsage)}, usd ${costUsd ?? 'unknown'}, steps ${result.lesson.steps.length}`);
     } catch (error) {
       failures += 1;
-      const message = error instanceof Error ? error.message.slice(0, 180) : 'failed';
+      const message = error instanceof Error ? error.message.slice(0, 300) : 'failed';
       metrics.push({ file: name, ok: false, ms: Date.now() - started, error: message });
-      htmlRows.push(`<tr><td>${escapeHtml(name)}</td><td colspan="3">${escapeHtml(message)}</td></tr>`);
+      htmlRows.push(`<section><h2>${escapeHtml(name)}</h2><p>${escapeHtml(message)}</p></section>`);
       console.error(`${name}: ${message}`);
     }
   }
 
-  await mkdir(OUT_DIR, { recursive: true });
-  const sheet = await encodePng(composeContactSheet(rows));
-  await writeFile(path.join(OUT_DIR, 'contact-sheet.png'), sheet);
-  const rubricPath = path.join(OUT_DIR, 'rubric.csv');
+  await mkdir(outDir, { recursive: true });
+  const sheet = rows.length > 0 ? await encodePng(composeContactSheet(rows)) : await encodePng({ width: 1, height: 1, data: Uint8Array.of(255, 255, 255, 255) });
+  await writeFile(path.join(outDir, 'contact-sheet.png'), sheet);
+  const rubricPath = path.join(outDir, 'rubric.csv');
   const rubric = await mergeRubric(rubricPath, names.filter((name) => !name.toLowerCase().endsWith('.webp')));
   await writeFile(rubricPath, rubric);
   const computation = computeRubric(parseRubricCsv(rubric));
   const payload = { claimedPass: false as const, rubric: computation, photos: metrics };
-  await writeFile(path.join(OUT_DIR, 'metrics.json'), `${JSON.stringify(payload, null, 2)}\n`);
-  const sheetB64 = base64(sheet);
-  await writeFile(path.join(OUT_DIR, 'contact-sheet.html'), htmlPage(sheetB64, htmlRows.join('\n'), computation.note));
+  await writeFile(path.join(outDir, 'metrics.json'), `${JSON.stringify(payload, null, 2)}\n`);
+  await writeFile(path.join(outDir, 'contact-sheet.html'), htmlPage(base64(sheet), htmlRows.join('\n'), computation.note));
   report(computation);
-  console.log(`Wrote ${OUT_DIR}`);
+  console.log(`Wrote ${outDir}`);
   console.log('This run does not pass the go/no-go gate.');
   if (failures > 0) process.exit(1);
+}
+
+function parseArgs(argv: readonly string[]): Args {
+  let score: string | undefined;
+  let out: string | undefined;
+  const positional: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index] ?? '';
+    if (token === '--score') {
+      score = argv[index + 1] ?? '';
+      index += 1;
+    } else if (token === '--out') {
+      const value = argv[index + 1];
+      if (!value) throw new Error('Missing directory after --out');
+      out = value;
+      index += 1;
+    } else if (token.startsWith('-')) {
+      throw new Error(`Unknown option ${token}`);
+    } else {
+      positional.push(token);
+    }
+  }
+  const dir = positional[0];
+  return {
+    ...(score !== undefined ? { score } : {}),
+    ...(out !== undefined ? { out } : {}),
+    ...(dir !== undefined ? { dir } : {}),
+  };
 }
 
 function report(result: ReturnType<typeof computeRubric>): void {
@@ -178,7 +249,7 @@ function flatImageUsd(value: string | undefined): number | null {
 
 function evalKey(name: string, bytes: Uint8Array): string {
   const digest = createHash('sha256').update(bytes).digest('hex').slice(0, 16);
-  return `eval-${digest}-${slug(name)}`.slice(0, 80);
+  return `eval-${digest}-${slug(name)}-${EVAL_KEY_REVISION}`.slice(0, 80);
 }
 
 function slug(name: string): string {
@@ -186,36 +257,55 @@ function slug(name: string): string {
   return cleaned.length >= 1 ? cleaned : 'photo';
 }
 
+function tokens(usage: TokenUsage | null): string {
+  if (!usage) return 'unknown';
+  return `${usage.inputTokens}/${usage.outputTokens}`;
+}
+
 interface PhotoMetric {
   readonly file: string;
   readonly ok: boolean;
   readonly ms?: number;
   readonly model?: string;
+  readonly quality?: string;
+  readonly steps?: number;
+  readonly drawingSteps?: number;
+  readonly colorSteps?: number;
+  readonly coverage?: number;
   readonly imageUsage?: TokenUsage | null;
   readonly textUsage?: TokenUsage | null;
   readonly costUsd?: number | null;
+  readonly listCostUsd?: number | null;
+  readonly imageUsd?: number | null;
+  readonly textUsd?: number | null;
   readonly needsReview?: boolean;
   readonly targetHash?: string;
   readonly error?: string;
 }
 
-function htmlRow(
-  name: string,
-  photo: string,
-  illustration: string,
-  render: string,
-  ms: number,
-  model: string,
-  usage: TokenUsage | null,
-  costUsd: number | null,
-  needsReview: boolean,
-): string {
-  const cost = costUsd === null ? 'unknown' : String(costUsd);
-  const tokens = usage ? String(usage.totalTokens) : 'unknown';
-  return `<tr><td>${escapeHtml(name)}<br>${ms} ms<br>${escapeHtml(model)}<br>tokens ${tokens}<br>usd ${cost}${needsReview ? '<br>review' : ''}</td>`
-    + `<td><img alt="" src="data:image/png;base64,${photo}"></td>`
-    + `<td><img alt="" src="data:image/png;base64,${illustration}"></td>`
-    + `<td><img alt="" src="data:image/png;base64,${render}"></td></tr>`;
+function htmlRow(input: {
+  readonly name: string;
+  readonly photo: string;
+  readonly illustration: string;
+  readonly steps: readonly { instruction: string; png: string }[];
+  readonly ms: number;
+  readonly model: string;
+  readonly quality: string;
+  readonly imageUsage: TokenUsage | null;
+  readonly textUsage: TokenUsage | null;
+  readonly costUsd: number | null;
+  readonly needsReview: boolean;
+}): string {
+  const cost = input.costUsd === null ? 'unknown' : input.costUsd.toFixed(4);
+  const steps = input.steps.map((step, index) => (
+    `<figure><img alt="" src="data:image/png;base64,${step.png}"><figcaption>${index + 1}. ${escapeHtml(step.instruction)}</figcaption></figure>`
+  )).join('');
+  return `<section><h2>${escapeHtml(input.name)}</h2>`
+    + `<p>${input.ms} ms, ${escapeHtml(input.model)} ${escapeHtml(input.quality)}, `
+    + `image ${escapeHtml(tokens(input.imageUsage))}, text ${escapeHtml(tokens(input.textUsage))}, usd ${cost}`
+    + `${input.needsReview ? ', review' : ''}</p>`
+    + `<div class="pair"><img alt="" src="data:image/png;base64,${input.photo}"><img alt="" src="data:image/png;base64,${input.illustration}"></div>`
+    + `<div class="steps">${steps}</div></section>`;
 }
 
 function htmlPage(sheet: string, rows: string, note: string): string {
@@ -225,18 +315,16 @@ function htmlPage(sheet: string, rows: string, note: string): string {
 <title>Photo eval</title>
 <style>
   body { font-family: system-ui, sans-serif; margin: 24px; }
-  img { max-width: 320px; background: white; }
-  td { vertical-align: top; padding: 8px; }
+  img { max-width: 280px; background: white; }
+  .pair, .steps { display: flex; flex-wrap: wrap; gap: 8px; }
+  figure { margin: 0; max-width: 280px; }
+  figcaption { font-size: 14px; }
   .note { border: 1px solid #c08a1e; background: #fdf0d5; padding: 12px; }
+  .sheet { max-width: 100%; }
 </style>
 <p class="note">${escapeHtml(note)} claimedPass is false. This page is not a pass.</p>
-<p><img alt="Contact sheet" src="data:image/png;base64,${sheet}"></p>
-<table>
-<thead><tr><th>Photo</th><th>Foto</th><th>Ilustrasi</th><th>Langkah</th></tr></thead>
-<tbody>
+<p><img class="sheet" alt="Contact sheet" src="data:image/png;base64,${sheet}"></p>
 ${rows}
-</tbody>
-</table>
 </html>
 `;
 }
@@ -254,4 +342,9 @@ function escapeHtml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 }
 
-await main();
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`photo-eval failed: ${message}`);
+  if (error instanceof Error && error.stack) console.error(error.stack);
+  process.exit(1);
+});

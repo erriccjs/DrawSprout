@@ -42,6 +42,16 @@ export function compareLessonToInk(lesson: LessonPackage, ink: RgbaImage): Rende
   return { dice, needsReview: false, reviewReason: null };
 }
 
+/** Lines from the first `count` steps only, so a contact sheet can show the lesson building up. */
+export function renderCumulativeStep(lesson: LessonPackage, count: number, width: number): RgbaImage {
+  const steps = lesson.steps.slice(0, Math.max(0, count));
+  const regionIds = new Set(steps.flatMap((step) => step.colorRegionIds));
+  const regions = lesson.colorRegions
+    .filter((region) => regionIds.has(region.id))
+    .map((region) => ({ id: region.id, d: region.d, role: 'final-outline' as const }));
+  return renderLessonPreview({ ...lesson, steps, targetPreview: { paths: regions } }, width);
+}
+
 export function renderLessonPreview(lesson: LessonPackage, width: number): RgbaImage {
   const height = Math.max(1, Math.round(width * (LESSON_HEIGHT / LESSON_WIDTH)));
   const mask = rasterizeLesson(lesson, width, height);

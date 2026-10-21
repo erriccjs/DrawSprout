@@ -193,8 +193,10 @@ The build does not read the secret. Workers Builds can succeed without it.
 The route then returns a clear error that the key is missing. Optional Worker
 vars, not secrets: `OPENAI_IMAGE_MODEL` (`gpt-image-2`, `gpt-image-1.5`,
 `gpt-image-1`, or `gpt-image-1-mini`; default `gpt-image-1.5`) and
-`OPENAI_TEXT_MODEL` (default `gpt-4.1-mini`). *Lebih sederhana* always uses
-`gpt-image-1-mini`.
+`OPENAI_TEXT_MODEL` (default `gpt-4.1-mini`). Default and *Lebih mirip foto*
+send `quality=medium`. *Lebih sederhana* stays on `gpt-image-1.5` at
+`quality=low` and ignores `OPENAI_IMAGE_MODEL` (D-67). Set
+`OPENAI_IMAGE_MODEL=gpt-image-1-mini` only for a default or faithful job.
 
 ### Evaluation
 
@@ -206,19 +208,24 @@ OPENAI_API_KEY=... npm run photo-eval -- <photo-directory>
 ```
 
 `<photo-directory>` is a folder of JPEG or PNG photos. The command writes
-`photo-eval-out/`: a contact sheet HTML and PNG (photo, illustration, step
-render), per-photo time and token counts, and `rubric.csv`. It prints
-`claimedPass: false` and does not mean the gate passed. Fill the CSV (scores
-1–5, and `ya` in `cacat_struktur` for a critical structure error) and recompute
-without calling the API:
+`photo-eval-out/` (or `PHOTO_EVAL_OUT`, or `--out <directory>`): a contact
+sheet HTML and PNG (photo, illustration, then each cumulative step), per-photo
+time, token counts, list-price `costUsd`, and `rubric.csv`. It prints
+`claimedPass: false` and does not mean the gate passed. A thrown error prints
+`photo-eval failed:` and exits non-zero. Fill the CSV (scores 1–5, and `ya`
+in `cacat_struktur` for a critical structure error) and recompute without
+calling the API:
 
 ```bash
 npm run photo-eval -- --score photo-eval-out/rubric.csv
 ```
 
-`OPENAI_IMAGE_USD`, if you set it to a number, is recorded as your flat USD
-figure for one image edit. The tool does not price tokens. Optional
-`PHOTO_EVAL_VARIANT` is `default`, `faithful`, or `simple`.
+`costUsd` uses OpenAI list prices for the image model and the text model
+(D-67). `OPENAI_IMAGE_USD`, if you set it to a number, replaces that figure;
+`listCostUsd` in `metrics.json` stays the computed one. Optional
+`PHOTO_EVAL_VARIANT` is `default`, `faithful`, or `simple`. The idempotency
+key for this revision ends in `v2`, so a rerun after the prompt change is a
+new paid job.
 
 CC0 samples, with credits, are in `scripts/photo-eval/samples/` (`LICENSES.md`).
 Running them does not pass the gate.
