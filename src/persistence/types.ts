@@ -106,6 +106,11 @@ export interface SessionStore {
   loadLatestSessionForLesson(lessonId: string): Promise<RestoredSession | null>;
   deleteSession(sessionId: string): Promise<void>;
   /**
+   * Deletes every session for one lesson, including its stroke log.
+   * Used when a photo lesson is removed, so the derived drawings go with it.
+   */
+  deleteSessionsForLesson(lessonId: string): Promise<void>;
+  /**
    * Saved artworks for the picture-choosing screen, newest first.
    * An untouched session (no strokes, still on step 1, not finished) is omitted.
    */

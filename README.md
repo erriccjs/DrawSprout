@@ -120,7 +120,9 @@ tablet and on a phone.
   (see the plan, section 7). That is not acceptance test AT-19: it was not an
   installed Home Screen icon, not Safari on iPad, and not Chrome on an Android
   tablet. `npm run dev` does not install the service worker.
-- No photo-to-lesson transformation, no backend, no accounts, no cloud sync.
+- Photo-to-lesson is a beta spike, not a finished photo MVP. It stays hidden
+  until a parent opens `?beta=foto`. The 30-photo go/no-go has not been run
+  and is not claimed. No accounts and no cloud sync. See [Photo beta](#photo-beta-spike).
 - No automatic "step finished" detection — the child presses *Lanjut*.
 - No project backup file or audio.
 - No migration of a drawing saved under an older lesson or storage schema. A
@@ -159,7 +161,67 @@ npm run preview
 ```
 
 The build output lands in `dist/` and is a static site; any static host will
-serve it.
+serve the shell. `npm run dev` does not serve `POST /api/photo-lesson`.
+
+## Photo beta (spike)
+
+Off by default. Open the site with `?beta=foto` (for example
+`https://drawsprout.erriccjs.cloud/?beta=foto`). That sets a flag in
+`sessionStorage` for the tab, not in the drawing database. `?beta=off` clears
+it. The picture list then shows *Buat dari foto* and a *Dari foto* section.
+Children do not see that entry until the flag is on.
+
+This is not a finished photo MVP. If the 30-photo evaluation has not passed,
+the photo feature stays a spike. Nothing in this repository claims that pass.
+
+The button calls `POST /api/photo-lesson` on the Worker. After a production
+build, local API development is:
+
+```bash
+npm run build
+npx wrangler dev
+```
+
+Put the key in `.dev.vars` (gitignored) as `OPENAI_API_KEY=...`, or set the
+production secret:
+
+```bash
+npx wrangler secret put OPENAI_API_KEY
+```
+
+The build does not read the secret. Workers Builds can succeed without it.
+The route then returns a clear error that the key is missing. Optional Worker
+vars, not secrets: `OPENAI_IMAGE_MODEL` (`gpt-image-2`, `gpt-image-1.5`,
+`gpt-image-1`, or `gpt-image-1-mini`; default `gpt-image-1.5`) and
+`OPENAI_TEXT_MODEL` (default `gpt-4.1-mini`). *Lebih sederhana* always uses
+`gpt-image-1-mini`.
+
+### Evaluation
+
+On a machine with the key, Node.js 20.16 or newer (`CompressionStream`; this
+repo's tests still need 22.12+), after `npm install`:
+
+```bash
+OPENAI_API_KEY=... npm run photo-eval -- <photo-directory>
+```
+
+`<photo-directory>` is a folder of JPEG or PNG photos. The command writes
+`photo-eval-out/`: a contact sheet HTML and PNG (photo, illustration, step
+render), per-photo time and token counts, and `rubric.csv`. It prints
+`claimedPass: false` and does not mean the gate passed. Fill the CSV (scores
+1–5, and `ya` in `cacat_struktur` for a critical structure error) and recompute
+without calling the API:
+
+```bash
+npm run photo-eval -- --score photo-eval-out/rubric.csv
+```
+
+`OPENAI_IMAGE_USD`, if you set it to a number, is recorded as your flat USD
+figure for one image edit. The tool does not price tokens. Optional
+`PHOTO_EVAL_VARIANT` is `default`, `faithful`, or `simple`.
+
+CC0 samples, with credits, are in `scripts/photo-eval/samples/` (`LICENSES.md`).
+Running them does not pass the gate.
 
 ## Deploy
 
@@ -173,7 +235,9 @@ npx wrangler deploy
 ```
 
 `wrangler.jsonc` is the deploy. It uploads `./dist` as static assets and, for a
-path that is not a file, serves `index.html`. There is no Worker script.
+path that is not a file, serves `index.html`. `src/worker/index.ts` answers
+`/api/*` only (`run_worker_first`). `/sw.js` stays a static file. The Cloudflare
+Vite plugin is still not used.
 `npx wrangler deploy` uses the Wrangler 4 version locked in `package-lock.json`.
 A branch build on Workers Builds runs `npx wrangler preview` instead. That
 command needs the empty top-level `previews` object in `wrangler.jsonc`.

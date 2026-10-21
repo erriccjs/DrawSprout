@@ -864,3 +864,84 @@ is unchanged: bumping it would refuse every saved drawing, and migration is
 still deferred. The undo record for *Ulangi langkah ini* is session-only,
 same as *Hapus semua*. A free-drawing session is an ordinary saved drawing:
 Karyaku lists it and *Buka* restores `freeCreation` with the free strokes.
+
+### D-65 — A Worker script for `/api/*`, assets still serve the shell
+
+Photo lessons need `POST /api/photo-lesson`. An assets-only Wrangler config
+cannot answer that. Adding `@cloudflare/vite-plugin` is the failure from D-48:
+it collects assets before `drawsproutOffline()` writes `dist/sw.js`, and
+`/sw.js` becomes `index.html`.
+
+**Choice.** `wrangler.jsonc` keeps `assets.directory` `./dist`,
+`not_found_handling: single-page-application`, and the empty `previews` object.
+It gains `main: src/worker/index.ts`, an `ASSETS` binding, and
+`run_worker_first: ["/api/*"]`. Only `/api/*` enters the script. `/sw.js`,
+`_headers`, and the single-page fallback stay on the asset layer. The script
+delegates anything else to `env.ASSETS.fetch` in case it is invoked more
+broadly. `compatibility_date` stays `2026-10-19`. The build does not read
+`OPENAI_API_KEY`; a missing secret is a runtime error on the photo route.
+`npx wrangler types --include-runtime=false` writes `src/worker/env.d.ts`. The
+full workerd runtime is not loaded into the app TypeScript project, because
+that would replace the DOM types the shared photo code uses. `fetcher.d.ts`
+declares the `fetch` method the assets binding actually calls.
+
+### D-66 — Photo spike: OpenAI line art, a TypeScript tracer, beta off by default
+
+The owner chose OpenAI image models (`gpt-image-2`, `gpt-image-1.5`,
+`gpt-image-1`, `gpt-image-1-mini`). The key is `OPENAI_API_KEY`, set with
+`npx wrangler secret put OPENAI_API_KEY`, never committed. The default edit
+model is `gpt-image-1.5`. *Lebih sederhana* always uses `gpt-image-1-mini`.
+An unknown `OPENAI_IMAGE_MODEL` is ignored. The text model defaults to
+`gpt-4.1-mini` and may be overridden with `OPENAI_TEXT_MODEL`.
+
+**Choice.** The spike is off until a parent opens `?beta=foto` (cleared with
+`?beta=off`). The flag is `sessionStorage` for the tab, not drawing data.
+The child picture list does not show *Buat dari foto* without it.
+
+The browser picks a photo with a file input (`capture` for the camera, none
+for the gallery), crops, lets `createImageBitmap` apply orientation once, and
+re-encodes through a canvas to PNG at a 1024px long edge. That drops EXIF.
+A parent consent screen, in Indonesian, comes before the upload: the photo
+goes to the DrawSprout Worker and to OpenAI, is not stored after processing,
+and the lesson made from it can be deleted.
+
+The Worker accepts PNG only, caps size and pixel count, and calls the OpenAI
+image edit API. The prompt asks for black line art on white and forbids new
+limbs, objects, background, shading, and colour. Dominant colours are computed
+here from the source photo, not from the line art. Photos are not written to
+R2, KV, or logs. A log line is `{ route, status, ms }` only. The same
+idempotency key returns the in-memory JSON result (capped at 32, per isolate)
+or waits on the in-flight job, and the key is forwarded to OpenAI so a retry
+after the isolate dies is not a second billed edit. A new photo, *Lebih mirip
+foto*, or *Lebih sederhana* is a new key. New jobs are limited to 6 per 10
+minutes per `cf-connecting-ip`. The image call times out at 120 seconds and
+aborts with the request. A missing key fails before a rate slot is taken and
+before OpenAI is called.
+
+Line art becomes strokes with a marching-squares tracer and
+Ramer–Douglas–Peucker, in `src/photo/trace.ts`. Potrace's curve fit and a WASM
+build were skipped: the lesson path subset is straight segments, and one
+TypeScript file runs in the Worker, the browser, and `photo-eval` without a
+native toolchain. Contours are scaled into the 1000×750 space, grouped big
+shapes first by area and containment, then details, then colour regions from
+closed areas and the photo palette. Indonesian instructions come from the text
+model with a fixed sentence when that call fails. `assertValidLessons` runs
+before the package is returned. Re-rasterising the lesson and comparing ink
+with a Dice coefficient below 0.22 sets `needsReview`. That number is a spike
+heuristic. It is not the PRD section 8 gate, and a parent can still approve.
+
+Approval stores the lesson and the illustration hash in IndexedDB database
+`drawsprout-photo-lessons` (version 1). The session database stays at version
+1, and `PERSISTENCE_SCHEMA_VERSION` stays 1. The source photo and the
+illustration PNG are not stored. The lesson plays in the existing engine and
+is listed under *Dari foto*. Deleting it deletes that record and every session
+for the lesson id.
+
+`npm run photo-eval` runs the same `runPhotoPipeline` on a folder of JPEGs or
+PNGs. It writes `photo-eval-out/` and a CSV rubric. `computeRubric` can print
+`counted: go` as arithmetic and always sets `claimedPass` to false. The
+30-photo evaluation has not been run, the 80% threshold is not calibrated, and
+this spike does not claim the photo MVP. CC0 samples live in
+`scripts/photo-eval/samples/` with `LICENSES.md`. `OPENAI_IMAGE_USD`, when set,
+is recorded as a flat figure the operator supplied. The harness does not price
+tokens.
