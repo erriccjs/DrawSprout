@@ -103,26 +103,20 @@ export class ArtworkSurface {
       layer.ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
     }
     for (const stroke of strokes) {
-      const { ctx } = this.layers[stroke.layer];
-      this.prepare(ctx, stroke);
-      this.withClip(ctx, stroke.clipPathIds, (target) => {
+      this.paint(stroke, (target) => {
         strokeWholePath(target, stroke.points);
       });
     }
     const live = this.live;
     if (!live) return;
-    const { ctx } = this.layers[live.spec.layer];
-    this.prepare(ctx, live.spec);
-    this.withClip(ctx, live.spec.clipPathIds, (target) => {
+    this.paint(live.spec, (target) => {
       strokeWholePath(target, live.points);
     });
   }
 
   beginStroke(spec: LiveStrokeSpec, at: Point): void {
     this.live = { spec, points: [at] };
-    const { ctx } = this.layers[spec.layer];
-    this.prepare(ctx, spec);
-    this.withClip(ctx, spec.clipPathIds, (target) => {
+    this.paint(spec, (target) => {
       // A tap is a legitimate dot, so the stroke is visible from the first
       // sample rather than only once the pointer moves.
       drawDot(target, at, spec.width / 2);
@@ -135,11 +129,19 @@ export class ArtworkSurface {
     if (!live) return;
     const from = live.points[live.points.length - 1]!;
     live.points.push(to);
-    const { ctx } = this.layers[live.spec.layer];
-    this.prepare(ctx, live.spec);
-    this.withClip(ctx, live.spec.clipPathIds, (target) => {
+    this.paint(live.spec, (target) => {
       strokeSegment(target, from, to);
     });
+  }
+
+  /** Paints on the stroke's layer, or on both layers when `eraseAll` is set. */
+  private paint(spec: LiveStrokeSpec, draw: (ctx: CanvasRenderingContext2D) => void): void {
+    const layers: RenderLayer[] = spec.eraseAll ? ['color', 'ink'] : [spec.layer];
+    for (const layer of layers) {
+      const { ctx } = this.layers[layer];
+      this.prepare(ctx, spec);
+      this.withClip(ctx, spec.clipPathIds, draw);
+    }
   }
 
   /**

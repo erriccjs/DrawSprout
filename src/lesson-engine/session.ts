@@ -52,8 +52,18 @@ export function createSession(
     redoStack: [],
     nextSequence: 1,
     clearedArtworks: [],
+    clearedSteps: [],
+    freeCreation: false,
     finished: false,
   };
+}
+
+/** Step id stored on strokes drawn after the guided lesson, never a lesson step. */
+export const FREE_STEP_ID = 'free-creation';
+
+/** The step id a new stroke, an undo, or "repeat this step" belongs to. */
+export function drawingStepId(lesson: LessonPackage, state: SessionState): string {
+  return state.freeCreation ? FREE_STEP_ID : activeStep(lesson, state).id;
 }
 
 export function reduceSession(
@@ -63,7 +73,11 @@ export function reduceSession(
 ): SessionState {
   switch (action.type) {
     case 'commit-stroke': {
-      const stroke: Stroke = { ...action.stroke, sequence: state.nextSequence };
+      const stroke: Stroke = {
+        ...action.stroke,
+        stepId: state.freeCreation ? FREE_STEP_ID : action.stroke.stepId,
+        sequence: state.nextSequence,
+      };
       return {
         ...state,
         strokes: [...state.strokes, stroke],
@@ -89,15 +103,30 @@ export function reduceSession(
       };
     }
 
+    case 'clear-step': {
+      const stepId = drawingStepId(lesson, state);
+      const removed = state.strokes.filter((stroke) => stroke.stepId === stepId);
+      if (removed.length === 0) return state;
+      return {
+        ...state,
+        strokes: state.strokes.filter((stroke) => stroke.stepId !== stepId),
+        redoStack: [],
+        clearedSteps: [...state.clearedSteps, { stepId, strokes: removed, redoStack: state.redoStack }],
+      };
+    }
+
     case 'undo': {
       // Undo is scoped to the active step so that navigating back and tapping
       // undo can never destroy work from a later step (FR-09).
-      const stepId = activeStep(lesson, state).id;
+      const stepId = drawingStepId(lesson, state);
       const index = lastIndexOfStep(state.strokes, stepId);
-      // Nothing of this step's own left to take back. The clear is the
-      // operation this undo reverses only while the canvas is empty, so a
-      // restored drawing is never laid over another one.
-      if (index === -1) return state.strokes.length === 0 ? restoreClearedArtwork(state) : state;
+      if (index === -1) {
+        const clearedAt = lastClearedStepIndex(state, stepId);
+        if (clearedAt !== -1) return restoreClearedStep(state, clearedAt);
+        // The whole-canvas clear is undone only while the canvas is empty, so a
+        // restored drawing is never laid over another one.
+        return state.strokes.length === 0 ? restoreClearedArtwork(state) : state;
+      }
       const stroke = state.strokes[index]!;
       return {
         ...state,
@@ -119,12 +148,12 @@ export function reduceSession(
     }
 
     case 'next-step': {
-      if (state.currentStepIndex >= lesson.steps.length - 1) return state;
+      if (state.freeCreation || state.currentStepIndex >= lesson.steps.length - 1) return state;
       return withStepIndex(lesson, state, state.currentStepIndex + 1);
     }
 
     case 'prev-step': {
-      if (state.currentStepIndex <= 0) return state;
+      if (state.freeCreation || state.currentStepIndex <= 0) return state;
       return withStepIndex(lesson, state, state.currentStepIndex - 1);
     }
 
@@ -180,6 +209,27 @@ export function reduceSession(
     case 'reopen':
       return state.finished ? { ...state, finished: false } : state;
 
+    case 'enter-free-creation': {
+      if (state.currentStepIndex !== lesson.steps.length - 1) return state;
+      if (state.freeCreation && !state.finished) return state;
+      return { ...state, freeCreation: true, finished: false, redoStack: [] };
+    }
+
+    case 'leave-free-creation': {
+      if (!state.freeCreation) return state;
+      const step = activeStep(lesson, state);
+      return {
+        ...state,
+        freeCreation: false,
+        redoStack: [],
+        toolPreferences: {
+          ...state.toolPreferences,
+          activeTool: step.toolPreset.tool,
+          customWidth: null,
+        },
+      };
+    }
+
     case 'restart':
       return {
         ...state,
@@ -188,6 +238,8 @@ export function reduceSession(
         redoStack: [],
         nextSequence: 1,
         clearedArtworks: [],
+        clearedSteps: [],
+        freeCreation: false,
         finished: false,
         toolPreferences: {
           ...state.toolPreferences,
@@ -225,6 +277,28 @@ function withStepIndex(lesson: LessonPackage, state: SessionState, index: number
  * The strokes keep their original sequence numbers, so replay order is
  * unchanged.
  */
+function restoreClearedStep(state: SessionState, index: number): SessionState {
+  const cleared = state.clearedSteps[index];
+  if (!cleared) return state;
+  const strokes = cleared.strokes.reduce(
+    (current, stroke) => insertBySequence(current, stroke),
+    [...state.strokes],
+  );
+  return {
+    ...state,
+    strokes,
+    redoStack: cleared.redoStack,
+    clearedSteps: state.clearedSteps.filter((_, at) => at !== index),
+  };
+}
+
+function lastClearedStepIndex(state: SessionState, stepId: string): number {
+  for (let i = state.clearedSteps.length - 1; i >= 0; i -= 1) {
+    if (state.clearedSteps[i]!.stepId === stepId) return i;
+  }
+  return -1;
+}
+
 function restoreClearedArtwork(state: SessionState): SessionState {
   const cleared = state.clearedArtworks[state.clearedArtworks.length - 1];
   if (!cleared) return state;
@@ -271,9 +345,15 @@ export function activeStep(lesson: LessonPackage, state: SessionState): LessonSt
 
 export function sessionPhase(lesson: LessonPackage, state: SessionState): SessionPhase {
   if (state.finished) return 'completed';
+  if (state.freeCreation) return 'free_creation';
   // A clear is real content, so a session that has been cleared has started
   // even while the canvas is empty.
-  if (state.strokes.length === 0 && state.currentStepIndex === 0 && state.clearedArtworks.length === 0) {
+  if (
+    state.strokes.length === 0 &&
+    state.currentStepIndex === 0 &&
+    state.clearedArtworks.length === 0 &&
+    state.clearedSteps.length === 0
+  ) {
     return 'not_started';
   }
   return activeStep(lesson, state).phase === 'color' ? 'coloring' : 'drawing';
@@ -290,6 +370,13 @@ export function sessionPhase(lesson: LessonPackage, state: SessionState): Sessio
 export function effectiveToolPreset(lesson: LessonPackage, state: SessionState): ToolPreset {
   const step = activeStep(lesson, state);
   const { activeTool, colorSource, customColor, customWidth } = state.toolPreferences;
+
+  if (state.freeCreation) {
+    const tool = activeTool;
+    const color = colorSource === 'custom' ? customColor : tool === 'brush' ? '#e8552d' : '#3a3a3a';
+    const widthViewbox = customWidth ?? (tool === 'brush' ? 36 : tool === 'eraser' ? 24 : 8);
+    return { tool, color, widthViewbox };
+  }
 
   if (activeTool === 'eraser') {
     return {
@@ -308,6 +395,9 @@ export function effectiveToolPreset(lesson: LessonPackage, state: SessionState):
 
 /** Which layer the next stroke lands on: colour steps paint, others ink. */
 export function activeLayerId(lesson: LessonPackage, state: SessionState): 'ink' | 'color' {
+  if (state.freeCreation) {
+    return state.toolPreferences.activeTool === 'brush' ? 'color' : 'ink';
+  }
   return activeStep(lesson, state).phase === 'color' ? 'color' : 'ink';
 }
 
@@ -316,6 +406,7 @@ export function activeLayerId(lesson: LessonPackage, state: SessionState): 'ink'
  * has no regions or the child switched the boundary assist off (FR-11).
  */
 export function activeClipRegionIds(lesson: LessonPackage, state: SessionState): readonly string[] {
+  if (state.freeCreation) return [];
   const step = activeStep(lesson, state);
   if (!state.toolPreferences.colorBoundaryAssist) return [];
   return step.colorRegionIds;
@@ -339,8 +430,10 @@ export function guideOverlayMode(
 }
 
 export function canUndo(lesson: LessonPackage, state: SessionState): boolean {
+  const stepId = drawingStepId(lesson, state);
   return (
-    lastIndexOfStep(state.strokes, activeStep(lesson, state).id) !== -1 ||
+    lastIndexOfStep(state.strokes, stepId) !== -1 ||
+    lastClearedStepIndex(state, stepId) !== -1 ||
     (state.strokes.length === 0 && state.clearedArtworks.length > 0)
   );
 }

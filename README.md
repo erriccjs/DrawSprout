@@ -28,6 +28,11 @@ tablet and on a phone.
   lesson name, date). Open one to continue or view it, save a PNG, or delete
   it after a confirmation.
 - Canvas drawing with Pointer Events, pen / brush / eraser, undo and redo.
+  On the last step, *Gambar bebas* (in the help sheet, and on the finish
+  screen) continues with no canvas guide. Pen, brush, eraser, and colours
+  stay available. In that same help sheet, *Ulangi langkah ini* clears only
+  the current step and can be undone, and *Mulai ulang* asks before starting
+  the picture over. The dock does not grow.
 - A full-bleed drawing screen. The paper fills the stage, and the tools, the
   brush-size slider, and the step card float at the edges instead of taking a
   column beside it. The dock chip is a ? named *Bantuan* and opens the help

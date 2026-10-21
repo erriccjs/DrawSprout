@@ -63,6 +63,13 @@ describe('replay', () => {
     expect(ops(color.calls, 'stroke')).toHaveLength(1);
   });
 
+  it('cuts a free-drawing eraser out of both layers', () => {
+    const { surface, color, ink } = harness();
+    surface.replay([{ ...stroke, erase: true, eraseAll: true, layer: 'ink' }]);
+    expect(ink.calls.some((call) => call.op === 'stroke')).toBe(true);
+    expect(color.calls.some((call) => call.op === 'stroke')).toBe(true);
+  });
+
   it('cuts an eraser stroke out of its layer instead of painting over it', () => {
     const { surface, ink } = harness();
     surface.replay([{ ...stroke, erase: true }]);

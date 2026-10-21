@@ -8,6 +8,7 @@ import { toCheckpoint } from './persistence/mapping';
 import { MemorySessionStore } from './persistence/memory-store';
 import { StorageFullError } from './persistence/types';
 import { markOfflineReady, markUpdateWaiting, resetOfflineStatus } from './offline/status';
+import * as exportApi from './renderer/export';
 import { strokeInput } from './test/factories';
 import { drawStroke, pointerDown, pointerMove, pointerUp, stubLayoutBox } from './test/pointer';
 import { App } from './App';
@@ -264,6 +265,50 @@ describe('lesson picker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hapus' }));
     expect(await screen.findByText('Belum ada karya tersimpan.')).toBeTruthy();
     expect(await store.loadSession('gallery-cat')).toBeNull();
+  });
+
+  it('lists a free-drawing session in Karyaku and reopens it without the guide', async () => {
+    const cat = lessonData.CAT_LESSON;
+    const lastStepId = cat.steps[cat.steps.length - 1]!.id;
+    let state = createSession(cat, 'free-cat');
+    for (let index = 1; index < cat.steps.length; index += 1) {
+      state = reduceSession(cat, state, { type: 'next-step' });
+    }
+    state = reduceSession(cat, state, {
+      type: 'commit-stroke',
+      stroke: strokeInput(lastStepId, {
+        id: 'guided',
+        points: [{ x: 30, y: 40 }, { x: 50, y: 60 }],
+      }),
+    });
+    state = reduceSession(cat, state, { type: 'enter-free-creation' });
+    state = reduceSession(cat, state, {
+      type: 'commit-stroke',
+      stroke: strokeInput('ignored', {
+        id: 'free-mark',
+        points: [{ x: 70, y: 80 }, { x: 90, y: 100 }],
+      }),
+    });
+    await store.saveProgress({
+      checkpoint: toCheckpoint(state, 1, Date.UTC(2026, 9, 21, 9, 5)),
+      newStrokes: [...state.strokes],
+    });
+
+    const paint = vi.spyOn(exportApi, 'renderArtworkToCanvas');
+    render(<App />);
+    expect(await screen.findByRole('img', { name: 'Karya Kucing Duduk' })).toBeTruthy();
+    const thumbnail = paint.mock.calls.at(-1)?.[0];
+    expect(thumbnail).not.toHaveProperty('guides');
+    expect(thumbnail?.strokes.map((stroke) => stroke.points[0])).toEqual([
+      { x: 30, y: 40 },
+      { x: 70, y: 80 },
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buka Kucing Duduk' }));
+    expect(await screen.findByRole('heading', { name: 'Gambar bebas.' })).toBeTruthy();
+    expect(document.querySelector('.guide-overlay')?.getAttribute('data-visible')).toBe('false');
+    expect(screen.queryByRole('heading', { name: 'Karyaku' })).toBeNull();
+    paint.mockRestore();
   });
 });
 

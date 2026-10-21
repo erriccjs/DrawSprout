@@ -2228,6 +2228,23 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   width: min(320px, calc(100vw - 24px));
 }
 
+.float-help.pad__control-panel {
+  flex-direction: column;
+}
+
+.lesson-edits {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  border: 0;
+  padding: 8px 4px 4px;
+}
+
+.lesson-edits .button {
+  width: 100%;
+  min-height: var(--tap);
+}
+
 .shell[data-layout='phone-portrait'] .brush-slider {
   top: calc(var(--sheet-bottom, 420px) + 8px);
   bottom: auto;

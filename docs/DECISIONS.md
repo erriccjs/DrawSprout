@@ -835,3 +835,32 @@ guide parameter), the lesson title, and the date. *Buka* restores that
 session. *Simpan PNG* downloads it. *Hapus* asks "Hapus karya ini?" before
 `deleteSession`. The picture-choosing shell scrolls; the drawing screen does
 not, and the dock is unchanged.
+
+### D-64 — Free drawing, repeat this step, and start over
+
+The lesson ended at *Selesai*. There was no way to keep drawing without the
+guide, and the only start-over was on the finish screen. Repeating a step
+would have had to delete later strokes or be a second *Hapus semua*.
+
+**Choice.** On the last step, *Gambar bebas* (in the help sheet, and again
+on the finish screen) sets `freeCreation`. The canvas guide turns off. The
+sample card stays, so the paper does not move and the dock does not change
+width. Pen draws ink, the brush draws colour, the eraser cuts both layers,
+and the colour circle still opens the palette. Nothing is clipped to a
+colour region. Strokes from this phase use the step id `free-creation`, so
+they are not the last guided step's strokes.
+
+*Ulangi langkah ini*, in the same help sheet, deletes only the active
+step's strokes. One *Batalkan* puts them back. Strokes from other steps
+stay. It does not ask first, because undo is the way back. *Mulai ulang*
+(accessible name "Mulai ulang karya", so it is not the resume toast's
+one-tap *Mulai ulang*) asks "Mau mulai dengan gambar kosong?" and then uses
+the existing restart, which is not undoable. *Kembali* during free drawing
+returns to the last guided step without deleting strokes.
+
+`freeCreation` is stored on the checkpoint as an optional field. Older
+checkpoints omit it and are read as not free. The persistence schema version
+is unchanged: bumping it would refuse every saved drawing, and migration is
+still deferred. The undo record for *Ulangi langkah ini* is session-only,
+same as *Hapus semua*. A free-drawing session is an ordinary saved drawing:
+Karyaku lists it and *Buka* restores `freeCreation` with the free strokes.

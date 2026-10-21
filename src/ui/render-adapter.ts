@@ -7,16 +7,19 @@
  */
 
 import type { LessonPackage } from '../lesson-data/schema';
+import { FREE_STEP_ID } from '../lesson-engine/session';
 import type { Stroke } from '../lesson-engine/types';
 import type { RenderStroke } from '../renderer/types';
 
 export function toRenderStroke(stroke: Stroke): RenderStroke {
+  const erase = stroke.tool === 'eraser';
   return {
     points: stroke.points,
     color: stroke.color,
     width: stroke.width,
     layer: stroke.layerId,
-    erase: stroke.tool === 'eraser',
+    erase,
+    eraseAll: erase && stroke.stepId === FREE_STEP_ID,
     clipPathIds: stroke.clipRegionIds,
   };
 }

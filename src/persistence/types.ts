@@ -36,6 +36,11 @@ export interface SessionCheckpoint {
   readonly toolPreferences: SessionState['toolPreferences'];
   readonly nextSequence: number;
   readonly finished: boolean;
+  /**
+   * Set when the child kept drawing after the last step. Missing on checkpoints
+   * written before that flag existed; readers treat absence as false.
+   */
+  readonly freeCreation?: boolean;
   /** Stroke ids in replay order. */
   readonly committedStrokeIds: readonly string[];
   /** Undone stroke ids, oldest undo first, so redo survives a reload (AT-05). */

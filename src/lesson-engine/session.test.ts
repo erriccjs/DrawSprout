@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  FREE_STEP_ID,
   activeClipRegionIds,
   activeLayerId,
   activeStep,
+  canUndo,
+  drawingStepId,
   effectiveToolPreset,
   guideOverlayMode,
   reduceSession,
@@ -207,5 +210,85 @@ describe('assistance, input mode and colour boundaries', () => {
 
   it('has no boundary to apply on a line step', () => {
     expect(activeClipRegionIds(lesson, newSessionState())).toEqual([]);
+  });
+});
+
+function onLastStep(): SessionState {
+  return applyAll(
+    newSessionState(),
+    lesson.steps.slice(1).map(() => ({ type: 'next-step' }) as const),
+  );
+}
+
+describe('free creation and repeating a step', () => {
+  it('starts free drawing only on the last step, with no guide clip and every tool', () => {
+    const fresh = newSessionState();
+    expect(reduceSession(lesson, fresh, { type: 'enter-free-creation' })).toBe(fresh);
+
+    const last = onLastStep();
+    const free = reduceSession(lesson, last, { type: 'enter-free-creation' });
+    expect(sessionPhase(lesson, free)).toBe('free_creation');
+    expect(free.freeCreation).toBe(true);
+    expect(free.strokes).toBe(last.strokes);
+    expect(activeClipRegionIds(lesson, free)).toEqual([]);
+    expect(drawingStepId(lesson, free)).toBe(FREE_STEP_ID);
+
+    const pen = effectiveToolPreset(lesson, reduceSession(lesson, free, { type: 'set-tool', tool: 'pen' }));
+    const brush = effectiveToolPreset(lesson, reduceSession(lesson, free, { type: 'set-tool', tool: 'brush' }));
+    expect(pen.tool).toBe('pen');
+    expect(pen.color).toBe('#3a3a3a');
+    expect(activeLayerId(lesson, reduceSession(lesson, free, { type: 'set-tool', tool: 'pen' }))).toBe('ink');
+    expect(brush.tool).toBe('brush');
+    expect(activeLayerId(lesson, reduceSession(lesson, free, { type: 'set-tool', tool: 'brush' }))).toBe('color');
+    expect(reduceSession(lesson, free, { type: 'leave-free-creation' }).freeCreation).toBe(false);
+
+    const finished = reduceSession(lesson, last, { type: 'finish' });
+    const continued = reduceSession(lesson, finished, { type: 'enter-free-creation' });
+    expect(continued.finished).toBe(false);
+    expect(continued.freeCreation).toBe(true);
+  });
+
+  it('repeats only the active step and one undo restores those strokes', () => {
+    const first = draw(draw(newSessionState(), stepIdAt(0)), stepIdAt(0));
+    const later = draw(reduceSession(lesson, first, { type: 'next-step' }), stepIdAt(1));
+    const cleared = reduceSession(lesson, later, { type: 'clear-step' });
+
+    expect(cleared.strokes.map((stroke) => stroke.stepId)).toEqual([stepIdAt(0), stepIdAt(0)]);
+    expect(canUndo(lesson, cleared)).toBe(true);
+
+    const restored = reduceSession(lesson, cleared, { type: 'undo' });
+    expect(restored.strokes).toEqual(later.strokes);
+    expect(restored.clearedSteps).toEqual([]);
+  });
+
+  it('does not let a free-drawing repeat delete the guided strokes', () => {
+    const guided = draw(onLastStep(), stepIdAt(lesson.steps.length - 1));
+    const free = reduceSession(lesson, guided, { type: 'enter-free-creation' });
+    const withFreeStroke = reduceSession(lesson, free, {
+      type: 'commit-stroke',
+      stroke: {
+        id: 'free-stroke',
+        stepId: 'should-be-rewritten',
+        layerId: 'ink',
+        points: [{ x: 1, y: 1 }, { x: 4, y: 6 }],
+        color: '#111111',
+        width: 4,
+        tool: 'pen',
+        clipRegionIds: [],
+      },
+    });
+    expect(withFreeStroke.strokes.map((stroke) => stroke.stepId)).toContain(FREE_STEP_ID);
+
+    const repeated = reduceSession(lesson, withFreeStroke, { type: 'clear-step' });
+    expect(repeated.strokes).toEqual(guided.strokes);
+    expect(reduceSession(lesson, repeated, { type: 'undo' }).strokes.map((stroke) => stroke.id)).toContain('free-stroke');
+  });
+
+  it('drops the repeat when the picture is started over', () => {
+    const cleared = reduceSession(lesson, draw(newSessionState(), stepIdAt(0)), { type: 'clear-step' });
+    const restarted = reduceSession(lesson, cleared, { type: 'restart' });
+    expect(restarted.clearedSteps).toEqual([]);
+    expect(restarted.freeCreation).toBe(false);
+    expect(canUndo(lesson, restarted)).toBe(false);
   });
 });

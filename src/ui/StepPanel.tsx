@@ -9,7 +9,9 @@
 
 import { useState } from 'react';
 import type { LessonPackage, LessonStep } from '../lesson-data/schema';
+import { drawingStepId } from '../lesson-engine/session';
 import type { AssistanceMode, HintDurationMs, SessionAction, SessionState } from '../lesson-engine/types';
+import { ClearArtworkPrompt } from './ClearArtworkPrompt';
 
 const ASSISTANCE_CHOICES: readonly { mode: AssistanceMode; label: string; help: string }[] = [
   { mode: 'visible', label: 'Garis terlihat', help: 'Garis tetap tampil.' },
@@ -88,14 +90,15 @@ export function StepPanel({
 
 export function StepNavigation({ lesson, state, onFinish, dispatch }: StepNavigationProps) {
   const isLastStep = state.currentStepIndex === lesson.steps.length - 1;
+  const inFreeDraw = state.freeCreation;
 
   return (
     <div className="step-panel__nav">
       <button
         type="button"
         className="button"
-        disabled={state.currentStepIndex === 0}
-        onClick={() => dispatch({ type: 'prev-step' })}
+        disabled={!inFreeDraw && state.currentStepIndex === 0}
+        onClick={() => dispatch(inFreeDraw ? { type: 'leave-free-creation' } : { type: 'prev-step' })}
       >
         <span aria-hidden="true">← </span>
         <span className="button__text">Kembali</span>
@@ -164,6 +167,60 @@ export function StepControls({ state, guidesVisible, onShowHint, dispatch }: Ste
         )}
       </fieldset>
     </div>
+  );
+}
+
+interface LessonEditsProps {
+  readonly lesson: LessonPackage;
+  readonly state: SessionState;
+  readonly dispatch: (action: SessionAction) => void;
+  readonly onRestart: () => void;
+}
+
+/**
+ * In-lesson edits live in the help sheet so the dock stays the same width.
+ * "Ulangi langkah ini" is one undoable action. "Mulai ulang" asks first.
+ */
+export function LessonEdits({ lesson, state, dispatch, onRestart }: LessonEditsProps) {
+  const [confirmingRestart, setConfirmingRestart] = useState(false);
+  const stepId = drawingStepId(lesson, state);
+  const canRepeat = state.strokes.some((stroke) => stroke.stepId === stepId);
+  const onLastStep = state.currentStepIndex === lesson.steps.length - 1;
+
+  return (
+    <fieldset className="lesson-edits">
+      <legend>Langkah ini</legend>
+      {onLastStep && !state.freeCreation && (
+        <button type="button" className="button" onClick={() => dispatch({ type: 'enter-free-creation' })}>
+          Gambar bebas
+        </button>
+      )}
+      <button
+        type="button"
+        className="button"
+        disabled={!canRepeat}
+        onClick={() => dispatch({ type: 'clear-step' })}
+      >
+        Ulangi langkah ini
+      </button>
+      {confirmingRestart ? (
+        <ClearArtworkPrompt
+          compact
+          label="Mulai ulang karya"
+          onKeep={() => setConfirmingRestart(false)}
+          onClear={onRestart}
+        />
+      ) : (
+        <button
+          type="button"
+          className="button"
+          aria-label="Mulai ulang karya"
+          onClick={() => setConfirmingRestart(true)}
+        >
+          Mulai ulang
+        </button>
+      )}
+    </fieldset>
   );
 }
 
