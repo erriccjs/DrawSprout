@@ -100,15 +100,16 @@ describe('POST /api/photo-lesson', () => {
     ]);
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
-    expect(mock.calls).toHaveLength(1);
+    expect(mock.calls).toHaveLength(2);
     expect(mock.calls[0]?.key).toBe('same-key-01');
+    expect(mock.calls[1]?.key).toBe('same-key-01-colour');
     const body = await first.json() as { lesson: { steps: { instruction: string }[] }; targetHash: string };
     expect(body.targetHash).toMatch(/^[0-9a-f]{64}$/);
     expect(body.lesson.steps[0]?.instruction).toMatch(/Gambar bentuk yang paling besar|Gambar garis luar|bentuk dasar/);
 
     const third = await handlePhotoLessonRequest(post(art, 'same-key-01'), { OPENAI_API_KEY: 'test-key' }, shared);
     expect(third.status).toBe(200);
-    expect(mock.calls).toHaveLength(1);
+    expect(mock.calls).toHaveLength(2);
   });
 
   it('calls OpenAI again for a different key and for a failed retry', async () => {
@@ -131,7 +132,7 @@ describe('POST /api/photo-lesson', () => {
     expect(again.status).toBe(200);
     const other = await handlePhotoLessonRequest(post(art, 'other-key-02'), { OPENAI_API_KEY: 'test-key' }, shared);
     expect(other.status).toBe(200);
-    expect(calls).toEqual(['retry-after-fail', 'retry-after-fail', 'other-key-02']);
+    expect(calls).toEqual(['retry-after-fail', 'retry-after-fail', 'retry-after-fail-colour', 'other-key-02', 'other-key-02-colour']);
   });
 
   it('uses gpt-image-1.5 at low quality for simple, and the configured model otherwise', async () => {
@@ -151,8 +152,8 @@ describe('POST /api/photo-lesson', () => {
       deps(mock.images),
     );
     expect(unknown.status).toBe(200);
-    expect(mock.calls[1]?.model).toBe('gpt-image-1.5');
-    expect(mock.calls[1]?.quality).toBe('medium');
+    expect(mock.calls[2]?.model).toBe('gpt-image-1.5');
+    expect(mock.calls[2]?.quality).toBe('medium');
 
     const cheap = await handlePhotoLessonRequest(
       post(art, 'cheap-key001', 'default'),
@@ -160,8 +161,8 @@ describe('POST /api/photo-lesson', () => {
       deps(mock.images),
     );
     expect(cheap.status).toBe(200);
-    expect(mock.calls[2]?.model).toBe('gpt-image-1-mini');
-    expect(mock.calls[2]?.quality).toBe('medium');
+    expect(mock.calls[4]?.model).toBe('gpt-image-1-mini');
+    expect(mock.calls[4]?.quality).toBe('medium');
   });
 
   it('rate-limits new jobs and still serves a cached retry', async () => {
@@ -180,7 +181,7 @@ describe('POST /api/photo-lesson', () => {
     expect(blocked.status).toBe(429);
     const cached = await handlePhotoLessonRequest(post(art, 'rate-key-0'), { OPENAI_API_KEY: 'test-key' }, shared);
     expect(cached.status).toBe(200);
-    expect(mock.calls).toHaveLength(6);
+    expect(mock.calls).toHaveLength(12);
 
     time += 11 * 60 * 1000;
     const later = await handlePhotoLessonRequest(post(art, 'rate-key-later'), { OPENAI_API_KEY: 'test-key' }, shared);

@@ -7,7 +7,7 @@
 
 import { compareLessonToInk } from './compare';
 import { dominantColors } from './colors';
-import { readFlatIllustration, type FlatRegion } from './flat-colour';
+import { regionsColouredBy, type FlatRegion } from './flat-colour';
 import { downscaleLongEdge, flattenOnWhite } from './image-ops';
 import { buildPhotoLesson, lessonPieces, outlineCoverage, sanitizeTitle, shouldRedraw } from './lesson-build';
 import { sumUsage, type ImageEditor, type InstructionResult, type InstructionWriter, type TokenUsage } from './openai';
@@ -31,6 +31,10 @@ export interface PhotoPipelineInput {
 
 export interface PhotoPipelineResult {
   readonly illustrationPng: Uint8Array;
+  /** Line drawing. Drawing steps are traced from this. */
+  readonly lineArtPng: Uint8Array;
+  /** Flat colour painted onto the line drawing. Null when that call failed. */
+  readonly colouredPng: Uint8Array | null;
   readonly dominantColors: readonly string[];
   readonly lesson: ReturnType<typeof buildPhotoLesson>['lesson'];
   readonly targetHash: string;
@@ -42,18 +46,21 @@ export interface PhotoPipelineResult {
   readonly subjectFit: number;
   readonly imageUsage: TokenUsage | null;
   readonly textUsage: TokenUsage | null;
-  /** Successful image edits, including a redraw that was not kept. */
+  /** Successful image edits, including a colour pass and a redraw that was not kept. */
   readonly imageCalls: number;
+  /** True when a line drawing was requested again after the first pair. */
   readonly regenerated: boolean;
 }
 
 interface TracedEdit {
   readonly illustration: RgbaImage;
   readonly png: Uint8Array;
+  readonly colouredPng: Uint8Array | null;
   readonly targetHash: string;
   readonly contours: readonly Contour[];
   readonly flatRegions: readonly FlatRegion[];
   readonly usage: TokenUsage | null;
+  readonly calls: number;
 }
 
 export async function runPhotoPipeline(
@@ -69,15 +76,15 @@ export async function runPhotoPipeline(
   const quality = imageQualityFor(input.variant);
   const photoPng = await encodePng(downscaleLongEdge(photo, 512));
   let imageCalls = 0;
-  let traced = await editTraced(deps.images, input, photo, model, quality, false, false, input.idempotencyKey);
-  imageCalls += 1;
+  let traced = await drawPass(deps.images, input, photo, model, quality, false, false, input.idempotencyKey);
+  imageCalls += traced.calls;
   let imageUsage = traced.usage;
   let retried = false;
   if (shouldRedraw(outlineCoverage(traced.contours))) {
-    const second = await editTraced(deps.images, input, photo, model, quality, true, false, `${input.idempotencyKey}-redraw`).catch(() => null);
+    const second = await drawPass(deps.images, input, photo, model, quality, true, false, `${input.idempotencyKey}-redraw`).catch(() => null);
     retried = true;
     if (second) {
-      imageCalls += 1;
+      imageCalls += second.calls;
       imageUsage = sumUsage(imageUsage, second.usage);
       if (outlineCoverage(second.contours) >= outlineCoverage(traced.contours)) traced = second;
     }
@@ -86,10 +93,10 @@ export async function runPhotoPipeline(
   let written = await askParts(deps.instructions, input, traced, photoPng, '');
   let textUsage = written?.usage ?? null;
   if (written && !written.sameSubject && !retried) {
-    const second = await editTraced(deps.images, input, photo, model, quality, true, true, `${input.idempotencyKey}-redraw`).catch(() => null);
+    const second = await drawPass(deps.images, input, photo, model, quality, true, true, `${input.idempotencyKey}-redraw`).catch(() => null);
     retried = true;
     if (second) {
-      imageCalls += 1;
+      imageCalls += second.calls;
       imageUsage = sumUsage(imageUsage, second.usage);
       const again = await askParts(deps.instructions, input, second, photoPng, '-redraw');
       textUsage = sumUsage(textUsage, again?.usage ?? null);
@@ -101,7 +108,7 @@ export async function runPhotoPipeline(
   let built = lessonFrom(input, traced, photo, palette, written);
   let comparison = compareLessonToInk(built.lesson, traced.illustration);
   if (!retried && (comparison.needsReview || shouldRedraw(built.coverage))) {
-    const second = await editTraced(
+    const second = await drawPass(
       deps.images,
       input,
       photo,
@@ -112,7 +119,7 @@ export async function runPhotoPipeline(
       `${input.idempotencyKey}-redraw`,
     ).catch(() => null);
     if (second) {
-      imageCalls += 1;
+      imageCalls += second.calls;
       imageUsage = sumUsage(imageUsage, second.usage);
       const again = await askParts(deps.instructions, input, second, photoPng, '-redraw');
       textUsage = sumUsage(textUsage, again?.usage ?? null);
@@ -143,11 +150,14 @@ export async function runPhotoPipeline(
   const reasons = [comparison.reviewReason, built.reviewReason];
   if (subjectMismatch) reasons.push('Gambar tidak sama dengan foto. Cek dulu sebelum dipakai.');
   const review = reasons.filter((reason): reason is string => reason !== null && reason !== undefined);
+  const shown = traced.colouredPng ?? traced.png;
   return {
-    illustrationPng: traced.png,
+    illustrationPng: shown,
+    lineArtPng: traced.png,
+    colouredPng: traced.colouredPng,
     dominantColors: palette,
     lesson: built.lesson,
-    targetHash: traced.targetHash,
+    targetHash: shown === traced.png ? traced.targetHash : await sha256Hex(shown),
     needsReview: comparison.needsReview || built.needsReview || subjectMismatch,
     reviewReason: review.length > 0 ? review.join(' ') : null,
     model,
@@ -157,11 +167,11 @@ export async function runPhotoPipeline(
     imageUsage,
     textUsage,
     imageCalls,
-    regenerated: imageCalls > 1,
+    regenerated: imageCalls > 2,
   };
 }
 
-async function editTraced(
+async function drawPass(
   images: ImageEditor,
   input: PhotoPipelineInput,
   photo: RgbaImage,
@@ -183,8 +193,32 @@ async function editTraced(
     ...(reinforceSilhouette ? { reinforceSilhouette: true } : {}),
     ...(reinforceSubject ? { reinforceSubject: true } : {}),
   });
-  const traced = await traceEdited(edited.png);
-  return { ...traced, usage: edited.usage };
+  const traced = await traceLine(edited.png);
+  let usage = edited.usage;
+  let calls = 1;
+  let colouredPng: Uint8Array | null = null;
+  let flatRegions: readonly FlatRegion[] = [];
+  try {
+    const coloured = await images.edit({
+      png: traced.png,
+      referencePng: input.png,
+      variant: input.variant,
+      model,
+      quality,
+      width: traced.illustration.width,
+      height: traced.illustration.height,
+      idempotencyKey: `${idempotencyKey}-colour`,
+      signal: input.signal,
+    });
+    calls += 1;
+    usage = sumUsage(usage, coloured.usage);
+    const page = flattenOnWhite(await decodePng(coloured.png));
+    colouredPng = await encodePng(page);
+    flatRegions = regionsColouredBy(traced.illustration, page).regions;
+  } catch {
+    // The line drawing still becomes a lesson when the colour call fails.
+  }
+  return { ...traced, colouredPng, flatRegions, usage, calls };
 }
 
 async function askParts(
@@ -240,18 +274,19 @@ function lessonFrom(
   });
 }
 
-async function traceEdited(png: Uint8Array): Promise<TracedEdit> {
+async function traceLine(png: Uint8Array): Promise<TracedEdit> {
   const illustration = flattenOnWhite(await decodePng(png));
-  const flat = readFlatIllustration(illustration);
   const encoded = await encodePng(illustration);
-  const traced = traceInk(flat.lineArt);
+  const traced = traceInk(illustration);
   return {
     illustration,
     png: encoded,
+    colouredPng: null,
     targetHash: await sha256Hex(encoded),
-    contours: traced.length > 0 ? traced : traceInk(illustration),
-    flatRegions: flat.regions,
+    contours: traced,
+    flatRegions: [],
     usage: null,
+    calls: 1,
   };
 }
 

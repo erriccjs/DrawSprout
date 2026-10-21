@@ -13,14 +13,13 @@ export const DEFAULT_TEXT_MODEL = 'gpt-4.1-mini';
 export type PhotoVariant = 'default' | 'faithful' | 'simple';
 
 const SHARED = [
-  'Turn this photo into a colouring-book page for a five-year-old.',
-  'One main subject only. Bold uniform black outlines and flat solid fills on a plain white background.',
-  'No shading, no gradients, no texture, no paper grain.',
-  'Fill each part with the true colour of that part in the photo. White stays white, black stays black, dark brown stays dark brown, and red stays red.',
-  'Draw one closed outer silhouette around the whole subject, then a few interior outlines that close each part.',
+  'Turn this photo into a simple drawing guide for a five-year-old.',
+  'One main subject only. Black line art on a plain white background.',
+  'No shading, no colour, and no fill. Lines only.',
+  'Draw one closed outer silhouette around the whole subject first, then interior outlines that close each part: eyes, ears, collar, tongue, cup, coffee, petals, leaves, wheels, seat, handle.',
   'Keep the pose, the direction the subject faces, the silhouette, the proportions, and the count of visible parts of that subject.',
   'Keep the same framing and crop as the photo. A close-up stays a close-up. Do not zoom out to show the whole body if the photo only shows the head.',
-  'Keep distinctive features that identify it: markings, ears, wheels, handle, petals.',
+  'Keep distinctive features that identify it: markings, ears, wheels, handle, petals, leaves.',
   'Leave out the background and anything that is not the subject: people, hands, legs, leashes, furniture, ground, sky, and scenery.',
   'Do not draw letters, numbers, barcodes, logos, racing numbers, or writing, unless the writing itself is the only subject.',
   'Do not draw a barcode, QR code, price sticker, or any row of vertical black bars. If the photo has one, leave that area blank. Do not copy stripes, ticks, or a grille.',
@@ -49,15 +48,35 @@ export function imagePrompt(variant: PhotoVariant, reinforceSilhouette = false, 
   return extra.length === 0 ? base : `${base} ${extra.join(' ')}`;
 }
 
+/** Fill the line drawing. The first image is the line art and the second is the photo. */
+export function colourPrompt(): string {
+  return [
+    'The first image is a finished line drawing. The second image is the photo of the same subject.',
+    'Fill each enclosed area of the line drawing with one flat solid colour that matches that part in the photo.',
+    'Do not change, add, remove, or move any line. Do not redraw the subject.',
+    'No shading, no gradients, no texture.',
+    'Grey stays grey, not beige and not orange. Red stays red, not orange. Black stays black. Dark brown stays dark brown. White stays white.',
+    'Leave the paper outside the subject white.',
+  ].join(' ');
+}
+
 /**
  * Replicate Kontext prompt. Positive only: naming vehicles in a negative
  * list made flux-kontext-pro draw cars (D-70). OpenAI keeps `imagePrompt`.
  */
-export function replicatePrompt(reinforceSilhouette = false, reinforceSubject = false): string {
+export function replicatePrompt(reinforceSilhouette = false, reinforceSubject = false, colour = false): string {
+  if (colour) {
+    return [
+      'Flat solid colour inside this line drawing.',
+      'Do not change, add, or move any line.',
+      'Match the subject\'s true colours. Grey stays grey. Red stays red. Black stays black.',
+      'Plain white background. No shading and no text.',
+    ].join(' ');
+  }
   const lines = [
-    'Colouring-book page of this one subject for a young child.',
-    'Bold black outlines and flat solid fills in the subject\'s true colours.',
-    'Plain white background. No shading, no gradients, and no text.',
+    'Black line drawing of this one subject for a young child.',
+    'One closed outer silhouette and interior outlines that close each part.',
+    'Plain opaque white background. No colour, no shading, no text.',
     "Keep the photo's framing and crop.",
   ];
   if (reinforceSilhouette) lines.push('Draw the full subject as one continuous closed outer silhouette.');

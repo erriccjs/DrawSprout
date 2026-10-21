@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { flatColourRegions, lineArtImage, paletteName } from './flat-colour';
+import { flatColourRegions, lineArtImage, paletteName, regionsColouredBy } from './flat-colour';
 import type { RgbaImage } from './png';
 
 function painted(
@@ -28,6 +28,8 @@ describe('flat colouring page', () => {
     expect(paletteName({ r: 140, g: 140, b: 140 })).toBe('abu-abu');
     expect(paletteName({ r: 72, g: 42, b: 24 })).toBe('cokelat tua');
     expect(paletteName({ r: 120, g: 20, b: 30 })).toBe('merah');
+    expect(paletteName({ r: 210, g: 40, b: 45 })).toBe('merah');
+    expect(paletteName({ r: 150, g: 145, b: 140 })).toBe('abu-abu');
     expect(paletteName({ r: 20, g: 20, b: 20 })).toBe('hitam');
   });
 
@@ -72,5 +74,40 @@ describe('flat colouring page', () => {
     const names = flatColourRegions(framed).map((region) => region.name);
     expect(names).toContain('abu-abu');
     expect(names).not.toContain('hijau');
+  });
+
+  it('colours enclosed areas of the line drawing from the aligned page', () => {
+    const lines = painted(48, 36, (x, y) => {
+      const outer = x >= 6 && x < 42 && y >= 4 && y < 32 && (x < 8 || x >= 40 || y < 6 || y >= 30);
+      const inner = x >= 18 && x < 30 && y >= 14 && y < 24 && (x < 20 || x >= 28 || y < 16 || y >= 22);
+      return outer || inner ? [0, 0, 0] : [255, 255, 255];
+    });
+    const coloured = painted(48, 36, (x, y) => {
+      if (x >= 20 && x < 28 && y >= 16 && y < 22) return [40, 70, 210];
+      if (x >= 8 && x < 40 && y >= 6 && y < 30) return [210, 40, 45];
+      return [40, 160, 50];
+    });
+    const sampled = regionsColouredBy(lines, coloured);
+    const names = sampled.regions.map((region) => region.name).sort();
+    expect(names).toEqual(['biru', 'merah']);
+    expect(sampled.mixed).toBe(false);
+    expect(sampled.regions.every((region) => region.mixed !== true)).toBe(true);
+  });
+
+  it('skips white paper and flags a region that holds two colours', () => {
+    const lines = painted(48, 36, (x, y) => (
+      x >= 6 && x < 42 && y >= 4 && y < 32 && (x < 8 || x >= 40 || y < 6 || y >= 30) ? [0, 0, 0] : [255, 255, 255]
+    ));
+    const white = painted(48, 36, () => [255, 255, 255]);
+    expect(regionsColouredBy(lines, white).regions).toHaveLength(0);
+    const mixed = painted(48, 36, (x, y) => {
+      if (x < 8 || x >= 40 || y < 6 || y >= 30) return [255, 255, 255];
+      return x < 24 ? [210, 40, 45] : [40, 70, 210];
+    });
+    const sampled = regionsColouredBy(lines, mixed);
+    expect(sampled.regions).toHaveLength(1);
+    expect(sampled.mixed).toBe(true);
+    expect(sampled.regions[0]?.mixed).toBe(true);
+    expect(['merah', 'biru']).toContain(sampled.regions[0]?.name);
   });
 });

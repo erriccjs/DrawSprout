@@ -145,7 +145,7 @@ export async function handlePhotoLessonRequest(
       png,
       variant,
       idempotencyKey,
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(120_000)]),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(180_000)]),
       provider,
       ...(configuredImageModel ? { configuredImageModel } : {}),
       textModel: env.OPENAI_TEXT_MODEL || DEFAULT_TEXT_MODEL,

@@ -1239,4 +1239,18 @@ The v6 run (commit 4759f94, OpenAI only) kept the drawing fixes: framing stayed 
 
 **Prompt.** The barcode line now also refuses a QR code, a price sticker, and a row of vertical bars, and tells the model to leave that area blank. The OpenAI prompt still refuses extra vehicles and wheels. The Kontext prompt stays positive and does not name them.
 
-The eval idempotency key ends in `v7`. The gate is still not claimed.
+The eval idempotency key ended in `v7` for that flat-page run. D-74 bumps it to `v8`. The gate is still not claimed.
+
+### D-74 — Line art and colour are two aligned images
+
+The v7 run (commit 99dff63) coloured well and drew badly. The flat pages had the right colours (a black dog with a red collar and a pink tongue, white cup with dark coffee, white petals with a dark-red centre, a grey car with a brown seat). The drawing steps did not: the cup's first step was a rim fragment, the dog and the flower had one drawing step, and the cat's later steps were empty. Colour regions were mis-named and painted over one another (the red collar came out `oranye`, the cat became beige, coffee was named as the cup, leaves as petals). A rubric preview was a no-go. This is not a pass. `claimedPass` stays false.
+
+**Two calls.** Call A is the v6 line drawing: black lines only, no fill. Every drawing step is traced from that image (outline, named parts, piece ids, at most seven steps). Call B is an image edit of that line drawing, with the photo as a second reference. It is told to fill each enclosed area with one flat colour from the photo and not to change, add, or move a line, so the colour page lines up with the line drawing. A normal photo is two image calls. A redraw is another pair. `regenerated` means more than those two. The job timeout is 180 seconds so both calls fit. About $0.13 a photo on the OpenAI list price is accepted for this spike.
+
+**Regions.** Enclosed areas come from the line drawing, after a small gap is closed and the paper outside the subject is flooded away. They are not taken from the colour page. Each region's colour is the mode of the colour page's pixels inside it, then the Lab-nearest name. A bright red with little green is `merah`, not `oranye`. A warm grey is `abu-abu`, not beige. One region gets exactly one colour. A region that is actually two colours is still given its mode and `needsReview` is set. The name is the vision part whose box contains the region: coffee is not the cup, a collar is not the eyes or the body, a leaf is `daun` not a petal, a wheel is `roda`.
+
+**White.** A white region is not a colour step. The paper is already white, and a white fill was painting over the parts inside it (the cup wall, the petals). The outline still shows those shapes. This is a change from D-73, which painted `putih`.
+
+**Empty steps.** New ink is counted on the path that is actually shipped, not on a contour that the stroke then hides. A step with no new visible ink is dropped and flagged. `needsReview` is also set when fewer than three drawing steps remain, when a colour step would not change the picture, or when one region holds more than one colour. These flags do not ask for another illustration.
+
+The harness writes `illustrations/<photo>-line.png` and `illustrations/<photo>-colour.png`. The eval idempotency key ends in `v8`. The gate is still not claimed.

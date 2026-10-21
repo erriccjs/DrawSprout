@@ -17,6 +17,8 @@ export interface FlatRegion {
   readonly pixels: number;
   readonly cx: number;
   readonly cy: number;
+  /** The enclosed area held more than one colour. The name is still the mode. */
+  readonly mixed?: boolean;
 }
 
 interface Rgb {
@@ -43,12 +45,14 @@ const SWATCHES: readonly { readonly name: string; readonly hex: string; readonly
 
 const LAB = SWATCHES.map((swatch) => ({ ...swatch, lab: toLab(swatch.rgb) }));
 
-/** Nearest Indonesian colour in Lab. Near-white stays putih and near-black stays hitam. */
+/** Nearest Indonesian colour in Lab. Near-white stays putih, near-black stays hitam, and a warm grey stays abu-abu. */
 export function paletteName(rgb: Rgb): string {
   const lum = luminance(rgb);
   const sat = saturation(rgb);
   if (sat < 0.14 && lum >= 225) return 'putih';
   if (sat < 0.16 && lum < 42) return 'hitam';
+  if (sat < 0.18 && lum >= 50 && lum < 210) return 'abu-abu';
+  if (redNotOrange(rgb, sat)) return 'merah';
   const sample = toLab(rgb);
   let best = LAB[0] ?? { name: 'abu-abu', hex: '#8d8d8d' };
   let bestDistance = Number.POSITIVE_INFINITY;
@@ -85,6 +89,191 @@ export function flatColourRegions(image: RgbaImage): FlatRegion[] {
 
 export function lineArtImage(image: RgbaImage): RgbaImage {
   return readFlatIllustration(image).lineArt;
+}
+
+/**
+ * Enclosed areas of a line drawing, coloured from a second image that shares
+ * its pixels. White paper is not a fill. A region that is not one colour is
+ * marked `mixed` and still keeps a single mode.
+ */
+export function regionsColouredBy(lineArt: RgbaImage, coloured: RgbaImage): { regions: FlatRegion[]; mixed: boolean } {
+  const aligned = sameSize(lineArt, coloured) ? coloured : scaleNearest(coloured, lineArt.width, lineArt.height);
+  const { width, height } = lineArt;
+  const line = lineMask(lineArt);
+  const radius = Math.min(width, height) >= 800 ? 3 : (width < 64 || height < 64 ? 1 : 2);
+  const barrier = erodeMask(dilateMask(line, width, height, radius), width, height, radius);
+  if (!barrier.some((value) => value === 1)) return { regions: [], mixed: false };
+  const inside = interiorMask(barrier, width, height);
+  return colourComponents(aligned, inside, width, height);
+}
+
+function redNotOrange(rgb: Rgb, sat: number): boolean {
+  if (sat < 0.45 || rgb.r < 140 || rgb.g >= 80) return false;
+  return rgb.r > rgb.g * 2.4 && rgb.r > rgb.b * 1.8;
+}
+
+function sameSize(left: RgbaImage, right: RgbaImage): boolean {
+  return left.width === right.width && left.height === right.height;
+}
+
+function scaleNearest(image: RgbaImage, width: number, height: number): RgbaImage {
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    const sy = Math.min(image.height - 1, Math.round((y * (image.height - 1)) / Math.max(1, height - 1)));
+    for (let x = 0; x < width; x += 1) {
+      const sx = Math.min(image.width - 1, Math.round((x * (image.width - 1)) / Math.max(1, width - 1)));
+      const from = (sy * image.width + sx) * 4;
+      const to = (y * width + x) * 4;
+      data[to] = image.data[from] ?? 0;
+      data[to + 1] = image.data[from + 1] ?? 0;
+      data[to + 2] = image.data[from + 2] ?? 0;
+      data[to + 3] = 255;
+    }
+  }
+  return { width, height, data };
+}
+
+function interiorMask(barrier: Uint8Array, width: number, height: number): Uint8Array {
+  const exterior = new Uint8Array(barrier.length);
+  const stack = new Int32Array(barrier.length);
+  let top = 0;
+  const push = (index: number) => {
+    if (index < 0 || index >= barrier.length || exterior[index] || barrier[index]) return;
+    exterior[index] = 1;
+    stack[top] = index;
+    top += 1;
+  };
+  for (let x = 0; x < width; x += 1) {
+    push(x);
+    push((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y += 1) {
+    push(y * width);
+    push(y * width + width - 1);
+  }
+  while (top > 0) {
+    top -= 1;
+    const index = stack[top] ?? 0;
+    const x = index % width;
+    if (x > 0) push(index - 1);
+    if (x + 1 < width) push(index + 1);
+    if (index >= width) push(index - width);
+    if (index + width < barrier.length) push(index + width);
+  }
+  const inside = new Uint8Array(barrier.length);
+  for (let index = 0; index < inside.length; index += 1) {
+    if (!barrier[index] && !exterior[index]) inside[index] = 1;
+  }
+  return inside;
+}
+
+function colourComponents(coloured: RgbaImage, mask: Uint8Array, width: number, height: number): { regions: FlatRegion[]; mixed: boolean } {
+  const ids = new Int32Array(mask.length);
+  const stack = new Int32Array(mask.length);
+  const stats: Array<{ id: number; pixels: number; minX: number; minY: number; maxX: number; maxY: number }> = [];
+  let next = 0;
+  for (let start = 0; start < mask.length; start += 1) {
+    if (!mask[start] || ids[start]) continue;
+    next += 1;
+    let top = 0;
+    ids[start] = next;
+    stack[top] = start;
+    top += 1;
+    let pixels = 0;
+    let minX = width;
+    let minY = height;
+    let maxX = 0;
+    let maxY = 0;
+    while (top > 0) {
+      top -= 1;
+      const index = stack[top] ?? 0;
+      pixels += 1;
+      const x = index % width;
+      const y = (index - x) / width;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+      const neighbors = [x > 0 ? index - 1 : -1, x + 1 < width ? index + 1 : -1, y > 0 ? index - width : -1, y + 1 < height ? index + width : -1];
+      for (const neighbor of neighbors) {
+        if (neighbor < 0 || !mask[neighbor] || ids[neighbor]) continue;
+        ids[neighbor] = next;
+        stack[top] = neighbor;
+        top += 1;
+      }
+    }
+    stats.push({ id: next, pixels, minX, minY, maxX, maxY });
+  }
+  const minimum = Math.max(20, Math.round(width * height * 0.00015));
+  const kept = stats.filter((stat) => stat.pixels >= minimum).sort((left, right) => right.pixels - left.pixels).slice(0, 12);
+  const regions: FlatRegion[] = [];
+  let mixed = false;
+  for (const stat of kept) {
+    const sampled = modeIn(coloured, ids, stat.id);
+    if (!sampled || sampled.name === 'putih') continue;
+    if (sampled.mixed) mixed = true;
+    const points = shapeOf(ids, stat.id, width, stat.minX, stat.minY, stat.maxX, stat.maxY);
+    if (!points || points.length < 4) continue;
+    const spot = memberPoint(ids, stat.id, width);
+    regions.push({
+      name: sampled.name,
+      hex: sampled.name === 'putih' ? '#ffffff' : paletteHex(sampled.name),
+      points,
+      pixels: stat.pixels,
+      cx: spot.x,
+      cy: spot.y,
+      mixed: sampled.mixed,
+    });
+  }
+  return { regions, mixed };
+}
+
+function modeIn(image: RgbaImage, ids: Int32Array, id: number): { name: string; mixed: boolean } | null {
+  const counts = new Map<string, number>();
+  let total = 0;
+  for (let index = 0; index < ids.length; index += 1) {
+    if (ids[index] !== id) continue;
+    const rgb = pixelAt(image.data, index);
+    if (!rgb) continue;
+    const name = paletteName(rgb);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+    total += 1;
+  }
+  if (total < 8) return null;
+  const ranked = [...counts.entries()].sort((left, right) => right[1] - left[1]);
+  const top = ranked[0];
+  if (!top) return null;
+  const second = ranked[1]?.[1] ?? 0;
+  return { name: top[0], mixed: second / total >= 0.22 };
+}
+
+function memberPoint(ids: Int32Array, id: number, width: number): { x: number; y: number } {
+  let sumX = 0;
+  let sumY = 0;
+  let seen = 0;
+  for (let index = 0; index < ids.length; index += 1) {
+    if (ids[index] !== id) continue;
+    sumX += index % width;
+    sumY += (index - (index % width)) / width;
+    seen += 1;
+  }
+  const ax = seen > 0 ? sumX / seen : 0;
+  const ay = seen > 0 ? sumY / seen : 0;
+  let bestX = ax;
+  let bestY = ay;
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < ids.length; index += 1) {
+    if (ids[index] !== id) continue;
+    const x = index % width;
+    const y = (index - x) / width;
+    const dist = (x - ax) ** 2 + (y - ay) ** 2;
+    if (dist < best) {
+      best = dist;
+      bestX = x;
+      bestY = y;
+    }
+  }
+  return { x: bestX, y: bestY };
 }
 
 function enclosedRegions(image: RgbaImage, barrier: Uint8Array): FlatRegion[] {

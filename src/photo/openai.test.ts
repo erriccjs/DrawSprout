@@ -41,7 +41,7 @@ describe('OpenAI client', () => {
     const promptText = typeof prompt === 'string' ? prompt : '';
     expect(promptText).toContain('Do not add limbs');
     expect(promptText).toContain('closed outer silhouette');
-    expect(promptText).toContain('flat solid fills');
+    expect(promptText).toContain('No shading, no colour');
     expect(promptText).toContain('barcode');
     expect(promptText).toContain('vertical black bars');
     expect(promptText).toContain('QR code');
@@ -89,6 +89,8 @@ describe('OpenAI client', () => {
     expect(text).toContain('kursi');
     expect(text).toContain('anjing');
     expect(text).toContain('cokelat tua');
+    expect(text).toContain('daun');
+    expect(text).toContain('bukan cangkir');
     expect(text).toContain('0. x=10');
     expect(content.filter((part) => part.type === 'image_url' && part.image_url?.url.startsWith('data:image/png;base64,')).length).toBe(2);
   });
@@ -115,5 +117,34 @@ describe('OpenAI client', () => {
     expect(form.get('quality')).toBe('low');
     const prompt = form.get('prompt');
     expect(typeof prompt === 'string' ? prompt : '').toContain('Do not redesign');
+  });
+
+  it('colours the line drawing and sends the photo as the second image', async () => {
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({
+      data: [{ b64_json: bytesToBase64(png) }],
+      usage: { input_tokens: 4, output_tokens: 6, total_tokens: 10 },
+    }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+    await openAiClients('sk-test-not-real').images.edit({
+      png,
+      referencePng: Uint8Array.from([4, 5, 6]),
+      variant: 'default',
+      model: 'gpt-image-1.5',
+      quality: 'medium',
+      width: 800,
+      height: 600,
+      idempotencyKey: 'colour-key',
+      signal: AbortSignal.timeout(1000),
+    });
+    const form = fetchMock.mock.calls[0]?.[1]?.body;
+    if (!(form instanceof FormData)) throw new Error('expected form data');
+    const prompt = form.get('prompt');
+    const promptText = typeof prompt === 'string' ? prompt : '';
+    expect(promptText).toContain('Do not change, add, remove, or move any line');
+    expect(promptText).toContain('Grey stays grey');
+    expect(promptText).toContain('Red stays red');
+    expect(form.getAll('image[]')).toHaveLength(2);
+    expect(form.get('image')).toBeNull();
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('idempotency-key')).toBe('colour-key');
   });
 });

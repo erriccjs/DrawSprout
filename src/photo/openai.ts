@@ -7,7 +7,7 @@
  */
 
 import { detectedPartFrom, type DetectedPart } from './parts';
-import { imagePrompt, imageSize, type ImageQuality, type PhotoVariant } from './prompts';
+import { colourPrompt, imagePrompt, imageSize, type ImageQuality, type PhotoVariant } from './prompts';
 
 export interface TokenUsage {
   readonly inputTokens: number;
@@ -28,6 +28,8 @@ export interface ImageEditRequest {
   readonly signal: AbortSignal;
   readonly reinforceSilhouette?: boolean;
   readonly reinforceSubject?: boolean;
+  /** When set, `png` is the line drawing and this is the photo to match. */
+  readonly referencePng?: Uint8Array;
 }
 
 export interface ImageEditResult {
@@ -80,13 +82,20 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
       async edit(input) {
         const form = new FormData();
         form.set('model', input.model);
-        form.set('prompt', imagePrompt(input.variant, input.reinforceSilhouette === true, input.reinforceSubject === true));
+        form.set('prompt', input.referencePng
+          ? colourPrompt()
+          : imagePrompt(input.variant, input.reinforceSilhouette === true, input.reinforceSubject === true));
         form.set('quality', input.quality);
         form.set('size', imageSize(input.width, input.height));
         form.set('n', '1');
         form.set('background', 'opaque');
         form.set('output_format', 'png');
-        form.set('image', new File([toBlobPart(input.png)], 'photo.png', { type: 'image/png' }));
+        if (input.referencePng) {
+          form.append('image[]', new File([toBlobPart(input.png)], 'lines.png', { type: 'image/png' }));
+          form.append('image[]', new File([toBlobPart(input.referencePng)], 'photo.png', { type: 'image/png' }));
+        } else {
+          form.set('image', new File([toBlobPart(input.png)], 'photo.png', { type: 'image/png' }));
+        }
         const response = await fetch(IMAGE_URL, {
           method: 'POST',
           headers: {
@@ -122,15 +131,15 @@ export function openAiClients(apiKey: string): { images: ImageEditor; instructio
                 {
                   type: 'text',
                   text: [
-                    'Gambar pertama adalah foto. Gambar kedua adalah halaman mewarnai: garis hitam tebal dan warna datar.',
+                    'Gambar pertama adalah foto. Gambar kedua adalah garis hitam saja, tanpa warna.',
                     'sameSubject true hanya bila gambar itu adalah benda yang sama dengan foto. Kucing yang digambar menjadi mobil adalah false.',
                     'subject adalah satu kata benda bahasa Indonesia untuk benda di foto (kucing, cangkir, bunga), tanpa kata sifat.',
                     'title pendek, 2 sampai 4 kata, tanpa kata sifat.',
                     'parts adalah bagian yang benar-benar terlihat, dari yang terbesar. name adalah satu kata benda saja, tanpa kata sifat dan tanpa warna: "anjing", bukan "anjing hitam lucu"; "bunga", bukan "bunga putih merah". Bukan nama bentuk, bukan kalimat, tanpa kata "dua".',
                     'Jangan memakai "bagian berikutnya", "bentuk utama", "buih", "latar belakang", "wajah anak", "barcode", atau "ventilasi".',
                     'Jangan memasukkan setiap potongan ke dalam satu kotak.',
-                    'Sebut bagian yang terlihat: garis luar, telinga, mata, hidung, kumis, kaki, ekor, roda, gagang, kelopak, tengah bunga, kopi, kalung, lidah, kursi.',
-                    'Kalung, lidah, kursi, gagang, kopi, dan tengah bunga masing-masing bagian sendiri bila terlihat. Jangan menggabungkan kalung ke badan.',
+                    'Sebut bagian yang terlihat: garis luar, telinga, mata, hidung, kumis, kaki, ekor, roda, gagang, kelopak, daun, tengah bunga, kopi, kalung, lidah, kursi.',
+                    'Kopi bukan cangkir. Kalung bukan mata dan bukan badan. Daun bukan kelopak. Roda bukan badan. Lidah, kursi, dan gagang masing-masing bagian sendiri bila terlihat.',
                     'pieceIds adalah nomor potongan yang termasuk bagian itu. Bagian garis luar hanya berisi potongan siluet, bukan detail di dalamnya.',
                     'pair true bila satu langkah menggambar sepasang simetris (dua telinga, dua mata, dua roda). pair true boleh berisi dua pieceIds.',
                     'count adalah jumlah yang digambar dalam satu langkah: 1 untuk gagang, permukaan kopi, kalung, atau lidah; 2 hanya untuk sepasang yang memang dua (dua telinga, dua mata, dua roda). Kelopak yang banyak bukan 2.',

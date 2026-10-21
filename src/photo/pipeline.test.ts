@@ -75,8 +75,10 @@ describe('photo pipeline wiring', () => {
     expect(result.lesson.steps[0]?.instruction).toBe('Gambar garis luar kotak.');
     expect(result.lesson.steps[0]?.instruction).not.toMatch(/wajah/);
     expect(result.textUsage).toEqual({ inputTokens: 11, outputTokens: 7, totalTokens: 18 });
-    expect(result.imageCalls).toBe(1);
+    expect(result.imageCalls).toBe(2);
     expect(result.regenerated).toBe(false);
+    expect(result.lineArtPng[0]).toBe(137);
+    expect(result.colouredPng?.[0]).toBe(137);
     const request = captured.request;
     if (request === null) throw new Error('instruction writer was not called');
     expect(request.photoPng[0]).toBe(137);

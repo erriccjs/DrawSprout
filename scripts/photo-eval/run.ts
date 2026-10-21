@@ -10,7 +10,8 @@
  *
  * `PHOTO_EVAL_OUT` sets the same output directory. The default is
  * ./photo-eval-out/. The contact sheet shows the photo, the illustration,
- * and a cumulative render of each lesson step.
+ * and a cumulative render of each lesson step. Raw images are written to
+ * illustrations/<photo>-line.png and illustrations/<photo>-colour.png.
  *
  * Recompute a filled rubric without calling the API:
  *
@@ -40,7 +41,7 @@ import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../
 import { composeContactSheet } from '../../src/photo/sheet';
 
 /** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
-const EVAL_KEY_REVISION = 'v7';
+const EVAL_KEY_REVISION = 'v8';
 
 interface Args {
   readonly score?: string;
@@ -134,7 +135,7 @@ async function main(): Promise<void> {
         variant,
         provider: job.provider,
         idempotencyKey: evalKey(name, photo.png, job),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(180_000),
         ...(job.model ? { configuredImageModel: job.model } : {}),
         textModel,
         lessonId: `photo-eval-${slug(name)}`,
@@ -155,11 +156,17 @@ async function main(): Promise<void> {
       const costUsd = flatUsd ?? priced.usd;
       const photoB64 = base64(photo.png);
       const illustrationB64 = base64(result.illustrationPng);
+      const stem = `${slug(name)}${jobs.length > 1 ? `-${slug(job.label)}` : ''}`;
+      await mkdir(path.join(outDir, 'illustrations'), { recursive: true });
+      await writeFile(path.join(outDir, 'illustrations', `${stem}-line.png`), result.lineArtPng);
+      if (result.colouredPng) await writeFile(path.join(outDir, 'illustrations', `${stem}-colour.png`), result.colouredPng);
       const stepPngs = await Promise.all(stepImages.map((image) => encodePng(image)));
       htmlRows.push(htmlRow({
         name: label,
         photo: photoB64,
         illustration: illustrationB64,
+        lineArt: base64(result.lineArtPng),
+        coloured: result.colouredPng ? base64(result.colouredPng) : '',
         steps: result.lesson.steps.map((step, index) => ({
           instruction: step.instruction,
           png: base64(stepPngs[index] ?? new Uint8Array()),
@@ -391,6 +398,8 @@ function htmlRow(input: {
   readonly name: string;
   readonly photo: string;
   readonly illustration: string;
+  readonly lineArt: string;
+  readonly coloured: string;
   readonly steps: readonly { instruction: string; png: string }[];
   readonly ms: number;
   readonly model: string;
@@ -409,7 +418,10 @@ function htmlRow(input: {
     + `<p>${input.ms} ms, ${escapeHtml(input.model)} ${escapeHtml(input.quality)}, `
     + `image ${escapeHtml(tokens(input.imageUsage))}, text ${escapeHtml(tokens(input.textUsage))}, usd ${cost}`
     + `${input.needsReview ? ', review' : ''}${input.regenerated ? ', regenerated' : ''}</p>`
-    + `<div class="pair"><img alt="" src="data:image/png;base64,${input.photo}"><img alt="" src="data:image/png;base64,${input.illustration}"></div>`
+    + `<div class="pair"><figure><img alt="" src="data:image/png;base64,${input.photo}"><figcaption>photo</figcaption></figure>`
+    + `<figure><img alt="" src="data:image/png;base64,${input.lineArt}"><figcaption>line</figcaption></figure>`
+    + (input.coloured ? `<figure><img alt="" src="data:image/png;base64,${input.coloured}"><figcaption>colour</figcaption></figure>` : '')
+    + `</div>`
     + `<div class="steps">${steps}</div></section>`;
 }
 

@@ -210,12 +210,14 @@ send `quality=medium` on OpenAI. *Lebih sederhana* stays on `gpt-image-1.5` at
 Lessons follow the traced outline of each named part, and interior lines stay
 on their own part instead of one box around the whole subject (D-71). A circle
 or oval is added first only when it fits that part; it is a light dashed guide
-and it is left out of the finished ink (D-70, D-72). The illustration is one
-flat colouring-book page. Colour steps come from the closed regions of that
-page, largest first, not from the photo background (D-73). White fills as white
-with the outline still visible. Drawing steps stay within about seven, and the
-first step names the subject without adjectives. The illustration keeps the
-photo's framing and is flattened onto white. OpenAI stays the default image model.
+and it is left out of the finished ink (D-70, D-72). A photo makes two images:
+a black line drawing, then a flat colouring of that drawing. Drawing steps
+come from the line drawing. Colour steps come from the enclosed areas of those
+lines, sampled on the colour image, largest first (D-74). A white area is not
+a colour step, because the paper is already white. Drawing steps stay within
+about seven, and the first step names the subject without adjectives. The
+illustration keeps the photo's framing and is flattened onto white. OpenAI
+stays the default image model.
 
 ### Evaluation
 
@@ -245,14 +247,15 @@ npm run photo-eval -- --score photo-eval-out/rubric.csv
 model (D-67), or $0.04 per image for `flux-kontext-pro`, including a
 regeneration (D-69, D-71). `OPENAI_IMAGE_USD` or `REPLICATE_IMAGE_USD`, if you
 set it to a number, replaces that figure; `listCostUsd` in `metrics.json`
-stays the computed one. Metrics include `regenerated` when a second image was
-made. Optional `PHOTO_EVAL_VARIANT` is `default`, `faithful`, or `simple`.
-`--compare` runs OpenAI and Kontext on one contact sheet and stops if either
-provider fails. `flux-1.1-pro` is unsuitable (it returns near-photos) and is
-not part of compare. Kontext uses its own short prompt and retries HTTP 429.
-The idempotency key for this revision ends in `v7`, so a rerun after the
-flat-colour change is a new paid job. `REPLICATE_API_TOKEN` is read only when
-`REPLICATE_API_KEY` is unset.
+stays the computed one. Metrics include `regenerated` when the line drawing was requested again
+after the first pair. The harness writes `illustrations/<photo>-line.png` and
+`illustrations/<photo>-colour.png`. Optional `PHOTO_EVAL_VARIANT` is
+`default`, `faithful`, or `simple`. `--compare` runs OpenAI and Kontext on
+one contact sheet and stops if either provider fails. `flux-1.1-pro` is
+unsuitable (it returns near-photos) and is not part of compare. Kontext uses
+its own short prompt and retries HTTP 429. The idempotency key for this
+revision ends in `v8`, so a rerun after the two-image change is a new paid
+job. `REPLICATE_API_TOKEN` is read only when `REPLICATE_API_KEY` is unset.
 
 CC0 samples, with credits, are in `scripts/photo-eval/samples/` (`LICENSES.md`).
 Running them does not pass the gate.

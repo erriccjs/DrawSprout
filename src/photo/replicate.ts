@@ -120,7 +120,7 @@ interface Prediction {
 
 async function createPrediction(apiKey: string, model: string, input: ImageEditRequest): Promise<Prediction> {
   const dataUrl = `data:image/png;base64,${bytesToBase64(input.png)}`;
-  const prompt = replicatePrompt(input.reinforceSilhouette === true, input.reinforceSubject === true);
+  const prompt = replicatePrompt(input.reinforceSilhouette === true, input.reinforceSubject === true, input.referencePng !== undefined);
   const body = replicateUsesImagePrompt(model)
     ? {
       input: {

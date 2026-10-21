@@ -368,8 +368,11 @@ function appendFlatColours(
   const loaded = loadRegions(input);
   const notes: string[] = [];
   let empty = false;
+  let mixed = false;
   const buckets = new Map<string, ColourBucket>();
   for (const region of loaded) {
+    if (region.name === 'putih') continue;
+    if (region.mixed) mixed = true;
     const mapped = mapContour({ points: region.points, closed: true }, input.sourceWidth, input.sourceHeight);
     if (mapped.points.length < 3) continue;
     const area = boxOf(mapped.points).area;
@@ -386,6 +389,7 @@ function appendFlatColours(
     buckets.set(region.name, bucket);
   }
   if (empty) notes.push('Ada langkah warna yang tidak mengisi. Cek dulu sebelum dipakai.');
+  if (mixed) notes.push('Ada bagian dengan lebih dari satu warna. Cek dulu sebelum dipakai.');
   const rows = [...buckets.values()].sort((left, right) => right.pixels - left.pixels);
   rows.forEach((bucket, index) => {
     const id = `color-${index + 1}`;
@@ -503,17 +507,81 @@ function freshInk(existing: Uint8Array, contours: readonly MappedContour[]): num
 
 function stampContours(mask: Uint8Array, contours: readonly MappedContour[]): void {
   for (const contour of contours) {
-    const points = contour.points;
+    const points = samplePath(contour.path);
     for (let index = 1; index < points.length; index += 1) {
       const start = points[index - 1];
       const end = points[index];
       if (start && end) stampSegment(mask, start, end);
     }
-    if (!contour.closed || points.length < 2) continue;
-    const start = points[points.length - 1];
-    const end = points[0];
-    if (start && end) stampSegment(mask, start, end);
   }
+}
+
+/** The shipped path, sampled the way the contact sheet draws it. */
+function samplePath(d: string): Point[] {
+  const tokens = d.match(/[a-z]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? [];
+  const points: Point[] = [];
+  let index = 0;
+  let start: Point | null = null;
+  let cursor = { x: 0, y: 0 };
+  const take = (offset: number) => Number(tokens[index + offset] ?? '0');
+  while (index < tokens.length) {
+    const token = tokens[index] ?? '';
+    if (!/^[a-z]$/i.test(token)) {
+      index += 1;
+      continue;
+    }
+    const command = token.toUpperCase();
+    if (command === 'Z') {
+      if (start) points.push(start);
+      if (start) cursor = start;
+      index += 1;
+      continue;
+    }
+    if (command === 'M' || command === 'L') {
+      cursor = { x: take(1), y: take(2) };
+      if (command === 'M') start = cursor;
+      points.push(cursor);
+      index += 3;
+      continue;
+    }
+    if (command === 'H') {
+      cursor = { x: take(1), y: cursor.y };
+      points.push(cursor);
+      index += 2;
+      continue;
+    }
+    if (command === 'V') {
+      cursor = { x: cursor.x, y: take(1) };
+      points.push(cursor);
+      index += 2;
+      continue;
+    }
+    if (command === 'C') {
+      const c1 = { x: take(1), y: take(2) };
+      const c2 = { x: take(3), y: take(4) };
+      const end = { x: take(5), y: take(6) };
+      for (let step = 1; step <= 8; step += 1) {
+        const t = step / 8;
+        const mt = 1 - t;
+        points.push({
+          x: mt * mt * mt * cursor.x + 3 * mt * mt * t * c1.x + 3 * mt * t * t * c2.x + t * t * t * end.x,
+          y: mt * mt * mt * cursor.y + 3 * mt * mt * t * c1.y + 3 * mt * t * t * c2.y + t * t * t * end.y,
+        });
+      }
+      cursor = end;
+      index += 7;
+      continue;
+    }
+    if (command === 'A') {
+      const end = { x: take(6), y: take(7) };
+      points.push(end);
+      cursor = end;
+      index += 8;
+      continue;
+    }
+    index += 1;
+  }
+  return points;
 }
 
 function stampSegment(mask: Uint8Array, start: Point, end: Point): void {

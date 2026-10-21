@@ -364,7 +364,7 @@ describe('named traced parts', () => {
     const illustrated = new Set(flatColourRegions(cup).map((region) => region.name));
     expect(illustrated.has('putih')).toBe(true);
     expect(illustrated.has('cokelat tua')).toBe(true);
-    expect(colours.some((text) => text.includes('putih'))).toBe(true);
+    expect(colours.some((text) => text.includes('putih'))).toBe(false);
     expect(colours.some((text) => text.includes('cokelat tua'))).toBe(true);
     expect(colours.join(' ')).not.toMatch(/abu-abu|merah muda/);
     for (const text of colours) {
@@ -374,8 +374,6 @@ describe('named traced parts', () => {
     expect(built.lesson.steps.some((step) => isGenericInstruction(step.instruction))).toBe(false);
     expect(built.lesson.steps.find((step) => step.id === 'outline-1')?.guidePaths).toHaveLength(1);
     expect(built.lesson.steps.some((step) => step.instruction === 'Gambar kopi.')).toBe(true);
-    const white = built.lesson.steps.find((step) => step.instruction.includes('putih'));
-    expect(white?.toolPreset.color).toBe('#ffffff');
     const grey = { r: 200, g: 200, b: 200 };
     const drawingCount = built.lesson.steps.findIndex((step) => step.phase === 'color');
     let previous = renderCumulativeStep(built.lesson, drawingCount, 180, grey);
@@ -384,7 +382,6 @@ describe('named traced parts', () => {
       expect(changedPixels(previous, next)).toBeGreaterThanOrEqual(20);
       previous = next;
     }
-    expect(countTone(previous, (red, green, blue) => red > 245 && green > 245 && blue > 245)).toBeGreaterThan(20);
     expect(countTone(previous, (red, green, blue) => red > 50 && red < 110 && green < 70 && blue < 50)).toBeGreaterThan(10);
     expect(countTone(previous, (red, green, blue) => red < 80 && green < 80 && blue < 80)).toBeGreaterThan(8);
   });
@@ -663,6 +660,35 @@ describe('named traced parts', () => {
     expect(built.lesson.steps.some((step) => step.instruction.includes('kumis'))).toBe(false);
     expect(built.needsReview).toBe(true);
     expect(built.reviewReason).toContain('tidak menambah garis');
+  });
+
+  it('skips white, names the collar from the part that contains it, and flags a mixed region', () => {
+    const photo = painted(24, 18, () => [20, 20, 20]);
+    const built = buildPhotoLesson({
+      id: 'photo-collar',
+      title: 'Anjing',
+      targetHash: 'abcdef1234567890',
+      contours: [square(120, 80, 700)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#111111'],
+      flatRegions: [
+        { name: 'putih', hex: '#ffffff', points: square(400, 200, 80).points, pixels: 400, cx: 440, cy: 240 },
+        { name: 'merah', hex: '#c62828', points: square(200, 500, 140).points, pixels: 900, cx: 270, cy: 570 },
+        { name: 'hitam', hex: '#1a1a1a', points: square(120, 80, 700).points, pixels: 4000, cx: 470, cy: 400, mixed: true },
+      ],
+      parts: [
+        { ...part('badan', false, 'oranye'), ...cover(120, 80, 700, 560) },
+        { ...part('kalung', false, 'oranye'), ...cover(200, 500, 140, 140) },
+      ],
+    });
+    const colours = built.lesson.steps.filter((step) => step.phase === 'color').map((step) => step.instruction);
+    expect(colours.some((text) => text.includes('putih'))).toBe(false);
+    expect(colours.some((text) => text.includes('kalung') && text.includes('merah'))).toBe(true);
+    expect(colours.join(' ')).not.toMatch(/mata/);
+    expect(built.needsReview).toBe(true);
+    expect(built.reviewReason).toContain('lebih dari satu warna');
   });
 });
 
