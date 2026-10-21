@@ -801,3 +801,21 @@ slider and the dock follow the bottom of the sheet, so the open space is
 below the tools rather than around the paper. The toast sits in that lower
 band, above *Lanjut*, and does not cover the tools. The sheet does not grow
 past 4:3, because cropping the lesson would hide strokes at the sides.
+
+### D-62 — Ten beginner lessons, in a scrolling grid
+
+The picker shipped six pictures. A child who has drawn the cat, the flower,
+the fish, the sun, the apple tree, and the basketball had nothing new to
+choose, and the tiles were sized for a short list.
+
+**Choice.** Four more hand-authored packages join `BUNDLED_LESSONS`, still in
+the 1000×750 space, still outline (and detail) steps before colour regions,
+still `automaticEnabled: false`: `house` ("Rumah"), `car` ("Mobil"),
+`butterfly` ("Kupu-kupu"), and `star` ("Bintang"). Each has a target preview
+the picker draws, and each is validated with the others. Apples stay on the
+existing "Pohon Apel" lesson rather than becoming an eleventh picture.
+
+The picture list is a grid (`auto-fill`, about 200px) inside a shell that
+scrolls when the list is taller than the screen. A portrait phone uses two
+columns. The drawing screen still locks the shell (`:has(> .pad)`), so this
+scroll does not change the paper, the dock, or the sample card.
