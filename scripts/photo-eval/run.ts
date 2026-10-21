@@ -41,7 +41,7 @@ import { computeRubric, parseRubricCsv, rubricCsv, type RubricRow } from '../../
 import { composeContactSheet } from '../../src/photo/sheet';
 
 /** Bumped when the prompt or the lesson builder changes, so a rerun is a new paid job. */
-const EVAL_KEY_REVISION = 'v8';
+const EVAL_KEY_REVISION = 'v9';
 
 interface Args {
   readonly score?: string;
@@ -178,6 +178,7 @@ async function main(): Promise<void> {
         textUsage: result.textUsage,
         costUsd,
         needsReview: result.needsReview,
+        reviewReasons: result.reviewReasons,
         regenerated: result.regenerated,
       }));
       metrics.push({
@@ -198,6 +199,7 @@ async function main(): Promise<void> {
         imageUsd: priced.imageUsd,
         textUsd: priced.textUsd,
         needsReview: result.needsReview,
+        reviewReasons: result.reviewReasons,
         regenerated: result.regenerated,
         targetHash: result.targetHash,
       });
@@ -389,6 +391,7 @@ interface PhotoMetric {
   readonly imageUsd?: number | null;
   readonly textUsd?: number | null;
   readonly needsReview?: boolean;
+  readonly reviewReasons?: readonly string[];
   readonly regenerated?: boolean;
   readonly targetHash?: string;
   readonly error?: string;
@@ -408,6 +411,7 @@ function htmlRow(input: {
   readonly textUsage: TokenUsage | null;
   readonly costUsd: number | null;
   readonly needsReview: boolean;
+  readonly reviewReasons: readonly string[];
   readonly regenerated: boolean;
 }): string {
   const cost = input.costUsd === null ? 'unknown' : input.costUsd.toFixed(4);
@@ -417,7 +421,9 @@ function htmlRow(input: {
   return `<section><h2>${escapeHtml(input.name)}</h2>`
     + `<p>${input.ms} ms, ${escapeHtml(input.model)} ${escapeHtml(input.quality)}, `
     + `image ${escapeHtml(tokens(input.imageUsage))}, text ${escapeHtml(tokens(input.textUsage))}, usd ${cost}`
-    + `${input.needsReview ? ', review' : ''}${input.regenerated ? ', regenerated' : ''}</p>`
+    + `${input.needsReview ? ', review' : ''}${input.regenerated ? ', regenerated' : ''}`
+    + (input.reviewReasons.length > 0 ? ` — ${escapeHtml(input.reviewReasons.join(' '))}` : '')
+    + `</p>`
     + `<div class="pair"><figure><img alt="" src="data:image/png;base64,${input.photo}"><figcaption>photo</figcaption></figure>`
     + `<figure><img alt="" src="data:image/png;base64,${input.lineArt}"><figcaption>line</figcaption></figure>`
     + (input.coloured ? `<figure><img alt="" src="data:image/png;base64,${input.coloured}"><figcaption>colour</figcaption></figure>` : '')

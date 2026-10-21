@@ -1253,4 +1253,18 @@ The v7 run (commit 99dff63) coloured well and drew badly. The flat pages had the
 
 **Empty steps.** New ink is counted on the path that is actually shipped, not on a contour that the stroke then hides. A step with no new visible ink is dropped and flagged. `needsReview` is also set when fewer than three drawing steps remain, when a colour step would not change the picture, or when one region holds more than one colour. These flags do not ask for another illustration.
 
-The harness writes `illustrations/<photo>-line.png` and `illustrations/<photo>-colour.png`. The eval idempotency key ends in `v8`. The gate is still not claimed.
+The harness writes `illustrations/<photo>-line.png` and `illustrations/<photo>-colour.png`. The eval idempotency key ended in `v8` for that two-image run. D-75 bumps it to `v9`. The gate is still not claimed.
+
+### D-75 — Interior lines, sampled fills, and a quieter review gate
+
+The v8 run (commit 49a1732) was the best so far. The toy car was the first sample at 4 or better on every rubric dimension in the owner's preview, and the cat was close. Colours were mostly right and visible. It is not a pass. `claimedPass` stays false.
+
+**Lines.** Open interior strokes (eyes, nose, whiskers, petal divisions) were dropped, so a lesson could be only the outer outline plus closed areas. A stroke inside the outline becomes its own step when a vision part sits on that ink. A cup and a saucer are two outline steps when they are two large closed shapes. A step whose label does not overlap its ink, or whose path adds nothing past the lines already drawn, is dropped.
+
+**Colour.** Call B was redrawing the page: only about half to three quarters of A's lines sat within 3 pixels of B's dark lines, and B added a number and a barcode. The colour prompt now says to only fill and to keep every line exactly, including no new numbers or barcodes. Before sampling, B is shifted and scaled by a small search so its dark lines land on A's. Each region's colour is the median of an eroded interior, so B's offset black outline does not vote. A red collar stays red. Dark brown coffee stays `cokelat tua` or `hitam`, not `abu-abu`. The fill is that sampled colour snapped to a flat step, not a stock swatch of a different brightness. One part and one colour is one step, so an eye is not labelled as the nose and the face.
+
+**Cost.** Call A stays at the variant's quality. Call B uses `quality=low`. The harness cost is the measurement of whether the cheaper fill is enough.
+
+**Review.** All five v8 lessons were flagged, including the good car, and the reason was not in the output. `reviewReasons` is written into `metrics.json` and the contact-sheet HTML. A lesson is not sent back just because the illustration has extra ink the steps do not draw, or because a duplicate stroke was dropped. A lesson like the car, with several visible drawing steps and colours that match their parts, is not flagged. A blank or mismatched drawing still is. These flags do not ask for another illustration. This is not the section 8 gate.
+
+The eval idempotency key ends in `v9`. The gate is still not claimed.

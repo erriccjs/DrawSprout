@@ -45,13 +45,15 @@ const SWATCHES: readonly { readonly name: string; readonly hex: string; readonly
 
 const LAB = SWATCHES.map((swatch) => ({ ...swatch, lab: toLab(swatch.rgb) }));
 
-/** Nearest Indonesian colour in Lab. Near-white stays putih, near-black stays hitam, and a warm grey stays abu-abu. */
+/** Nearest Indonesian colour in Lab. Dark brown stays dark; mid grey is the only abu-abu. */
 export function paletteName(rgb: Rgb): string {
   const lum = luminance(rgb);
   const sat = saturation(rgb);
   if (sat < 0.14 && lum >= 225) return 'putih';
-  if (sat < 0.16 && lum < 42) return 'hitam';
-  if (sat < 0.18 && lum >= 50 && lum < 210) return 'abu-abu';
+  if (lum < 48 && sat < 0.22) return 'hitam';
+  if (lum < 110 && rgb.g > rgb.b && rgb.r > rgb.b + 8 && rgb.r < rgb.g * 2.2 && sat >= 0.1) return lum < 72 ? 'cokelat tua' : 'cokelat';
+  if (lum < 85 && sat < 0.18) return 'hitam';
+  if (sat < 0.16 && lum >= 100 && lum < 200) return 'abu-abu';
   if (redNotOrange(rgb, sat)) return 'merah';
   const sample = toLab(rgb);
   let best = LAB[0] ?? { name: 'abu-abu', hex: '#8d8d8d' };
@@ -97,7 +99,8 @@ export function lineArtImage(image: RgbaImage): RgbaImage {
  * marked `mixed` and still keeps a single mode.
  */
 export function regionsColouredBy(lineArt: RgbaImage, coloured: RgbaImage): { regions: FlatRegion[]; mixed: boolean } {
-  const aligned = sameSize(lineArt, coloured) ? coloured : scaleNearest(coloured, lineArt.width, lineArt.height);
+  const fitted = sameSize(lineArt, coloured) ? coloured : scaleNearest(coloured, lineArt.width, lineArt.height);
+  const aligned = registerToLines(lineArt, fitted);
   const { width, height } = lineArt;
   const line = lineMask(lineArt);
   const radius = Math.min(width, height) >= 800 ? 3 : (width < 64 || height < 64 ? 1 : 2);
@@ -105,6 +108,86 @@ export function regionsColouredBy(lineArt: RgbaImage, coloured: RgbaImage): { re
   if (!barrier.some((value) => value === 1)) return { regions: [], mixed: false };
   const inside = interiorMask(barrier, width, height);
   return colourComponents(aligned, inside, width, height);
+}
+
+/** Shift and scale the colour page so its dark lines land on the line drawing. */
+function registerToLines(lineArt: RgbaImage, coloured: RgbaImage): RgbaImage {
+  const { width, height } = lineArt;
+  const line = lineMask(lineArt);
+  const dark = darkMask(coloured);
+  const samples: number[] = [];
+  const stride = Math.max(1, Math.floor(line.reduce((count, value) => count + value, 0) / 1800));
+  for (let index = 0, seen = 0; index < line.length; index += 1) {
+    if (!line[index]) continue;
+    seen += 1;
+    if (seen % stride === 0) samples.push(index);
+  }
+  if (samples.length < 20) return coloured;
+  const maxShift = Math.max(2, Math.round(Math.min(width, height) * 0.04));
+  const step = Math.max(1, Math.round(maxShift / 4));
+  let best = { score: hitScore(samples, dark, width, height, 1, 0, 0), scale: 1, dx: 0, dy: 0 };
+  for (const scale of [0.97, 1, 1.03]) {
+    for (let dy = -maxShift; dy <= maxShift; dy += step) {
+      for (let dx = -maxShift; dx <= maxShift; dx += step) {
+        if (scale === 1 && dx === 0 && dy === 0) continue;
+        const score = hitScore(samples, dark, width, height, scale, dx, dy);
+        if (score > best.score) best = { score, scale, dx, dy };
+      }
+    }
+  }
+  if (best.dx === 0 && best.dy === 0 && best.scale === 1) return coloured;
+  return warp(coloured, best.scale, best.dx, best.dy);
+}
+
+function hitScore(samples: readonly number[], dark: Uint8Array, width: number, height: number, scale: number, dx: number, dy: number): number {
+  const cx = (width - 1) / 2;
+  const cy = (height - 1) / 2;
+  let hits = 0;
+  for (const index of samples) {
+    const x = index % width;
+    const y = (index - x) / width;
+    const sx = Math.round(cx + (x - cx) * scale + dx);
+    const sy = Math.round(cy + (y - cy) * scale + dy);
+    if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
+    if (dark[sy * width + sx]) hits += 1;
+  }
+  return hits;
+}
+
+function warp(image: RgbaImage, scale: number, dx: number, dy: number): RgbaImage {
+  const { width, height } = image;
+  const data = new Uint8Array(width * height * 4);
+  const cx = (width - 1) / 2;
+  const cy = (height - 1) / 2;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const sx = Math.round(cx + (x - cx) * scale + dx);
+      const sy = Math.round(cy + (y - cy) * scale + dy);
+      const to = (y * width + x) * 4;
+      if (sx < 0 || sy < 0 || sx >= width || sy >= height) {
+        data[to] = 255;
+        data[to + 1] = 255;
+        data[to + 2] = 255;
+        data[to + 3] = 255;
+        continue;
+      }
+      const from = (sy * width + sx) * 4;
+      data[to] = image.data[from] ?? 255;
+      data[to + 1] = image.data[from + 1] ?? 255;
+      data[to + 2] = image.data[from + 2] ?? 255;
+      data[to + 3] = 255;
+    }
+  }
+  return { width, height, data };
+}
+
+function darkMask(image: RgbaImage): Uint8Array {
+  const mask = new Uint8Array(image.width * image.height);
+  for (let index = 0, pixel = 0; index < mask.length; index += 1, pixel += 4) {
+    const lum = 0.2126 * (image.data[pixel] ?? 255) + 0.7152 * (image.data[pixel + 1] ?? 255) + 0.0722 * (image.data[pixel + 2] ?? 255);
+    if (lum < 90) mask[index] = 1;
+  }
+  return mask;
 }
 
 function redNotOrange(rgb: Rgb, sat: number): boolean {
@@ -209,7 +292,7 @@ function colourComponents(coloured: RgbaImage, mask: Uint8Array, width: number, 
   const regions: FlatRegion[] = [];
   let mixed = false;
   for (const stat of kept) {
-    const sampled = modeIn(coloured, ids, stat.id);
+    const sampled = sampleRegion(coloured, ids, stat.id, width, height);
     if (!sampled || sampled.name === 'putih') continue;
     if (sampled.mixed) mixed = true;
     const points = shapeOf(ids, stat.id, width, stat.minX, stat.minY, stat.maxX, stat.maxY);
@@ -217,7 +300,7 @@ function colourComponents(coloured: RgbaImage, mask: Uint8Array, width: number, 
     const spot = memberPoint(ids, stat.id, width);
     regions.push({
       name: sampled.name,
-      hex: sampled.name === 'putih' ? '#ffffff' : paletteHex(sampled.name),
+      hex: sampled.hex,
       points,
       pixels: stat.pixels,
       cx: spot.x,
@@ -228,23 +311,68 @@ function colourComponents(coloured: RgbaImage, mask: Uint8Array, width: number, 
   return { regions, mixed };
 }
 
-function modeIn(image: RgbaImage, ids: Int32Array, id: number): { name: string; mixed: boolean } | null {
-  const counts = new Map<string, number>();
-  let total = 0;
-  for (let index = 0; index < ids.length; index += 1) {
-    if (ids[index] !== id) continue;
+function sampleRegion(image: RgbaImage, ids: Int32Array, id: number, width: number, height: number): { name: string; hex: string; mixed: boolean } | null {
+  let members = erodedMembers(ids, id, width, height, 3);
+  if (members.length < 12) members = erodedMembers(ids, id, width, height, 2);
+  if (members.length < 12) members = erodedMembers(ids, id, width, height, 1);
+  if (members.length < 8) {
+    members = [];
+    for (let index = 0; index < ids.length; index += 1) if (ids[index] === id) members.push(index);
+  }
+  const colours: Rgb[] = [];
+  for (const index of members) {
     const rgb = pixelAt(image.data, index);
-    if (!rgb) continue;
+    if (rgb) colours.push(rgb);
+  }
+  if (colours.length < 8) return null;
+  const median = medianRgb(colours);
+  const counts = new Map<string, number>();
+  for (const rgb of colours) {
     const name = paletteName(rgb);
     counts.set(name, (counts.get(name) ?? 0) + 1);
-    total += 1;
   }
-  if (total < 8) return null;
   const ranked = [...counts.entries()].sort((left, right) => right[1] - left[1]);
-  const top = ranked[0];
-  if (!top) return null;
   const second = ranked[1]?.[1] ?? 0;
-  return { name: top[0], mixed: second / total >= 0.22 };
+  const name = paletteName(median);
+  return { name, hex: name === 'putih' ? '#ffffff' : snapKid(median), mixed: second / colours.length >= 0.38 };
+}
+
+function erodedMembers(ids: Int32Array, id: number, width: number, height: number, radius: number): number[] {
+  const chosen: number[] = [];
+  for (let index = 0; index < ids.length; index += 1) {
+    if (ids[index] !== id) continue;
+    const x = index % width;
+    const y = (index - x) / width;
+    let inside = true;
+    for (let dy = -radius; dy <= radius && inside; dy += 1) {
+      const sy = y + dy;
+      if (sy < 0 || sy >= height) {
+        inside = false;
+        break;
+      }
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        const sx = x + dx;
+        if (sx < 0 || sx >= width || ids[sy * width + sx] !== id) inside = false;
+      }
+    }
+    if (inside) chosen.push(index);
+  }
+  return chosen;
+}
+
+function medianRgb(colours: readonly Rgb[]): Rgb {
+  const mid = (values: number[]) => {
+    const sorted = [...values].sort((left, right) => left - right);
+    return sorted[Math.floor(sorted.length / 2)] ?? 0;
+  };
+  return { r: mid(colours.map((colour) => colour.r)), g: mid(colours.map((colour) => colour.g)), b: mid(colours.map((colour) => colour.b)) };
+}
+
+/** Flat colour near the sample, not a stock swatch of a different brightness. */
+function snapKid(rgb: Rgb): string {
+  const quantize = (value: number) => Math.max(0, Math.min(255, Math.round(value / 16) * 16));
+  const channel = (value: number) => quantize(value).toString(16).padStart(2, '0');
+  return `#${channel(rgb.r)}${channel(rgb.g)}${channel(rgb.b)}`;
 }
 
 function memberPoint(ids: Int32Array, id: number, width: number): { x: number; y: number } {

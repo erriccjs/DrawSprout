@@ -29,6 +29,8 @@ describe('flat colouring page', () => {
     expect(paletteName({ r: 72, g: 42, b: 24 })).toBe('cokelat tua');
     expect(paletteName({ r: 120, g: 20, b: 30 })).toBe('merah');
     expect(paletteName({ r: 210, g: 40, b: 45 })).toBe('merah');
+    expect(paletteName({ r: 52, g: 40, b: 32 })).toBe('cokelat tua');
+    expect(paletteName({ r: 48, g: 46, b: 44 })).toBe('hitam');
     expect(paletteName({ r: 150, g: 145, b: 140 })).toBe('abu-abu');
     expect(paletteName({ r: 20, g: 20, b: 20 })).toBe('hitam');
   });
@@ -109,5 +111,42 @@ describe('flat colouring page', () => {
     expect(sampled.mixed).toBe(true);
     expect(sampled.regions[0]?.mixed).toBe(true);
     expect(['merah', 'biru']).toContain(sampled.regions[0]?.name);
+  });
+
+  it('samples the eroded interior, so a black edge does not turn a red collar black', () => {
+    const lines = painted(64, 48, (x, y) => (
+      x >= 8 && x < 56 && y >= 8 && y < 40 && (x < 11 || x >= 53 || y < 11 || y >= 37) ? [0, 0, 0] : [255, 255, 255]
+    ));
+    const coloured = painted(64, 48, (x, y) => {
+      if (x < 6 || x >= 58 || y < 6 || y >= 42) return [255, 255, 255];
+      if (x < 16 || x >= 48 || y < 16 || y >= 34) return [10, 10, 10];
+      return [200, 36, 40];
+    });
+    const sampled = regionsColouredBy(lines, coloured);
+    expect(sampled.regions.map((region) => region.name)).toEqual(['merah']);
+    expect(sampled.regions[0]?.hex).not.toBe('#8d8d8d');
+    expect(sampled.regions[0]?.hex.startsWith('#c') || sampled.regions[0]?.hex.startsWith('#d') || sampled.regions[0]?.hex.startsWith('#b')).toBe(true);
+    const shifted = painted(64, 48, (x, y) => {
+      const sx = x - 3;
+      const sy = y - 2;
+      if (sx < 6 || sx >= 58 || sy < 6 || sy >= 42) return [255, 255, 255];
+      if (sx < 16 || sx >= 48 || sy < 16 || sy >= 34) return [10, 10, 10];
+      return [200, 36, 40];
+    });
+    expect(regionsColouredBy(lines, shifted).regions[0]?.name).toBe('merah');
+  });
+
+  it('names dark coffee from the sample and snaps the fill to that brown', () => {
+    const lines = painted(48, 36, (x, y) => (
+      x >= 6 && x < 42 && y >= 4 && y < 32 && (x < 8 || x >= 40 || y < 6 || y >= 30) ? [0, 0, 0] : [255, 255, 255]
+    ));
+    const coloured = painted(48, 36, (x, y) => (
+      x >= 8 && x < 40 && y >= 6 && y < 30 ? [52, 40, 32] : [255, 255, 255]
+    ));
+    const region = regionsColouredBy(lines, coloured).regions[0];
+    expect(region?.name).toBe('cokelat tua');
+    expect(region?.hex).not.toBe('#8d8d8d');
+    const red = Number.parseInt(region?.hex.slice(1, 3) ?? 'ff', 16);
+    expect(red).toBeLessThan(96);
   });
 });

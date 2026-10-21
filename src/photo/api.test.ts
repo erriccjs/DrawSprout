@@ -145,6 +145,7 @@ describe('POST /api/photo-lesson', () => {
     expect(simple.status).toBe(200);
     expect(mock.calls[0]?.model).toBe('gpt-image-1.5');
     expect(mock.calls[0]?.quality).toBe('low');
+    expect(mock.calls[1]?.quality).toBe('low');
 
     const unknown = await handlePhotoLessonRequest(
       post(art, 'default-key1', 'default'),
@@ -154,6 +155,7 @@ describe('POST /api/photo-lesson', () => {
     expect(unknown.status).toBe(200);
     expect(mock.calls[2]?.model).toBe('gpt-image-1.5');
     expect(mock.calls[2]?.quality).toBe('medium');
+    expect(mock.calls[3]?.quality).toBe('low');
 
     const cheap = await handlePhotoLessonRequest(
       post(art, 'cheap-key001', 'default'),

@@ -33,7 +33,8 @@ export function compareLessonToInk(lesson: LessonPackage, ink: RgbaImage): Rende
     if (left && right) intersection += 1;
   }
   const dice = drawnCount + targetCount === 0 ? 0 : (2 * intersection) / (drawnCount + targetCount);
-  if (dice < REVIEW_DICE_BELOW) {
+  const precision = drawnCount === 0 ? 0 : intersection / drawnCount;
+  if (precision < 0.5 && dice < REVIEW_DICE_BELOW) {
     return {
       dice,
       needsReview: true,

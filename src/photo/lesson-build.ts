@@ -38,6 +38,7 @@ export interface BuiltLesson {
   readonly builder: 'parts' | 'traced';
   readonly needsReview: boolean;
   readonly reviewReason: string | null;
+  readonly reviewReasons: readonly string[];
   /** Interior contours that were not given their own part name. */
   readonly unnamedInteriors: number;
 }
@@ -166,11 +167,16 @@ function buildFromParts(input: {
   const spokenOutline = plainNoun(bareName(outlineName)) || plainNoun(outlineName) || outlineName;
 
   const bundles = new Map<string, DetailBundle>();
+  const separate: MappedContour[] = [];
   let unnamed = 0;
   for (const contour of kept) {
     if (contour.id === main.id) continue;
-    const owner = interiorOwner(contour, parts, subject);
-    if (!owner || owner === outlinePart) {
+    if (isSeparateObject(contour, main)) {
+      separate.push(contour);
+      continue;
+    }
+    const owner = partAt(contour, parts, subject);
+    if (!owner) {
       unnamed += 1;
       continue;
     }
@@ -193,8 +199,16 @@ function buildFromParts(input: {
   const outlineGuides = guidesFor('outline-1', [main]);
   preview.push(...outlineGuides);
   steps.push(lineStep('outline-1', 'outline', outlineInstruction(outlineName, input.title), outlineGuides));
+  separate.forEach((contour, index) => {
+    const owner = partAt(contour, parts, subject);
+    const name = plainNoun(bareName(owner?.name ?? '')) || spokenOutline;
+    const id = `outline-${index + 2}`;
+    const guides = guidesFor(id, [contour]);
+    preview.push(...guides);
+    steps.push(lineStep(id, 'outline', outlineInstruction(name, input.title), guides));
+  });
 
-  const fixed = (fit ? 1 : 0) + 1;
+  const fixed = (fit ? 1 : 0) + 1 + separate.length;
   const pruned = pruneDetails([...bundles.values()], [main], Math.max(0, MAX_DRAWING_STEPS - fixed));
   pruned.kept.forEach((bundle, index) => {
     const id = `detail-${index + 1}`;
@@ -304,6 +318,7 @@ function finish(
     builder,
     needsReview,
     reviewReason: needsReview ? reasons.join(' ') : null,
+    reviewReasons: reasons,
     unnamedInteriors,
   };
 }
@@ -381,12 +396,13 @@ function appendFlatColours(
       empty = true;
       continue;
     }
-    const bucket = buckets.get(region.name) ?? { colour: region.name, hex: region.hex, pixels: 0, names: [], paths: [] };
+    const label = nameAt(region.cx, region.cy, input, parts, subject, spoken);
+    const key = `${label}|${region.name}`;
+    const bucket = buckets.get(key) ?? { colour: region.name, hex: region.hex, pixels: 0, names: [], paths: [] };
     bucket.pixels += region.pixels;
     bucket.paths.push(mapped.path);
-    const label = nameAt(region.cx, region.cy, input, parts, subject, spoken);
     if (label && !bucket.names.includes(label)) bucket.names.push(label);
-    buckets.set(region.name, bucket);
+    buckets.set(key, bucket);
   }
   if (empty) notes.push('Ada langkah warna yang tidak mengisi. Cek dulu sebelum dipakai.');
   if (mixed) notes.push('Ada bagian dengan lebih dari satu warna. Cek dulu sebelum dipakai.');
@@ -496,13 +512,31 @@ function ownInk(contours: readonly MappedContour[]): number {
 }
 
 function freshInk(existing: Uint8Array, contours: readonly MappedContour[]): number {
-  const scratch = existing.slice();
+  const covered = dilateMask(existing);
+  const scratch = covered.slice();
   stampContours(scratch, contours);
   let fresh = 0;
   for (let index = 0; index < scratch.length; index += 1) {
-    if (scratch[index] && !existing[index]) fresh += 1;
+    if (scratch[index] && !covered[index]) fresh += 1;
   }
   return fresh;
+}
+
+function dilateMask(mask: Uint8Array): Uint8Array {
+  const out = mask.slice();
+  for (let y = 0; y < MASK_H; y += 1) {
+    for (let x = 0; x < MASK_W; x += 1) {
+      if (!mask[y * MASK_W + x]) continue;
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const sx = x + dx;
+          const sy = y + dy;
+          if (sx >= 0 && sy >= 0 && sx < MASK_W && sy < MASK_H) out[sy * MASK_W + sx] = 1;
+        }
+      }
+    }
+  }
+  return out;
 }
 
 function stampContours(mask: Uint8Array, contours: readonly MappedContour[]): void {
@@ -737,19 +771,57 @@ function outlineOwner(contour: MappedContour, parts: readonly DetectedPart[]): D
   return best;
 }
 
-function interiorOwner(contour: MappedContour, parts: readonly DetectedPart[], subject: Box): DetectedPart | null {
-  const listed = parts.filter((part) => part.pieceIds.includes(contour.id) && partFraction(part, subject) <= HUGE_PART && containment(contour, part) >= CONTAIN_MIN);
-  if (listed.length > 0) return listed.reduce((best, part) => (areaOf(part) < areaOf(best) ? part : best));
+function partAt(contour: MappedContour, parts: readonly DetectedPart[], subject: Box): DetectedPart | null {
+  const box = boxOf(contour.points);
+  const point = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
   let best: DetectedPart | null = null;
   let bestArea = Number.POSITIVE_INFINITY;
   for (const part of parts) {
     if (partFraction(part, subject) > HUGE_PART) continue;
-    if (containment(contour, part) < CONTAIN_MIN) continue;
+    if (!containsPoint(part, point)) continue;
+    if (!boxesOverlap(box, part)) continue;
     const area = areaOf(part);
     if (area < bestArea) {
       best = part;
       bestArea = area;
     }
+  }
+  return best;
+}
+
+function boxesOverlap(ink: Box, part: DetectedPart): boolean {
+  return ink.minX <= part.x + part.width && ink.maxX >= part.x && ink.minY <= part.y + part.height && ink.maxY >= part.y;
+}
+
+function isSeparateObject(contour: MappedContour, main: MappedContour): boolean {
+  if (!contour.closed) return false;
+  const area = boxOf(contour.points).area;
+  const mainArea = Math.max(1, boxOf(main.points).area);
+  if (area < mainArea * 0.18 || area > mainArea * 0.92) return false;
+  let total = 0;
+  let seen = 0;
+  const step = Math.max(1, Math.floor(contour.points.length / 16));
+  for (let index = 0; index < contour.points.length; index += step) {
+    const point = contour.points[index];
+    if (!point) continue;
+    total += nearest(point, main.points);
+    seen += 1;
+  }
+  return seen > 0 && total / seen > 18;
+}
+
+function nearest(point: Point, line: readonly Point[]): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < line.length; index += 1) {
+    const start = line[index - 1];
+    const end = line[index];
+    if (!start || !end) continue;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length2 = dx * dx + dy * dy;
+    const t = length2 < 1e-6 ? 0 : Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / length2));
+    const gap = Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+    if (gap < best) best = gap;
   }
   return best;
 }

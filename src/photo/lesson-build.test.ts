@@ -690,6 +690,72 @@ describe('named traced parts', () => {
     expect(built.needsReview).toBe(true);
     expect(built.reviewReason).toContain('lebih dari satu warna');
   });
+
+  it('keeps an open whisker and splits a cup from its saucer', () => {
+    const photo = painted(24, 18, () => [20, 20, 20]);
+    const whiskers = buildPhotoLesson({
+      id: 'photo-whisker',
+      title: 'Kucing',
+      targetHash: 'abcdef1234567890',
+      contours: [
+        square(80, 60, 420),
+        { closed: false, points: [{ x: 180, y: 250 }, { x: 280, y: 270 }, { x: 400, y: 250 }] },
+      ],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      parts: [
+        { ...part('wajah', false, 'abu-abu'), ...cover(80, 60, 420, 420) },
+        { ...part('kumis', false, 'abu-abu'), ...cover(160, 220, 260, 80) },
+      ],
+    });
+    expect(whiskers.lesson.steps.some((step) => step.instruction === 'Gambar kumis.')).toBe(true);
+    const cup = buildPhotoLesson({
+      id: 'photo-saucer',
+      title: 'Cangkir',
+      targetHash: 'abcdef1234567890',
+      contours: [square(200, 40, 320), square(60, 400, 600)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#ffffff'],
+      parts: [
+        { ...part('cangkir', false, 'putih'), ...cover(200, 40, 320, 320) },
+        { ...part('piring', false, 'putih'), ...cover(60, 400, 600, 200) },
+      ],
+    });
+    const outlines = cup.lesson.steps.filter((step) => step.instruction.startsWith('Gambar garis luar')).map((step) => step.instruction);
+    expect(outlines).toContain('Gambar garis luar cangkir.');
+    expect(outlines).toContain('Gambar garis luar piring.');
+  });
+
+  it('does not send a car-like lesson back for review', () => {
+    const photo = painted(24, 18, () => [140, 140, 140]);
+    const built = buildPhotoLesson({
+      id: 'photo-car',
+      title: 'Mobil mainan',
+      targetHash: 'abcdef1234567890',
+      contours: [square(80, 160, 640), square(120, 520, 90), square(560, 500, 100), square(400, 240, 120)],
+      sourceWidth: 1000,
+      sourceHeight: 750,
+      photo,
+      palette: ['#888888'],
+      flatRegions: [
+        { name: 'abu-abu', hex: '#808080', points: square(80, 160, 640).points, pixels: 5000, cx: 400, cy: 480 },
+        { name: 'cokelat', hex: '#806040', points: square(400, 240, 120).points, pixels: 800, cx: 460, cy: 300 },
+      ],
+      parts: [
+        { ...part('mobil', false, 'abu-abu'), ...cover(80, 160, 640, 520) },
+        { ...part('roda', true, 'hitam'), ...cover(120, 520, 90, 90), count: 2 },
+        { ...part('roda', true, 'hitam'), ...cover(560, 500, 100, 100), count: 2 },
+        { ...part('kursi', false, 'cokelat'), ...cover(400, 240, 120, 120) },
+      ],
+    });
+    expect(built.lesson.steps.filter((step) => step.phase !== 'color').length).toBeGreaterThanOrEqual(3);
+    expect(built.needsReview).toBe(false);
+    expect(built.reviewReasons).toEqual([]);
+  });
 });
 
 describe('colour names', () => {

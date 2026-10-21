@@ -40,6 +40,7 @@ export interface PhotoPipelineResult {
   readonly targetHash: string;
   readonly needsReview: boolean;
   readonly reviewReason: string | null;
+  readonly reviewReasons: readonly string[];
   readonly model: string;
   readonly quality: ImageQuality;
   readonly coverage: number;
@@ -147,9 +148,9 @@ export async function runPhotoPipeline(
   }
 
   const subjectMismatch = written?.sameSubject === false;
-  const reasons = [comparison.reviewReason, built.reviewReason];
+  const reasons = [...built.reviewReasons];
+  if (comparison.reviewReason) reasons.push(comparison.reviewReason);
   if (subjectMismatch) reasons.push('Gambar tidak sama dengan foto. Cek dulu sebelum dipakai.');
-  const review = reasons.filter((reason): reason is string => reason !== null && reason !== undefined);
   const shown = traced.colouredPng ?? traced.png;
   return {
     illustrationPng: shown,
@@ -158,8 +159,9 @@ export async function runPhotoPipeline(
     dominantColors: palette,
     lesson: built.lesson,
     targetHash: shown === traced.png ? traced.targetHash : await sha256Hex(shown),
-    needsReview: comparison.needsReview || built.needsReview || subjectMismatch,
-    reviewReason: review.length > 0 ? review.join(' ') : null,
+    needsReview: reasons.length > 0,
+    reviewReason: reasons.length > 0 ? reasons.join(' ') : null,
+    reviewReasons: reasons,
     model,
     quality,
     coverage: built.coverage,
@@ -204,7 +206,7 @@ async function drawPass(
       referencePng: input.png,
       variant: input.variant,
       model,
-      quality,
+      quality: 'low',
       width: traced.illustration.width,
       height: traced.illustration.height,
       idempotencyKey: `${idempotencyKey}-colour`,

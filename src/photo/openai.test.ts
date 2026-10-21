@@ -140,7 +140,9 @@ describe('OpenAI client', () => {
     if (!(form instanceof FormData)) throw new Error('expected form data');
     const prompt = form.get('prompt');
     const promptText = typeof prompt === 'string' ? prompt : '';
-    expect(promptText).toContain('Do not change, add, remove, or move any line');
+    expect(promptText).toContain('Only fill');
+    expect(promptText).toContain('Keep every line exactly');
+    expect(promptText).toContain('barcode');
     expect(promptText).toContain('Grey stays grey');
     expect(promptText).toContain('Red stays red');
     expect(form.getAll('image[]')).toHaveLength(2);

@@ -35,15 +35,16 @@ export function traceInk(image: RgbaImage, threshold = INK_LUMINANCE): Contour[]
   const filled = filledSubject(cleaned, width, height);
   const detailMask = shouldThin(cleaned, width, height) ? thinStrokes(cleaned, width, height) : cleaned;
   const details = collapseNested(contoursFrom(detailMask, width, height, epsilon, filled)
-    .filter((contour) => !bothSidesShorterThan(contour.points, Math.max(4, Math.min(width, height) * 0.02))));
+    .filter((contour) => !bothSidesShorterThan(contour.points, Math.max(4, Math.min(width, height) * 0.012))));
   const outerLoop = largestLoop(marchingSquares(filled, width, height));
   if (!outerLoop) return dedupeContours(mergeNearParallel(details, width, height));
   const outer = finishLoop(outerLoop, epsilon, null, width, height);
   if (outer.length < 4) return dedupeContours(mergeNearParallel(details, width, height));
   const silhouette: Contour = { points: outer, closed: true, silhouette: true };
+  const gap = Math.max(3, Math.min(width, height) * 0.02);
   return dedupeContours(mergeNearParallel([
     silhouette,
-    ...details.filter((contour) => iouBoxes(bounds(contour.points), bounds(outer)) < 0.82),
+    ...details.filter((contour) => !nearParallel(contour, silhouette, gap)),
   ], width, height));
 }
 
@@ -621,11 +622,10 @@ function medialAxis(mask: Uint8Array, width: number, height: number): Uint8Array
 }
 
 function collapseNested(contours: Contour[]): Contour[] {
-  const sorted = [...contours].sort((left, right) => bounds(right.points).area - bounds(left.points).area);
+  const sorted = [...contours].sort((left, right) => polylineLength(right.points) - polylineLength(left.points));
   const kept: Contour[] = [];
   for (const contour of sorted) {
-    const box = bounds(contour.points);
-    const nested = kept.some((other) => iouBoxes(box, bounds(other.points)) >= 0.7);
+    const nested = kept.some((other) => meanGap(contour.points, other.points) <= 8 && meanGap(other.points, contour.points) <= 8);
     if (!nested) kept.push(contour);
   }
   return kept;
@@ -800,8 +800,7 @@ function deepInside(filled: Uint8Array, width: number, height: number, x: number
 function dedupeContours(contours: Contour[]): Contour[] {
   const kept: Contour[] = [];
   for (const contour of contours) {
-    const box = bounds(contour.points);
-    const duplicate = kept.some((other) => iouBoxes(box, bounds(other.points)) >= 0.82);
+    const duplicate = kept.some((other) => meanGap(contour.points, other.points) <= 6 && meanGap(other.points, contour.points) <= 6);
     if (!duplicate) kept.push(contour);
   }
   return kept;
@@ -821,15 +820,4 @@ function bounds(points: readonly Point[]): { minX: number; minY: number; width: 
   const width = Math.max(0, maxX - minX);
   const height = Math.max(0, maxY - minY);
   return { minX, minY, width, height, area: width * height };
-}
-
-function iouBoxes(
-  left: { minX: number; minY: number; width: number; height: number; area: number },
-  right: { minX: number; minY: number; width: number; height: number; area: number },
-): number {
-  const width = Math.max(0, Math.min(left.minX + left.width, right.minX + right.width) - Math.max(left.minX, right.minX));
-  const height = Math.max(0, Math.min(left.minY + left.height, right.minY + right.height) - Math.max(left.minY, right.minY));
-  const intersection = width * height;
-  const union = left.area + right.area - intersection;
-  return union <= 0 ? 0 : intersection / union;
 }

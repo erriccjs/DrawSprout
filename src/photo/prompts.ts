@@ -16,7 +16,8 @@ const SHARED = [
   'Turn this photo into a simple drawing guide for a five-year-old.',
   'One main subject only. Black line art on a plain white background.',
   'No shading, no colour, and no fill. Lines only.',
-  'Draw one closed outer silhouette around the whole subject first, then interior outlines that close each part: eyes, ears, collar, tongue, cup, coffee, petals, leaves, wheels, seat, handle.',
+  'Draw one closed outer silhouette around the whole subject first, then the interior lines, including open ones: eyes, nose, whiskers, ears, collar, tongue, petals, leaves, wheels, seat, handle.',
+  'A cup and its saucer are two closed outlines, not one shape. A flower keeps the lines between the petals.',
   'Keep the pose, the direction the subject faces, the silhouette, the proportions, and the count of visible parts of that subject.',
   'Keep the same framing and crop as the photo. A close-up stays a close-up. Do not zoom out to show the whole body if the photo only shows the head.',
   'Keep distinctive features that identify it: markings, ears, wheels, handle, petals, leaves.',
@@ -52,8 +53,9 @@ export function imagePrompt(variant: PhotoVariant, reinforceSilhouette = false, 
 export function colourPrompt(): string {
   return [
     'The first image is a finished line drawing. The second image is the photo of the same subject.',
-    'Fill each enclosed area of the line drawing with one flat solid colour that matches that part in the photo.',
-    'Do not change, add, remove, or move any line. Do not redraw the subject.',
+    'Only fill. Keep every line exactly where it is.',
+    'Do not redraw, move, scale, rotate, or replace any line. Do not add a line, letter, number, barcode, or sticker.',
+    'Fill each enclosed area with one flat solid colour that matches that part in the photo.',
     'No shading, no gradients, no texture.',
     'Grey stays grey, not beige and not orange. Red stays red, not orange. Black stays black. Dark brown stays dark brown. White stays white.',
     'Leave the paper outside the subject white.',
@@ -67,8 +69,8 @@ export function colourPrompt(): string {
 export function replicatePrompt(reinforceSilhouette = false, reinforceSubject = false, colour = false): string {
   if (colour) {
     return [
-      'Flat solid colour inside this line drawing.',
-      'Do not change, add, or move any line.',
+      'Only fill this line drawing. Keep every line exactly where it is.',
+      'Do not redraw, move, or add any line.',
       'Match the subject\'s true colours. Grey stays grey. Red stays red. Black stays black.',
       'Plain white background. No shading and no text.',
     ].join(' ');
