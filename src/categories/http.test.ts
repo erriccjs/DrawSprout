@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handlePhotoMatch, MissingMatchKey } from './http';
+import { handlePhotoMatch, MatchUpstreamError, MissingMatchKey } from './http';
 import type { ClassifyResult } from './openai';
 
 const png = Uint8Array.from([137, 80, 78, 71]);
@@ -86,5 +86,27 @@ describe('photo-match endpoint', () => {
       classify: () => Promise.reject(new MissingMatchKey()),
     });
     expect(response.status).toBe(503);
+  });
+
+  it('logs the sanitized upstream status and message', async () => {
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((message: unknown) => {
+      logs.push(String(message));
+    });
+    const secret = `Bearer ${'A'.repeat(50)}`;
+    const response = await handlePhotoMatch(post(), {
+      classify: () => Promise.reject(new MatchUpstreamError(
+        `refused data:image/jpeg;base64,${'B'.repeat(50)} ${secret}`,
+        422,
+      )),
+    });
+    expect(response.status).toBe(502);
+    const line = JSON.parse(logs[0] ?? '{}') as { route: string; upstreamStatus: number; upstream: string };
+    expect(line).toMatchObject({ route: 'photo-match', upstreamStatus: 422 });
+    expect(line.upstream).toContain('[image]');
+    expect(line.upstream).toContain('Bearer [redacted]');
+    expect(line.upstream).not.toContain('B'.repeat(40));
+    expect(logs.join('\n')).not.toContain('A'.repeat(40));
+    spy.mockRestore();
   });
 });

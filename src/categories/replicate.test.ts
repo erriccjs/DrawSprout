@@ -58,6 +58,7 @@ describe('replicate photo match', () => {
     expect(headers.get('prefer')).toBe('wait=20');
     expect(headers.get('authorization')).toBe(`Bearer ${secret}`);
     expect(headers.get('idempotency-key')).toBe('match-1');
+    expect(headers.get('user-agent')).toBe('drawsprout/photo-match');
     const rawBody = calls[0]?.init.body;
     const body = JSON.parse(typeof rawBody === 'string' ? rawBody : '') as { input: Record<string, unknown> };
     expect(body.input.image_input).toEqual([expect.stringMatching(/^data:image\/png;base64,/)]);
@@ -111,6 +112,30 @@ describe('replicate photo match', () => {
     expect(calls.some((url) => url.endsWith('/pred-slow/cancel'))).toBe(true);
   });
 
+  it('retries a 502 with a fresh body', async () => {
+    const bodies: string[] = [];
+    vi.stubGlobal('fetch', (_url: string, init: RequestInit = {}) => {
+      bodies.push(typeof init.body === 'string' ? init.body : '');
+      if (bodies.length === 1) return Promise.resolve(jsonResponse({ detail: 'busy' }, 502));
+      return Promise.resolve(jsonResponse({
+        id: 'pred-retry',
+        status: 'succeeded',
+        output: '{"category":"cat","confidence":0.9,"facing":"front","pose":"","colours":[]}',
+      }));
+    });
+    const result = await classifyWithReplicate({
+      apiKey: secret,
+      image: png,
+      mediaType: 'image/png',
+      idempotencyKey: 'match-retry',
+      signal: AbortSignal.timeout(5_000),
+    });
+    expect(result.model).toBe('openai/gpt-4.1-mini');
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toBe(bodies[0]);
+    expect(bodies[0]).toContain('image_input');
+  });
+
   it('drops photo bytes and the key from an upstream error', async () => {
     const dumped = `refused data:image/png;base64,${'A'.repeat(80)} Bearer ${secret}`;
     vi.stubGlobal('fetch', () => Promise.resolve(jsonResponse({ detail: dumped }, 400)));
@@ -147,6 +172,8 @@ describe('replicate photo match', () => {
     expect(replicateMatchModel('../nope')).toBe('openai/gpt-4.1-mini');
     const input = replicateMatchInput('image/jpeg', 'aaaa');
     expect(input.image_input).toEqual(['data:image/jpeg;base64,aaaa']);
+    expect(input.prompt).toContain('Return exactly {"category":"<id>","confidence":0.0,"facing":"left|right|front|unknown","pose":"","colours":[{"part":"<part id>","color":"#rrggbb"}]}');
+    expect(input.prompt).toContain('Colours must be objects using the part ids listed for that category.');
     expect(parseModelJson('```json\n{"category":"dog"}\n```')).toEqual({ category: 'dog' });
     const source = readFileSync(path.join(process.cwd(), 'src/categories/replicate.ts'), 'utf8');
     expect(source).not.toMatch(/console\.(log|info|debug|warn|error)/);

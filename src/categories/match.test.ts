@@ -36,6 +36,31 @@ describe('photo match parsing', () => {
     expect(match.suggestions).toEqual([]);
   });
 
+  it('reads a string array, a part map, and the object shape', () => {
+    const base = { category: 'flower', confidence: 0.9, facing: 'front', pose: '' };
+    expect(interpretMatch({ ...base, colours: ['#a49f9a', '#b7b7b2'] }).colours).toEqual([
+      { part: 'petals', color: '#a49f9a' },
+      { part: 'centre', color: '#b7b7b2' },
+    ]);
+    expect(interpretMatch({ ...base, colours: ['nope', '#112233'] }).colours).toEqual([
+      { part: 'centre', color: '#112233' },
+    ]);
+    expect(interpretMatch({
+      ...base,
+      colours: { leaves: '#3e9a55', petals: '#ff00aa', vase: '#000000' },
+    }).colours).toEqual([
+      { part: 'petals', color: '#ff00aa' },
+      { part: 'leaves', color: '#3e9a55' },
+    ]);
+    expect(interpretMatch({
+      ...base,
+      colours: [{ part: 'Leaves', color: '#123' }, { part: 'petals', color: 'merah' }],
+    }).colours).toEqual([
+      { part: 'leaves', color: '#112233' },
+      { part: 'petals', color: '#d64545' },
+    ]);
+  });
+
   it('refuses a low score, an unknown subject, and a lesson that is only planned', () => {
     for (const raw of [
       { category: 'cat', confidence: MATCH_CONFIDENCE - 0.01, facing: 'front', pose: '', colours: [] },

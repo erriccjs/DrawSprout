@@ -22,6 +22,26 @@ export class MissingMatchKey extends Error {
   }
 }
 
+/** A Replicate response or fetch failure. `status` is the HTTP status, or 0 when fetch threw. */
+export class MatchUpstreamError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'MatchUpstreamError';
+    this.status = status;
+  }
+}
+
+/** Strip photo bytes and credentials before a message is logged. */
+export function redactUpstream(value: string): string {
+  return value
+    .replace(/data:[^\s'"]+/gi, '[image]')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/[A-Za-z0-9+/]{40,}/g, '[redacted]')
+    .slice(0, 180);
+}
+
 export interface PhotoMatchDeps {
   readonly classify: (
     image: Uint8Array,
@@ -73,6 +93,9 @@ export async function handlePhotoMatch(request: Request, deps: PhotoMatchDeps): 
     if (error instanceof MissingMatchKey) {
       return json({ error: 'Foto belum bisa dipakai sekarang.', code: 'unconfigured' }, 503);
     }
+    const upstreamStatus = error instanceof MatchUpstreamError ? error.status : 0;
+    const upstream = redactUpstream(error instanceof Error ? error.message : 'Replicate match failed');
+    console.log(JSON.stringify({ route: 'photo-match', upstreamStatus, upstream }));
     return json({ error: 'Foto ini belum bisa dipakai. Coba lagi ya.', code: 'upstream' }, 502);
   }
 }
