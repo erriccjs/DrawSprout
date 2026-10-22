@@ -9,11 +9,13 @@ import { APPLE_CATEGORY } from './lessons/apple';
 import { BIRD_CATEGORY } from './lessons/bird';
 import { BUTTERFLY_CATEGORY } from './lessons/butterfly';
 import { CAT_CATEGORY } from './lessons/cat';
+import { CHARACTER_CATEGORY } from './lessons/character';
 import { CUP_CATEGORY } from './lessons/cup';
 import { DOG_CATEGORY } from './lessons/dog';
 import { FISH_CATEGORY } from './lessons/fish';
 import { FLOWER_CATEGORY } from './lessons/flower';
 import { HOUSE_CATEGORY } from './lessons/house';
+import { PERSON_STANDING_CATEGORY } from './lessons/person-standing';
 import { RABBIT_CATEGORY } from './lessons/rabbit';
 import { ROCKET_CATEGORY } from './lessons/rocket';
 import { TOY_CAR_CATEGORY } from './lessons/toy-car';
@@ -24,7 +26,6 @@ import { isDone, type CategoryEntry, type CategoryLesson, type PlannedCategory }
 const PLANNED: readonly PlannedCategory[] = [
   planned('dinosaur', 'Dinosaurus', 'a dinosaur'),
   planned('robot', 'Robot', 'a robot'),
-  planned('person', 'Orang', 'a person'),
   planned('sun', 'Matahari', 'a sun'),
   planned('boat', 'Perahu', 'a boat'),
   planned('elephant', 'Gajah', 'an elephant'),
@@ -65,6 +66,8 @@ export const CATEGORY_LESSONS: readonly CategoryLesson[] = [
   TURTLE_CATEGORY,
   ROCKET_CATEGORY,
   APPLE_CATEGORY,
+  PERSON_STANDING_CATEGORY,
+  CHARACTER_CATEGORY,
 ];
 
 export const CATEGORY_CATALOGUE: readonly CategoryEntry[] = [

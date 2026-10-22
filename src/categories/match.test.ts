@@ -4,10 +4,11 @@ import { pathBounds } from '../ui/preview-frame';
 import { applyPhotoToLesson } from './apply';
 import { DOG_CATEGORY } from './lessons/dog';
 import { FLOWER_CATEGORY } from './lessons/flower';
+import { PERSON_STANDING_CATEGORY } from './lessons/person-standing';
 import { CATEGORY_LESSONS, doneCategory } from './library';
 import { MATCH_CONFIDENCE, interpretMatch, normalizeHex } from './match';
 import { mirrorPath } from './mirror';
-import { matchRequestBody } from './openai';
+import { matchPrompt, matchRequestBody } from './openai';
 import { matchCostUsd } from './pricing';
 
 describe('photo match parsing', () => {
@@ -59,6 +60,37 @@ describe('photo match parsing', () => {
       { part: 'leaves', color: '#112233' },
       { part: 'petals', color: '#d64545' },
     ]);
+  });
+
+  it('opens the standing person and the cartoon head from the names a model may say', () => {
+    const person = interpretMatch({
+      category: 'person',
+      confidence: 0.8,
+      facing: 'front',
+      pose: 'standing',
+      colours: ['#f0c2a0', '#3a2e28', '#3d74c4', '#2c3d6e', '#6b4428', '#d24b45'],
+    });
+    expect(person.matched).toBe(true);
+    expect(person.category).toBe('person-standing');
+    expect(person.facing).toBe('front');
+    expect(person.pose).toBe('standing');
+    expect(person.colours.map((item) => item.part)).toEqual(PERSON_STANDING_CATEGORY.parts.map((part) => part.id));
+
+    for (const category of ['man', 'woman', 'boy', 'girl', 'child', 'statue of a person', 'figure', 'people standing']) {
+      const match = interpretMatch({ category, confidence: 0.8, facing: 'front', pose: 'standing', colours: [] });
+      expect(match.matched).toBe(true);
+      expect(match.category).toBe('person-standing');
+    }
+    for (const category of ['anime character', 'cartoon character', 'face', 'portrait', 'doll', 'action figure', 'superhero']) {
+      const match = interpretMatch({ category, confidence: 0.9, facing: 'front', pose: '', colours: [] });
+      expect(match.matched).toBe(true);
+      expect(match.category).toBe('character');
+    }
+
+    const prompt = matchPrompt();
+    expect(prompt).toContain('person-standing');
+    expect(prompt).toContain('character');
+    expect(prompt.split('\n').some((line) => line.startsWith('person:'))).toBe(false);
   });
 
   it('refuses a low score, an unknown subject, and a lesson that is only planned', () => {

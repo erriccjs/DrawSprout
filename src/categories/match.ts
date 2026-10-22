@@ -29,6 +29,29 @@ export interface PhotoMatch {
   readonly message: string;
 }
 
+/**
+ * Names the model may say instead of a catalogue id. Applied only when the
+ * reply is not already an id, so a real lesson name always wins.
+ */
+const CATEGORY_ALIASES: Readonly<Record<string, string>> = {
+  person: 'person-standing',
+  man: 'person-standing',
+  woman: 'person-standing',
+  boy: 'person-standing',
+  girl: 'person-standing',
+  child: 'person-standing',
+  'statue of a person': 'person-standing',
+  figure: 'person-standing',
+  'people standing': 'person-standing',
+  'anime character': 'character',
+  'cartoon character': 'character',
+  face: 'character',
+  portrait: 'character',
+  doll: 'character',
+  'action figure': 'character',
+  superhero: 'character',
+};
+
 const NAMED_COLOURS: Readonly<Record<string, string>> = {
   black: '#222222',
   hitam: '#222222',
@@ -57,7 +80,7 @@ const NAMED_COLOURS: Readonly<Record<string, string>> = {
 
 export function interpretMatch(raw: unknown, catalogue: readonly CategoryEntry[] = CATEGORY_CATALOGUE): PhotoMatch {
   const record = asRecord(raw);
-  const category = typeof record?.category === 'string' ? record.category.trim().toLowerCase() : 'none';
+  const category = canonicalCategory(record?.category, catalogue);
   const known = catalogue.find((entry) => entry.id === category);
   const confidence = readConfidence(record?.confidence);
   const facing = readFacing(record?.facing);
@@ -87,6 +110,13 @@ export function normalizeHex(value: string): string | null {
   }
   const full = /^#([0-9a-f]{6})$/.exec(text);
   return full?.[1] ? `#${full[1]}` : null;
+}
+
+function canonicalCategory(value: unknown, catalogue: readonly CategoryEntry[]): string {
+  if (typeof value !== 'string') return 'none';
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (catalogue.some((entry) => entry.id === normalized)) return normalized;
+  return CATEGORY_ALIASES[normalized] ?? normalized;
 }
 
 function readConfidence(value: unknown): number {
