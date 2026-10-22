@@ -1344,3 +1344,13 @@ The v13 run (commit 9a2d318, OpenAI, `--steps both`, five samples) was a no-go. 
 **Other.** A guide that is not the opening cross, such as a neck construction line with no ink, is not a step. The part of the saucer behind the cup is hidden. Call A does not add a branch, a bud, or a stem that is not in the photo. The photo request waits long enough for the erase pass.
 
 The eval idempotency key ends in `v14`. The gate is still not claimed.
+
+### D-81 — A photo can pick a hand-authored category lesson
+
+Generating a lesson from a photo (D-66 through D-80) did not reach the drawing quality the owner wants. That spike stays in the app behind `?beta=foto`. The picture-choosing screen also offers this second path.
+
+**Choice.** Lessons are vectors in the existing schema (version stays 1). Fourteen are drawn by hand: cat, dog, flower, cup, toy car, fish, house, tree, butterfly, bird, rabbit, turtle, rocket, and apple. A larger list of category names is planned and not drawn yet. One cheap vision call (`gpt-4.1-mini`, `OPENAI_API_KEY` on the Worker) on `POST /api/photo-match` returns a category, a confidence, colours for the named parts, and a facing. At or above 0.55, and only for a lesson that exists, the app recolours that lesson and mirrors it when the photo faces the other way, then opens the ordinary drawing screen. Otherwise the child sees "Belum bisa digambar. Coba salah satu ini." There is no image generation on this path, and the 30-photo rubric is not claimed.
+
+The house and butterfly packages are `house-front` and `butterfly-front`. The matcher ids stay `house` and `butterfly`, so the picker tiles keep the bundled lessons of those ids.
+
+The example card draws the new line in red, earlier lines dark, and a dashed construction guide only on the step that introduces it. Bundled lessons and category lessons use that same card.

@@ -262,14 +262,13 @@ describe('lesson picker', () => {
 
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Karyaku' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Kucing Duduk', level: 3 })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Kucing Duduk', level: 3 })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Buka Kucing Duduk' }));
     await screen.findByRole('heading', { name: 'Kucing Duduk', level: 1 });
     expect(screen.queryByRole('heading', { name: 'Karyaku' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Pilih gambar/ }));
-    await screen.findByRole('heading', { name: 'Karyaku' });
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus Kucing Duduk' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Hapus Kucing Duduk' }));
     expect(screen.getByText('Hapus karya ini?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Batal' }));
     expect(await store.loadSession('gallery-cat')).not.toBeNull();

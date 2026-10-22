@@ -789,7 +789,7 @@ describe('assistance modes', () => {
 });
 
 describe('navigation and colouring', () => {
-  it('keeps the outline example unchanged on a line step', () => {
+  it('shows this step in red and hides the lines that come later', () => {
     setup();
     const paths = previewPaths();
     const current = CAT_LESSON.steps[0]!.guidePaths;
@@ -823,12 +823,12 @@ describe('navigation and colouring', () => {
     );
     expect(
       previewPaths()
-        .filter((path) => path.getAttribute('stroke') === '#4b6bfb')
+        .filter((path) => path.getAttribute('stroke') === '#e23b3b')
         .map((path) => path.getAttribute('d')),
     ).toEqual(filled.map((path) => path.getAttribute('d')));
     expect(
       previewPaths()
-        .filter((path) => path.getAttribute('fill') === 'none' && path.getAttribute('stroke') !== '#4b6bfb')
+        .filter((path) => path.getAttribute('fill') === 'none' && path.getAttribute('stroke') !== '#e23b3b')
         .every((path) => path.getAttribute('stroke') === '#2c2c2c'),
     ).toBe(true);
   });
@@ -855,7 +855,7 @@ describe('navigation and colouring', () => {
     );
     expect(
       previewPaths()
-        .filter((path) => path.getAttribute('stroke') === '#4b6bfb')
+        .filter((path) => path.getAttribute('stroke') === '#e23b3b')
         .map((path) => path.getAttribute('d')),
     ).toEqual(filled.map((path) => path.getAttribute('d')));
     expect(previewPaths().filter((path) => path.getAttribute('fill') === 'var(--paper)')).toHaveLength(0);

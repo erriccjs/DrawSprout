@@ -4,6 +4,7 @@ import type { PhotoLessonRecord } from '../persistence/photo-lesson-store';
 
 interface LessonPickerProps {
   readonly onSelect: (lessonId: string) => void;
+  readonly onPhoto: () => void;
   readonly notice: string | null;
   /** True only after the worker has stored and checked the whole shell. */
   readonly offlineReady: boolean;
@@ -20,6 +21,7 @@ interface LessonPickerProps {
 
 export function LessonPicker({
   onSelect,
+  onPhoto,
   notice,
   offlineReady,
   updatePhase,
@@ -37,6 +39,9 @@ export function LessonPicker({
     <section className="lesson-picker" aria-labelledby="lesson-picker-title">
       <h1 id="lesson-picker-title">Mau gambar apa hari ini?</h1>
       <p>Pilih gambar yang kamu suka, lalu ikuti langkahnya.</p>
+      <button type="button" className="button button--primary lesson-picker__photo" onClick={onPhoto}>
+        Gambar dari foto
+      </button>
       {notice && <p className="banner" role="status">{notice}</p>}
       {offlineReady && (
         <p className="lesson-picker__offline">Bisa dibuka tanpa internet.</p>

@@ -20,8 +20,8 @@
     // A missing file is index.html. A path that matches a file, including
     // /sw.js, is that file. See https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/
     "not_found_handling": "single-page-application",
-    // Only the photo API is handled by the script. Everything else, including
-    // /sw.js and _headers, is served as a static asset.
+    // Only /api is handled by the script (photo-lesson and photo-match).
+    // Everything else, including /sw.js and _headers, is served as a static asset.
     "run_worker_first": ["/api/*"]
   },
   // Workers Builds runs `wrangler preview` for a branch build. That command
