@@ -73,6 +73,17 @@ export class MemorySessionStore implements SessionStore {
     return Promise.resolve();
   }
 
+  deleteSessionsForLesson(lessonId: string): Promise<void> {
+    const ids = [...this.checkpoints.values()]
+      .filter((checkpoint) => checkpoint.lessonId === lessonId)
+      .map((checkpoint) => checkpoint.sessionId);
+    for (const id of ids) {
+      this.checkpoints.delete(id);
+      this.strokes.delete(id);
+    }
+    return Promise.resolve();
+  }
+
   listSavedArtworks(): Promise<readonly SavedArtworkSummary[]> {
     const saved = [...this.checkpoints.values()]
       .filter(isGalleryArtwork)

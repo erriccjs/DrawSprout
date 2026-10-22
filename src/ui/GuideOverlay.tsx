@@ -26,8 +26,8 @@ interface GuideOverlayProps {
  * weight, not only colour (PRD section 10).
  */
 const STYLE_BY_ROLE = {
-  'final-outline': { dash: '20 14', width: 4, opacity: 0.75 },
-  construction: { dash: '4 14', width: 3, opacity: 0.5 },
+  'final-outline': { dash: '20 14', width: 4, opacity: 0.75, color: '#e23b3b' },
+  construction: { dash: '4 14', width: 3, opacity: 0.9, color: '#b5b5b5' },
 } as const;
 
 export function GuideOverlay({ space, paths, visible, widthCss, heightCss }: GuideOverlayProps) {
@@ -49,7 +49,7 @@ export function GuideOverlay({ space, paths, visible, widthCss, heightCss }: Gui
               key={path.id}
               d={path.d}
               fill="none"
-              stroke={path.role === 'construction' ? '#b5b5b5' : '#e23b3b'}
+              stroke={style.color}
               strokeWidth={style.width}
               strokeDasharray={style.dash}
               strokeLinecap="round"

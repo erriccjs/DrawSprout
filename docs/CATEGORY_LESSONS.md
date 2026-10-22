@@ -1,8 +1,8 @@
 # Category lessons
 
-Photo lessons are chosen from a hand-authored library. A photo is not turned
-into new geometry. OpenAI image generation (the v9–v14 spike, PR #23) stays
-open as a reference and is not on this path.
+Photo lessons on this path are chosen from a hand-authored library. A photo
+is not turned into new geometry. The generated photo spike (D-66 through D-80)
+is also in the app, behind `?beta=foto`. It is a separate path.
 
 This spike does **not** claim the 30-photo rubric. `claimedPass` stays false.
 
@@ -164,9 +164,10 @@ lesson does not have to replace a picker tile. Both open in `DrawingPad`.
 
 ## Samples
 
-`scripts/photo-eval/samples/` holds the five CC0 photos. The harness sends
-each one through the matcher and writes a PNG contact sheet of every done
-lesson. It does not pass the 30-photo rubric.
+`scripts/photo-eval/samples/` holds the five CC0 photos. `npm run photo-eval`
+is the generated-lesson harness. `scripts/photo-eval/category-sheets.ts`
+sends each sample through the category matcher and writes a PNG contact
+sheet of every done lesson. Neither claims the 30-photo rubric.
 
 ## Open questions
 

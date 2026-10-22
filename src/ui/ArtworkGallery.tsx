@@ -17,9 +17,11 @@ interface ArtworkGalleryProps {
   readonly store: SessionStore;
   readonly actionsDisabled: boolean;
   readonly onOpen: (sessionId: string) => void;
+  /** Photo lessons are not in the bundled catalogue. */
+  readonly extraLessons?: readonly LessonPackage[];
 }
 
-export function ArtworkGallery({ store, actionsDisabled, onOpen }: ArtworkGalleryProps) {
+export function ArtworkGallery({ store, actionsDisabled, onOpen, extraLessons = [] }: ArtworkGalleryProps) {
   const [artworks, setArtworks] = useState<readonly SavedArtworkSummary[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -52,6 +54,7 @@ export function ArtworkGallery({ store, actionsDisabled, onOpen }: ArtworkGaller
               artwork={artwork}
               actionsDisabled={actionsDisabled}
               onOpen={onOpen}
+              extraLessons={extraLessons}
               onDeleted={() => setRevision((current) => current + 1)}
             />
           ))}
@@ -66,11 +69,12 @@ interface ArtworkCardProps {
   readonly artwork: SavedArtworkSummary;
   readonly actionsDisabled: boolean;
   readonly onOpen: (sessionId: string) => void;
+  readonly extraLessons: readonly LessonPackage[];
   readonly onDeleted: () => void;
 }
 
-function ArtworkCard({ store, artwork, actionsDisabled, onOpen, onDeleted }: ArtworkCardProps) {
-  const lesson = lookupLesson(artwork.lessonId);
+function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, onDeleted }: ArtworkCardProps) {
+  const lesson = lookupLesson(artwork.lessonId, extraLessons);
   const title = lesson?.title ?? 'Pelajaran lama';
   const [confirming, setConfirming] = useState(false);
   const [exportName, setExportName] = useState<string | null>(null);
@@ -179,7 +183,9 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, onDeleted }: Art
   );
 }
 
-function lookupLesson(lessonId: string): LessonPackage | null {
+function lookupLesson(lessonId: string, extraLessons: readonly LessonPackage[]): LessonPackage | null {
+  const extra = extraLessons.find((lesson) => lesson.id === lessonId);
+  if (extra) return extra;
   try {
     return getLesson(lessonId);
   } catch {

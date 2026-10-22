@@ -792,13 +792,14 @@ describe('navigation and colouring', () => {
   it('shows this step in red and hides the lines that come later', () => {
     setup();
     const paths = previewPaths();
-    const head = CAT_LESSON.steps[0]!.guidePaths[0]!;
-    expect(paths.map((path) => path.getAttribute('d'))).toEqual([head.d]);
+    const current = CAT_LESSON.steps[0]!.guidePaths;
+    expect(paths).toHaveLength(current.length);
+    expect(paths.map((path) => path.getAttribute('d'))).toEqual(current.map((path) => path.d));
     expect(paths.map((path) => [
       path.getAttribute('fill'),
       path.getAttribute('stroke'),
       path.getAttribute('stroke-width'),
-    ])).toEqual([['none', '#e23b3b', '10']]);
+    ])).toEqual(current.map(() => ['none', '#e23b3b', '10']));
   });
 
   it('emphasises fur while leaving the later ear and nose regions blank on color-fur', () => {

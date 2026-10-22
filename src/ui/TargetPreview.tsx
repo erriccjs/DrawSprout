@@ -25,7 +25,7 @@ interface TargetPreviewProps {
 }
 
 export function TargetPreview({ space, paths, title, step, steps, colorRegions }: TargetPreviewProps) {
-  const preview = stepPreview({ steps, colorRegions }, steps.indexOf(step));
+  const preview = stepPreview({ steps, colorRegions }, Math.max(0, steps.indexOf(step)));
   const viewBox = previewViewBox(space, [
     ...paths.map((path) => path.d),
     ...colorRegions.map((region) => region.d),
