@@ -17,7 +17,7 @@ const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/g
 
 export class MissingMatchKey extends Error {
   constructor() {
-    super('OpenAI API key is not configured');
+    super('Match provider key is not configured');
     this.name = 'MissingMatchKey';
   }
 }
@@ -63,7 +63,8 @@ export async function handlePhotoMatch(request: Request, deps: PhotoMatchDeps): 
   }
 
   try {
-    const classified = await deps.classify(image, mediaType, idempotencyKey || crypto.randomUUID(), AbortSignal.timeout(30_000));
+    // Long enough for Prefer: wait and a short poll if the prediction is still running.
+    const classified = await deps.classify(image, mediaType, idempotencyKey || crypto.randomUUID(), AbortSignal.timeout(45_000));
     const match = interpretMatch(classified.raw);
     const body = responseBody(match, classified);
     if (idempotencyKey) remember(cache, idempotencyKey, body);

@@ -5,7 +5,8 @@
  *   npx esbuild scripts/photo-eval/category-sheets.ts --bundle --platform=node --format=esm --outfile=/tmp/photo-eval.mjs
  *   node /tmp/photo-eval.mjs
  *
- * OPENAI_API_KEY is required for the live match. The sheets render either way.
+ * The live match uses MATCH_PROVIDER (default replicate, REPLICATE_API_KEY).
+ * MATCH_PROVIDER=openai uses OPENAI_API_KEY. The sheets render either way.
  * The script does not print the key or the photo bytes.
  */
 
@@ -14,8 +15,9 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { applyPhotoToLesson } from '../../src/categories/apply';
 import { CATEGORY_LESSONS, doneCategory } from '../../src/categories/library';
+import { classifyMatch } from '../../src/categories/classify';
 import { interpretMatch } from '../../src/categories/match';
-import { classifyPhoto } from '../../src/categories/openai';
+import { matchProvider } from '../../src/categories/provider';
 import { matchCostUsd } from '../../src/categories/pricing';
 import { contactSheetHtml } from '../../src/categories/sheet';
 
@@ -58,16 +60,23 @@ async function main(): Promise<void> {
 
   const files = (await readdir(samplesDir)).filter((name) => name.endsWith('.jpg')).sort();
   const reports: SampleReport[] = [];
-  const apiKey = process.env.OPENAI_API_KEY;
+  const provider = matchProvider(process.env.MATCH_PROVIDER);
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  const replicateKey = (process.env.REPLICATE_API_KEY || process.env.REPLICATE_API_TOKEN)?.trim();
+  const missingKey = provider === 'openai' ? !openaiKey : !replicateKey;
   for (const file of files) {
-    if (!apiKey) {
-      reports.push(emptyReport(file, 'OPENAI_API_KEY is not set'));
+    if (missingKey) {
+      reports.push(emptyReport(file, provider === 'openai' ? 'OPENAI_API_KEY is not set' : 'REPLICATE_API_KEY is not set'));
       continue;
     }
     const bytes = await readFile(path.join(samplesDir, file));
     try {
-      const classified = await classifyPhoto({
-        apiKey,
+      const classified = await classifyMatch({
+        provider,
+        ...(openaiKey ? { openaiKey } : {}),
+        ...(replicateKey ? { replicateKey } : {}),
+        ...(process.env.OPENAI_TEXT_MODEL ? { openaiModel: process.env.OPENAI_TEXT_MODEL } : {}),
+        ...(process.env.MATCH_REPLICATE_MODEL ? { replicateModel: process.env.MATCH_REPLICATE_MODEL } : {}),
         image: bytes,
         mediaType: 'image/jpeg',
         idempotencyKey: `category-eval-${file}`,

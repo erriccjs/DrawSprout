@@ -9,8 +9,8 @@
  * duration only.
  */
 
-import { MissingMatchKey, handlePhotoMatch, PHOTO_MATCH_PATH } from '../categories/http';
-import { classifyPhoto } from '../categories/openai';
+import { classifyMatch } from '../categories/classify';
+import { handlePhotoMatch, PHOTO_MATCH_PATH } from '../categories/http';
 import { handlePhotoLessonRequest, PHOTO_API_PATH, type JobCache } from '../photo/api';
 import { openAiClients } from '../photo/openai';
 import { imageProvider, replicateApiKey } from '../photo/provider';
@@ -24,6 +24,8 @@ type WorkerEnv = Env & {
   readonly REPLICATE_API_KEY?: string;
   readonly REPLICATE_API_TOKEN?: string;
   readonly REPLICATE_IMAGE_MODEL?: string;
+  readonly MATCH_PROVIDER?: string;
+  readonly MATCH_REPLICATE_MODEL?: string;
 };
 
 const photoCache: JobCache = { success: new Map(), inflight: new Map() };
@@ -38,12 +40,13 @@ export default {
       const started = Date.now();
       const response = await handlePhotoMatch(request, {
         classify: (image, mediaType, idempotencyKey, signal) => {
-          const apiKey = env.OPENAI_API_KEY;
-          if (!apiKey) return Promise.reject(new MissingMatchKey());
-          const model = env.OPENAI_TEXT_MODEL;
-          return classifyPhoto({
-            apiKey,
-            ...(model ? { model } : {}),
+          const replicateKey = replicateApiKey(env);
+          return classifyMatch({
+            ...(env.MATCH_PROVIDER ? { provider: env.MATCH_PROVIDER } : {}),
+            ...(env.OPENAI_API_KEY ? { openaiKey: env.OPENAI_API_KEY } : {}),
+            ...(replicateKey ? { replicateKey } : {}),
+            ...(env.OPENAI_TEXT_MODEL ? { openaiModel: env.OPENAI_TEXT_MODEL } : {}),
+            ...(env.MATCH_REPLICATE_MODEL ? { replicateModel: env.MATCH_REPLICATE_MODEL } : {}),
             image,
             mediaType,
             idempotencyKey,

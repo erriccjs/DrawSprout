@@ -27,5 +27,10 @@
   // Workers Builds runs `wrangler preview` for a branch build. That command
   // refuses to start without this block. An empty object is enough, and
   // `wrangler deploy` does not read it.
-  "previews": {}
+  "previews": {},
+  // Photo match. The key is the Worker secret REPLICATE_API_KEY, not a var.
+  "vars": {
+    "MATCH_PROVIDER": "replicate",
+    "MATCH_REPLICATE_MODEL": "openai/gpt-4.1-mini"
+  }
 }

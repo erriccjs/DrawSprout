@@ -7,6 +7,7 @@ const png = Uint8Array.from([137, 80, 78, 71]);
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('worker routing', () => {
@@ -82,5 +83,62 @@ describe('worker routing', () => {
     expect(line).toMatchObject({ route: 'photo-lesson', status: 500 });
     expect(logs.join('\n')).not.toContain('png');
     expect(logs.join('\n')).not.toMatch(/[A-Za-z0-9+/]{40,}/);
+  });
+
+  it('asks Replicate for a photo match unless MATCH_PROVIDER is openai', async () => {
+    const logs: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((message: unknown) => {
+      logs.push(String(message));
+    });
+    const calls: { url: string; prefer: string | null; hasImageInput: boolean }[] = [];
+    const secret = 'replicate-secret-value-not-for-logs';
+    vi.stubGlobal('fetch', (url: string, init: RequestInit = {}) => {
+      const body = typeof init.body === 'string' ? init.body : '';
+      calls.push({
+        url: String(url),
+        prefer: new Headers(init.headers).get('prefer'),
+        hasImageInput: body.includes('image_input'),
+      });
+      const output = JSON.stringify({
+        category: 'cat', confidence: 0.9, facing: 'front', pose: 'sitting', colours: [{ part: 'fur', color: '#c47a2a' }],
+      });
+      if (String(url).includes('api.openai.com')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          choices: [{ message: { content: output } }],
+          usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+        })));
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        id: 'pred-worker',
+        status: 'succeeded',
+        output,
+        metrics: { input_token_count: 20, output_token_count: 8 },
+      })));
+    });
+    const assets = { ASSETS: { fetch: () => Promise.resolve(new Response('no')) } };
+    const photo = () => new Request('https://drawsprout.test/api/photo-match', {
+      method: 'POST',
+      headers: { 'content-type': 'image/png' },
+      body: png as unknown as BodyInit,
+    });
+    const replicate = await worker.fetch(photo(), { ...assets, REPLICATE_API_KEY: secret });
+    expect(replicate.status).toBe(200);
+    const matched = await replicate.json() as { matched: boolean; category: string; model: string };
+    expect(matched).toMatchObject({ matched: true, category: 'cat', model: 'openai/gpt-4.1-mini' });
+    expect(calls[0]?.url).toBe('https://api.replicate.com/v1/models/openai/gpt-4.1-mini/predictions');
+    expect(calls[0]?.prefer).toBe('wait=20');
+    expect(calls[0]?.hasImageInput).toBe(true);
+    expect(logs.join('\n')).not.toContain(secret);
+    expect(logs.join('\n')).not.toContain('data:image');
+
+    calls.length = 0;
+    const openai = await worker.fetch(photo(), {
+      ...assets,
+      MATCH_PROVIDER: 'openai',
+      OPENAI_API_KEY: 'openai-secret-value',
+    });
+    expect(openai.status).toBe(200);
+    expect(calls[0]?.url).toContain('https://api.openai.com/v1/chat/completions');
+    expect((await openai.json() as { category: string }).category).toBe('cat');
   });
 });

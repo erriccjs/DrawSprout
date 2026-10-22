@@ -1362,3 +1362,7 @@ The fourteen hand-authored lessons were only reachable through `/api/photo-match
 **Choice.** `lessonsForPicker` lists every lesson marked done, then any older package whose title is not already used. Rumah and Kupu-kupu are the category drawings (`house-front`, `butterfly-front`). Kucing Duduk stays, because that title is not Kucing. Each tile is the finished coloured drawing. Choosing one opens that package id.
 
 **Saved drawings.** `getPlayableLesson` still returns the older package for `house`, `butterfly`, and `cat-sitting`. Karyaku looks lessons up the same way, so a category drawing saved under `tree` or `house-front` keeps its name.
+
+### D-83 — Photo match calls Replicate
+
+The owner's OpenAI credit ran out. `POST /api/photo-match` now calls Replicate's official model `openai/gpt-4.1-mini` by default. The photo is an `image_input` data URI. The Worker secret is `REPLICATE_API_KEY`. `Prefer: wait` holds the create call, then the Worker polls until the prediction finishes or the request times out. `MATCH_PROVIDER=openai` keeps the previous chat-completions call. The JSON shape, the 0.55 bar, and the friendly list are unchanged. Replicate's listed price is $0.40 per 1M input tokens and $1.60 per 1M output tokens. Logs stay status and duration only.
