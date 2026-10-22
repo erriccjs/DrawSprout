@@ -96,18 +96,24 @@ the app then shows the friendly list instead of inventing a drawing.
 A separate real-car lesson is not in the list, so the matcher is not split
 between two car ids.
 
-The picker already has lessons with ids `house` and `butterfly`. Those tiles
-stay the original packages. The category drawings use package ids
-`house-front` and `butterfly-front`, and the matcher still says `house` and
-`butterfly`. A shared id would open the wrong picture from the gallery.
+The choosing screen lists every lesson marked done (`lessonsForPicker`).
+The tile is the finished coloured drawing. House and butterfly keep package
+ids `house-front` and `butterfly-front`, because the older picker packages
+already use `house` and `butterfly`. A saved drawing of those older ids still
+opens the older package. The new tiles are the ones labelled Rumah and
+Kupu-kupu. Kucing Duduk stays beside Kucing, because the titles differ.
+The matcher still says `house` and `butterfly`.
 
 ## Matching, recolouring, and facing
 
 `POST /api/photo-match` takes the photo as the body (`image/jpeg`,
-`image/png`, `image/webp`, or `image/gif`, up to 6 MB). The Worker calls
-OpenAI chat completions once. The model is `gpt-4.1-mini` unless
-`OPENAI_TEXT_MODEL` is set. The image is sent at `detail: low`. The reply is
-strict JSON:
+`image/png`, `image/webp`, or `image/gif`, up to 6 MB). The default provider
+is Replicate (`MATCH_PROVIDER=replicate`). The Worker calls the official
+model `openai/gpt-4.1-mini` (`MATCH_REPLICATE_MODEL`) with `Prefer: wait`,
+then polls the prediction if it is still running. The photo is sent as a
+data URI in `image_input`. Auth is the Worker secret `REPLICATE_API_KEY`.
+`MATCH_PROVIDER=openai` keeps the old chat-completions call (`gpt-4.1-mini`,
+`detail: low`, `OPENAI_API_KEY`). The reply is JSON of the same shape:
 
 ```json
 { "category": "cat", "confidence": 0.9, "facing": "right", "pose": "sitting", "colours": [{ "part": "fur", "color": "#c47a2a" }] }
@@ -135,17 +141,18 @@ The same idempotency key returns the cached JSON. A client is limited to
 
 ## Cost per photo
 
-One `gpt-4.1-mini` vision call. List price used here, October 2026: **$0.40
-per 1M input tokens** and **$1.60 per 1M output tokens**. Image tokens are
-input tokens. Nothing is priced as an image edit.
+One `openai/gpt-4.1-mini` vision call on Replicate. Replicate's price for
+that official model, read from the model page in October 2026: **$0.40 per
+1M input tokens** and **$1.60 per 1M output tokens**. The photo is billed as
+input tokens. OpenAI's standard rate for the same model is the same, so
+`MATCH_PROVIDER=openai` does not change this list price. Nothing is priced
+as an image edit.
 
-A short reply is a few hundred output tokens. At `detail: low` the photo is
-the rest of the input, so a match is typically well under one cent. The
-eval harness prints the measured token counts and this list price for each
-sample. There is no per-image generation fee. The run that produced the
-contact sheets in this spike did not have `OPENAI_API_KEY` in the
-environment, so the five sample photos were not sent and no token cost was
-measured.
+A short reply is a few hundred output tokens, so a match stays well under
+one cent. The eval harness prints measured token counts and this list price
+when a key is set. There is no per-image generation fee. This environment
+did not have `REPLICATE_API_KEY`, so no live match was run and no token cost
+was measured.
 
 ## How to add a lesson
 
@@ -159,8 +166,9 @@ measured.
 4. `npm test` validates the package, the step count, and that this document
    still lists the id.
 
-The bundled picker (`BUNDLED_LESSONS`) is a separate catalogue. A category
-lesson does not have to replace a picker tile. Both open in `DrawingPad`.
+Registering a done lesson puts it on the choosing screen. An older bundled
+lesson with the same title is left off that screen. Its id still opens from
+Karyaku. Both kinds of package open in `DrawingPad`.
 
 ## Samples
 

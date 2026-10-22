@@ -1,16 +1,24 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { BUNDLED_LESSONS } from '../lesson-data';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { CATEGORY_LESSONS, getPlayableLesson, lessonsForPicker } from '../categories/library';
 import { LessonPicker } from './LessonPicker';
 
 const css = readFileSync(path.join(process.cwd(), 'src/styles.css'), 'utf8');
 
-function renderPicker() {
+function choiceNamed(title: string): HTMLElement {
+  const choice = screen.getAllByRole('button').find((button) => (
+    button.querySelector('.lesson-picker__name')?.textContent === title
+  ));
+  if (!choice) throw new Error(`No lesson choice named ${title}`);
+  return choice;
+}
+
+function renderPicker(onSelect: (lessonId: string) => void = () => {}) {
   render(
     <LessonPicker
-      onSelect={() => {}}
+      onSelect={onSelect}
       onPhoto={() => {}}
       notice={null}
       offlineReady={false}
@@ -22,15 +30,40 @@ function renderPicker() {
 }
 
 describe('lesson picker', () => {
-  it('lists every bundled lesson, including the ten-picture catalogue', () => {
-    renderPicker();
-    expect(screen.getAllByRole('button').length).toBe(BUNDLED_LESSONS.length + 1);
+  it('lists every done category lesson as a coloured picture', () => {
+    const onSelect = vi.fn();
+    renderPicker(onSelect);
+    const choices = document.querySelectorAll('.lesson-picker__choice');
+    expect(choices).toHaveLength(lessonsForPicker().length);
     expect(screen.getByRole('button', { name: 'Gambar dari foto' })).toBeTruthy();
-    expect(BUNDLED_LESSONS).toHaveLength(10);
-    for (const title of ['Kucing Duduk', 'Rumah', 'Mobil', 'Kupu-kupu', 'Bintang']) {
-      expect(screen.getByRole('button', { name: new RegExp(title) })).toBeTruthy();
+    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 1);
+
+    const names = [...document.querySelectorAll('.lesson-picker__name')].map((node) => node.textContent);
+    expect(new Set(names).size).toBe(names.length);
+
+    for (const entry of CATEGORY_LESSONS) {
+      expect(entry.status).toBe('done');
+      const choice = choiceNamed(entry.lesson.title);
+      const fills = [...choice.querySelectorAll('path')].filter((path) => {
+        const fill = path.getAttribute('fill');
+        return fill !== null && fill !== 'none';
+      });
+      expect(fills.length).toBeGreaterThan(0);
     }
-    expect(document.querySelector('.lesson-picker__choices')?.children).toHaveLength(10);
+
+    fireEvent.click(choiceNamed('Rumah'));
+    fireEvent.click(choiceNamed('Kupu-kupu'));
+    fireEvent.click(choiceNamed('Kucing Duduk'));
+    expect(onSelect).toHaveBeenNthCalledWith(1, 'house-front');
+    expect(onSelect).toHaveBeenNthCalledWith(2, 'butterfly-front');
+    expect(onSelect).toHaveBeenNthCalledWith(3, 'cat-sitting');
+    expect(names.filter((name) => name === 'Rumah')).toHaveLength(1);
+    expect(names.filter((name) => name === 'Kupu-kupu')).toHaveLength(1);
+    expect(names).toContain('Kucing');
+    expect(getPlayableLesson('house').id).toBe('house');
+    expect(getPlayableLesson('butterfly').id).toBe('butterfly');
+    expect(getPlayableLesson('cat-sitting').id).toBe('cat-sitting');
+    expect(getPlayableLesson('house-front').id).toBe('house-front');
   });
 
   it('scrolls a grid that stays two columns on a portrait phone', () => {

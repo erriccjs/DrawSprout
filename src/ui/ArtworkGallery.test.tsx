@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { TREE_CATEGORY } from '../categories/lessons/tree';
 import { CAT_LESSON } from '../lesson-data/cat-lesson';
+import { HOUSE_LESSON } from '../lesson-data/house-lesson';
 import { createSession, reduceSession } from '../lesson-engine/session';
 import { fromRestoredSession, toCheckpoint } from '../persistence/mapping';
 import { MemorySessionStore } from '../persistence/memory-store';
@@ -67,6 +69,25 @@ describe('Karyaku', () => {
     expect((await screen.findByRole('button', { name: 'Buka Kucing Duduk' })).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Simpan PNG Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Hapus Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('names a saved category lesson and still names an older bundled id', async () => {
+    const store = new MemorySessionStore();
+    const tree = TREE_CATEGORY.lesson;
+    const treeSession = reduceSession(tree, createSession(tree, 'gallery-tree'), { type: 'next-step' });
+    const houseSession = reduceSession(HOUSE_LESSON, createSession(HOUSE_LESSON, 'gallery-house'), { type: 'next-step' });
+    await store.saveProgress({
+      checkpoint: toCheckpoint(treeSession, 1, Date.UTC(2026, 9, 21, 9, 5)),
+      newStrokes: [],
+    });
+    await store.saveProgress({
+      checkpoint: toCheckpoint(houseSession, 1, Date.UTC(2026, 9, 21, 10, 5)),
+      newStrokes: [],
+    });
+    render(<ArtworkGallery store={store} actionsDisabled={false} onOpen={() => {}} />);
+    expect(await screen.findByRole('heading', { name: 'Pohon' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Rumah' })).toBeTruthy();
+    expect(screen.queryByText('Pelajaran lama')).toBeNull();
   });
 
   it('says when nothing is saved', async () => {

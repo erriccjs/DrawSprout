@@ -1,6 +1,7 @@
-/** Validate the bundled lessons and open storage before the child chooses one. */
+/** Validate the shipped lessons and open storage before the child chooses one. */
 
 import { useEffect, useState } from 'react';
+import { CATEGORY_LESSONS } from '../categories/library';
 import { BUNDLED_LESSONS, assertValidLessons } from '../lesson-data';
 import { createSessionStore } from '../persistence';
 import type { SessionStore } from '../persistence/types';
@@ -23,6 +24,7 @@ export function useSessionBootstrap(): Bootstrap {
     void (async () => {
       try {
         assertValidLessons(BUNDLED_LESSONS);
+        assertValidLessons(CATEGORY_LESSONS.map((entry) => entry.lesson));
         const { store, durable } = await createSessionStore();
         if (cancelled) {
           store.close();

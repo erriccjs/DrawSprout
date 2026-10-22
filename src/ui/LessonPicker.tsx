@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { BUNDLED_LESSONS } from '../lesson-data';
+import { lessonsForPicker } from '../categories/library';
+import { PREVIEW_INK, stepPreview } from '../lesson-data/step-preview';
+import type { LessonPackage } from '../lesson-data/schema';
 import type { PhotoLessonRecord } from '../persistence/photo-lesson-store';
 
 interface LessonPickerProps {
@@ -64,7 +66,7 @@ export function LessonPicker({
         </div>
       )}
       <div className="lesson-picker__choices">
-        {BUNDLED_LESSONS.map((lesson) => (
+        {lessonsForPicker().map((lesson) => (
           <button
             className="lesson-picker__choice"
             key={lesson.id}
@@ -72,24 +74,7 @@ export function LessonPicker({
             disabled={applying}
             onClick={() => onSelect(lesson.id)}
           >
-            <svg
-              className="lesson-picker__picture"
-              viewBox={`0 0 ${lesson.coordinateSpace.width} ${lesson.coordinateSpace.height}`}
-              role="img"
-              aria-label={`Gambar ${lesson.title}`}
-            >
-              {lesson.targetPreview.paths.map((path) => (
-                <path
-                  key={path.id}
-                  d={path.d}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={8}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              ))}
-            </svg>
+            <LessonPicture lesson={lesson} />
             <span className="lesson-picker__name">{lesson.title}</span>
             <span className="lesson-picker__subtitle">{lesson.subtitle}</span>
           </button>
@@ -117,24 +102,7 @@ export function LessonPicker({
                     disabled={applying}
                     onClick={() => onSelect(record.lesson.id)}
                   >
-                    <svg
-                      className="lesson-picker__picture"
-                      viewBox={`0 0 ${record.lesson.coordinateSpace.width} ${record.lesson.coordinateSpace.height}`}
-                      role="img"
-                      aria-label={`Gambar ${record.lesson.title}`}
-                    >
-                      {record.lesson.targetPreview.paths.map((path) => (
-                        <path
-                          key={path.id}
-                          d={path.d}
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={8}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      ))}
-                    </svg>
+                    <LessonPicture lesson={record.lesson} />
                     <span className="lesson-picker__name">{record.lesson.title}</span>
                     <span className="lesson-picker__subtitle">{record.lesson.subtitle}</span>
                   </button>
@@ -174,5 +142,33 @@ export function LessonPicker({
         </div>
       )}
     </section>
+  );
+}
+
+/** The finished coloured drawing, used as the tile picture. */
+function LessonPicture({ lesson }: { readonly lesson: LessonPackage }) {
+  const preview = stepPreview(lesson, Math.max(0, lesson.steps.length - 1));
+  return (
+    <svg
+      className="lesson-picker__picture"
+      viewBox={`0 0 ${lesson.coordinateSpace.width} ${lesson.coordinateSpace.height}`}
+      role="img"
+      aria-label={`Gambar ${lesson.title}`}
+    >
+      {preview.fills.map((fill) => (
+        <path key={fill.id} d={fill.d} fill={fill.fill === 'paper' ? 'var(--paper)' : fill.fill} stroke="none" />
+      ))}
+      {preview.strokes.map((stroke) => (
+        <path
+          key={stroke.id}
+          d={stroke.d}
+          fill="none"
+          stroke={PREVIEW_INK[stroke.kind]}
+          strokeWidth={8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </svg>
   );
 }

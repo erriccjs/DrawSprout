@@ -1,9 +1,10 @@
 /**
  * List price for the photo-match call.
  *
- * gpt-4.1-mini, read from OpenAI's standard rates in October 2026: $0.40 per
- * 1M input tokens and $1.60 per 1M output tokens. The photo is input tokens.
- * There is no image-generation charge on this path.
+ * Replicate's official `openai/gpt-4.1-mini` page, October 2026: $0.40 per
+ * 1M input tokens and $1.60 per 1M output tokens. OpenAI's standard rate for
+ * the same model is the same. The photo is input tokens. There is no
+ * image-generation charge on this path.
  */
 
 export const MATCH_MODEL = 'gpt-4.1-mini';
