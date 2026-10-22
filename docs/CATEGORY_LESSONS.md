@@ -96,10 +96,13 @@ the app then shows the friendly list instead of inventing a drawing.
 A separate real-car lesson is not in the list, so the matcher is not split
 between two car ids.
 
-The picker already has lessons with ids `house` and `butterfly`. Those tiles
-stay the original packages. The category drawings use package ids
-`house-front` and `butterfly-front`, and the matcher still says `house` and
-`butterfly`. A shared id would open the wrong picture from the gallery.
+The choosing screen lists every lesson marked done (`lessonsForPicker`).
+The tile is the finished coloured drawing. House and butterfly keep package
+ids `house-front` and `butterfly-front`, because the older picker packages
+already use `house` and `butterfly`. A saved drawing of those older ids still
+opens the older package. The new tiles are the ones labelled Rumah and
+Kupu-kupu. Kucing Duduk stays beside Kucing, because the titles differ.
+The matcher still says `house` and `butterfly`.
 
 ## Matching, recolouring, and facing
 
@@ -159,8 +162,9 @@ measured.
 4. `npm test` validates the package, the step count, and that this document
    still lists the id.
 
-The bundled picker (`BUNDLED_LESSONS`) is a separate catalogue. A category
-lesson does not have to replace a picker tile. Both open in `DrawingPad`.
+Registering a done lesson puts it on the choosing screen. An older bundled
+lesson with the same title is left off that screen. Its id still opens from
+Karyaku. Both kinds of package open in `DrawingPad`.
 
 ## Samples
 

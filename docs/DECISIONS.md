@@ -1351,6 +1351,14 @@ Generating a lesson from a photo (D-66 through D-80) did not reach the drawing q
 
 **Choice.** Lessons are vectors in the existing schema (version stays 1). Fourteen are drawn by hand: cat, dog, flower, cup, toy car, fish, house, tree, butterfly, bird, rabbit, turtle, rocket, and apple. A larger list of category names is planned and not drawn yet. One cheap vision call (`gpt-4.1-mini`, `OPENAI_API_KEY` on the Worker) on `POST /api/photo-match` returns a category, a confidence, colours for the named parts, and a facing. At or above 0.55, and only for a lesson that exists, the app recolours that lesson and mirrors it when the photo faces the other way, then opens the ordinary drawing screen. Otherwise the child sees "Belum bisa digambar. Coba salah satu ini." There is no image generation on this path, and the 30-photo rubric is not claimed.
 
-The house and butterfly packages are `house-front` and `butterfly-front`. The matcher ids stay `house` and `butterfly`, so the picker tiles keep the bundled lessons of those ids.
+The house and butterfly packages are `house-front` and `butterfly-front`. The matcher ids stay `house` and `butterfly`. D-82 puts those packages on the choosing screen.
 
 The example card draws the new line in red, earlier lines dark, and a dashed construction guide only on the step that introduces it. Bundled lessons and category lessons use that same card.
+
+### D-82 — Done category lessons are pictures on the choosing screen
+
+The fourteen hand-authored lessons were only reachable through `/api/photo-match`. The choosing screen listed the ten older packages, so a child never saw the new cat, dog, flower, cup, toy car, fish, house, tree, butterfly, bird, rabbit, turtle, rocket, or apple.
+
+**Choice.** `lessonsForPicker` lists every lesson marked done, then any older package whose title is not already used. Rumah and Kupu-kupu are the category drawings (`house-front`, `butterfly-front`). Kucing Duduk stays, because that title is not Kucing. Each tile is the finished coloured drawing. Choosing one opens that package id.
+
+**Saved drawings.** `getPlayableLesson` still returns the older package for `house`, `butterfly`, and `cat-sitting`. Karyaku looks lessons up the same way, so a category drawing saved under `tree` or `house-front` keeps its name.

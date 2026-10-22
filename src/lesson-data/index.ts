@@ -24,10 +24,10 @@ import { STAR_LESSON } from './star-lesson';
 import type { LessonPackage } from './schema';
 
 /**
- * Every lesson shipped in the app. The picker reads this list directly, so
- * session bootstrap validates it with `assertValidLessons` before anything is
- * rendered: PRD section 14 requires an invalid package to refuse rather than be
- * rendered partially.
+ * The original picture catalogue. The choosing screen also lists every done
+ * category lesson (`lessonsForPicker`). Bootstrap validates this list before
+ * anything is rendered: PRD section 14 requires an invalid package to refuse
+ * rather than be rendered partially.
  */
 export const BUNDLED_LESSONS: readonly LessonPackage[] = [
   CAT_LESSON,

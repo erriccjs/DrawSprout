@@ -87,10 +87,26 @@ export function categoryLessonPackage(id: string): LessonPackage | undefined {
 }
 
 /**
- * The picker and older checkpoints use bundled ids. `house` and `butterfly`
- * are both a picker lesson and a category, so the bundled package wins for
- * those ids. A category drawing is opened from the photo flow by its package,
- * and from the gallery by the package id (`house-front`, `butterfly-front`).
+ * Pictures on the choosing screen. Every done category is a tile. An older
+ * bundled lesson stays beside it when the titles differ, such as Kucing
+ * Duduk next to Kucing. The same title would be two identical tiles, so the
+ * bundled Rumah and Kupu-kupu are not listed. Saved drawings still open
+ * those packages by id.
+ */
+export function lessonsForPicker(): readonly LessonPackage[] {
+  const categoryLessons = CATEGORY_LESSONS.map((entry) => entry.lesson);
+  const taken = new Set(categoryLessons.map((lesson) => lesson.title));
+  return [
+    ...categoryLessons,
+    ...BUNDLED_LESSONS.filter((lesson) => !taken.has(lesson.title)),
+  ];
+}
+
+/**
+ * Older checkpoints use bundled ids. `house` and `butterfly` are both an
+ * older package and a category name, so the bundled package wins for those
+ * ids. The picker opens the category drawing by its package id
+ * (`house-front`, `butterfly-front`).
  */
 export function getPlayableLesson(id: string): LessonPackage {
   const bundled = BUNDLED_LESSONS.find((lesson) => lesson.id === id);

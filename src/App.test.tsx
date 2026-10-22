@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type * as CategoryLibrary from './categories/library';
 import * as lessonData from './lesson-data';
 import type { LessonPackage } from './lesson-data/schema';
 import { DEFAULT_PREFERENCES, createSession, reduceSession } from './lesson-engine/session';
@@ -26,6 +27,14 @@ vi.mock('./lesson-data', async (importOriginal) => {
       if (!lesson) throw new Error(`Unknown lesson ${id}`);
       return lesson;
     },
+  };
+});
+
+vi.mock('./categories/library', async (importOriginal) => {
+  const actual = await importOriginal<typeof CategoryLibrary>();
+  return {
+    ...actual,
+    lessonsForPicker: () => lessons,
   };
 });
 

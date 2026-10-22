@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { getLesson } from '../lesson-data';
+import { getPlayableLesson } from '../categories/library';
 import type { LessonPackage } from '../lesson-data/schema';
 import type { Stroke } from '../lesson-engine/types';
 import { fromRestoredSession } from '../persistence/mapping';
@@ -187,7 +187,7 @@ function lookupLesson(lessonId: string, extraLessons: readonly LessonPackage[]):
   const extra = extraLessons.find((lesson) => lesson.id === lessonId);
   if (extra) return extra;
   try {
-    return getLesson(lessonId);
+    return getPlayableLesson(lessonId);
   } catch {
     return null;
   }
