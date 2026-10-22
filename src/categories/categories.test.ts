@@ -9,6 +9,7 @@ import { isDone } from './types';
 const DONE_IDS = [
   'cat', 'dog', 'flower', 'cup', 'toy-car', 'fish',
   'house', 'tree', 'butterfly', 'bird', 'rabbit', 'turtle', 'rocket', 'apple',
+  'person-standing', 'character',
 ];
 
 const doc = readFileSync(path.join(process.cwd(), 'docs/CATEGORY_LESSONS.md'), 'utf8');

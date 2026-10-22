@@ -31,6 +31,8 @@ export function matchPrompt(): string {
   return [
     'Match this photo to one drawing-lesson category.',
     'Use a category id from the list, or "none" when the subject is not in the list.',
+    'A standing person, man, woman, boy, girl, child, statue of a person, figure, or people standing is person-standing.',
+    'An anime character, cartoon character, face, portrait, doll, action figure, or superhero is character.',
     'confidence is a fraction from 0 to 1, not a percent.',
     'facing is left, right, front, or unknown. It is the way the head, the front of a vehicle, or a cup handle points. Use front for a flower or a face-on subject.',
     'pose is a short English word such as sitting or standing, or an empty string.',

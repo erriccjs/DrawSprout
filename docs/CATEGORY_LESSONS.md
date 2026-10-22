@@ -60,7 +60,8 @@ the app then shows the friendly list instead of inventing a drawing.
 | house | Rumah | done |
 | dinosaur | Dinosaurus | planned |
 | robot | Robot | planned |
-| person | Orang | planned |
+| person-standing | Orang Berdiri | done |
+| character | Tokoh | done |
 | butterfly | Kupu-kupu | done |
 | bird | Burung | done |
 | tree | Pohon | done |
@@ -103,6 +104,12 @@ already use `house` and `butterfly`. A saved drawing of those older ids still
 opens the older package. The new tiles are the ones labelled Rumah and
 Kupu-kupu. Kucing Duduk stays beside Kucing, because the titles differ.
 The matcher still says `house` and `butterfly`.
+
+`person-standing` is the standing person. A reply of person, man, woman, boy,
+girl, child, statue of a person, figure, or people standing opens that lesson.
+`character` is an original cartoon head and shoulders. Anime character,
+cartoon character, face, portrait, doll, action figure, and superhero open
+that lesson. The prompt tells the model to return the lesson id either way.
 
 ## Matching, recolouring, and facing
 
