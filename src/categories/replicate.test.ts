@@ -58,6 +58,7 @@ describe('replicate photo match', () => {
     expect(headers.get('prefer')).toBe('wait=20');
     expect(headers.get('authorization')).toBe(`Bearer ${secret}`);
     expect(headers.get('idempotency-key')).toBe('match-1');
+    expect(headers.get('user-agent')).toBe('drawsprout/photo-match');
     const rawBody = calls[0]?.init.body;
     const body = JSON.parse(typeof rawBody === 'string' ? rawBody : '') as { input: Record<string, unknown> };
     expect(body.input.image_input).toEqual([expect.stringMatching(/^data:image\/png;base64,/)]);
@@ -109,6 +110,30 @@ describe('replicate photo match', () => {
       signal: controller.signal,
     })).rejects.toThrow(/timed out/);
     expect(calls.some((url) => url.endsWith('/pred-slow/cancel'))).toBe(true);
+  });
+
+  it('retries a 502 with a fresh body', async () => {
+    const bodies: string[] = [];
+    vi.stubGlobal('fetch', (_url: string, init: RequestInit = {}) => {
+      bodies.push(typeof init.body === 'string' ? init.body : '');
+      if (bodies.length === 1) return Promise.resolve(jsonResponse({ detail: 'busy' }, 502));
+      return Promise.resolve(jsonResponse({
+        id: 'pred-retry',
+        status: 'succeeded',
+        output: '{"category":"cat","confidence":0.9,"facing":"front","pose":"","colours":[]}',
+      }));
+    });
+    const result = await classifyWithReplicate({
+      apiKey: secret,
+      image: png,
+      mediaType: 'image/png',
+      idempotencyKey: 'match-retry',
+      signal: AbortSignal.timeout(5_000),
+    });
+    expect(result.model).toBe('openai/gpt-4.1-mini');
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toBe(bodies[0]);
+    expect(bodies[0]).toContain('image_input');
   });
 
   it('drops photo bytes and the key from an upstream error', async () => {

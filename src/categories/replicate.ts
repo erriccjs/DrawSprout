@@ -7,6 +7,7 @@
  * finishes or the caller's signal aborts.
  */
 
+import { MatchUpstreamError, redactUpstream } from './http';
 import { bytesToBase64, matchPrompt, type ClassifyResult, type TokenUsage } from './openai';
 import { replicateMatchModel } from './provider';
 
@@ -73,7 +74,7 @@ async function createPrediction(
     signal,
   }, signal);
   const payload = await readJson(response);
-  if (!response.ok) throw new Error(replicateMessage(payload, response.status));
+  if (!response.ok) throw new MatchUpstreamError(replicateMessage(payload, response.status), response.status);
   return asPrediction(payload);
 }
 
@@ -113,7 +114,7 @@ async function getPrediction(apiKey: string, id: string, signal: AbortSignal): P
     signal,
   }, signal);
   const payload = await readJson(response);
-  if (!response.ok) throw new Error(replicateMessage(payload, response.status));
+  if (!response.ok) throw new MatchUpstreamError(replicateMessage(payload, response.status), response.status);
   return asPrediction(payload);
 }
 
@@ -131,17 +132,35 @@ async function cancelPrediction(apiKey: string, id: string): Promise<void> {
 }
 
 async function fetchWithRetry(url: string, init: RequestInit, signal: AbortSignal): Promise<Response> {
+  const body = init.body;
+  const attempt = () => fetch(url, freshInit(init, body));
   try {
-    const response = await fetch(url, init);
+    const response = await attempt();
     if (response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504) {
       await sleep(400, signal);
-      return fetch(url, init);
+      return attempt();
     }
     return response;
   } catch (error) {
     if (signal.aborted || !isTransient(error)) throw error;
-    return fetch(url, init);
+    return attempt();
   }
+}
+
+/**
+ * A new init on every attempt, with the original body string. Reusing one
+ * RequestInit after a 502 is safe for a string on this workerd, and a fresh
+ * init keeps the retry from depending on that.
+ */
+function freshInit(init: RequestInit, body: RequestInit['body']): RequestInit {
+  const headers = new Headers(init.headers);
+  if (!headers.has('user-agent')) headers.set('user-agent', 'drawsprout/photo-match');
+  return {
+    ...(init.method ? { method: init.method } : {}),
+    headers,
+    ...(body !== undefined ? { body } : {}),
+    ...(init.signal ? { signal: init.signal } : {}),
+  };
 }
 
 function isTransient(error: unknown): boolean {
@@ -176,7 +195,7 @@ function usageFromMetrics(metrics: unknown): TokenUsage | null {
 
 function asPrediction(value: unknown): Prediction {
   const record = asRecord(value) ?? {};
-  const error = typeof record.error === 'string' ? safeDetail(record.error) : '';
+  const error = typeof record.error === 'string' ? redactUpstream(record.error) : '';
   return {
     id: typeof record.id === 'string' ? record.id : '',
     status: typeof record.status === 'string' ? record.status : '',
@@ -188,17 +207,9 @@ function asPrediction(value: unknown): Prediction {
 
 function replicateMessage(payload: unknown, status: number): string {
   const record = asRecord(payload);
-  const detail = typeof record?.detail === 'string' ? safeDetail(record.detail) : '';
-  const title = typeof record?.title === 'string' ? safeDetail(record.title) : '';
+  const detail = typeof record?.detail === 'string' ? redactUpstream(record.detail) : '';
+  const title = typeof record?.title === 'string' ? redactUpstream(record.title) : '';
   return detail || title || `Replicate match failed (${status})`;
-}
-
-function safeDetail(value: string): string {
-  return value
-    .replace(/data:[^\s'"]+/gi, '[image]')
-    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
-    .replace(/[A-Za-z0-9+/]{40,}/g, '[redacted]')
-    .slice(0, 180);
 }
 
 async function readJson(response: Response): Promise<unknown> {

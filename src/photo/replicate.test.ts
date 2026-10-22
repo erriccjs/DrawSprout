@@ -13,6 +13,9 @@ describe('Replicate editor', () => {
   it('prefers REPLICATE_API_KEY and falls back to the token name', () => {
     expect(replicateApiKey({ REPLICATE_API_KEY: ' key ', REPLICATE_API_TOKEN: 'token' })).toBe('key');
     expect(replicateApiKey({ REPLICATE_API_TOKEN: ' token ' })).toBe('token');
+    expect(replicateApiKey({ REPLICATE_API_KEY: 'Bearer r8_live' })).toBe('r8_live');
+    expect(replicateApiKey({ REPLICATE_API_KEY: '"r8_quoted"' })).toBe('r8_quoted');
+    expect(replicateApiKey({ REPLICATE_API_KEY: "'Bearer r8_both'" })).toBe('r8_both');
     expect(replicateApiKey({})).toBeUndefined();
   });
 

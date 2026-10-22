@@ -14,8 +14,22 @@ export function replicateApiKey(env: {
   readonly REPLICATE_API_KEY?: string;
   readonly REPLICATE_API_TOKEN?: string;
 }): string | undefined {
-  const key = env.REPLICATE_API_KEY?.trim();
+  const key = normalizeReplicateKey(env.REPLICATE_API_KEY);
   if (key) return key;
-  const legacy = env.REPLICATE_API_TOKEN?.trim();
-  return legacy || undefined;
+  return normalizeReplicateKey(env.REPLICATE_API_TOKEN);
+}
+
+/**
+ * A Worker secret is often pasted from an `Authorization` header or a quoted
+ * env line. Replicate then answers 401 ("not a valid authentication token")
+ * in a few dozen milliseconds, and the photo match becomes a bare 502.
+ */
+function normalizeReplicateKey(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  let key = value.trim();
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1).trim();
+  }
+  key = key.replace(/^Bearer\s+/i, '').trim();
+  return key || undefined;
 }
