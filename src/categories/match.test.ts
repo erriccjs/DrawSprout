@@ -4,7 +4,7 @@ import { pathBounds } from '../ui/preview-frame';
 import { applyPhotoToLesson } from './apply';
 import { DOG_CATEGORY } from './lessons/dog';
 import { FLOWER_CATEGORY } from './lessons/flower';
-import { doneCategory } from './library';
+import { CATEGORY_LESSONS, doneCategory } from './library';
 import { MATCH_CONFIDENCE, interpretMatch, normalizeHex } from './match';
 import { mirrorPath } from './mirror';
 import { matchRequestBody } from './openai';
@@ -46,7 +46,7 @@ describe('photo match parsing', () => {
       const match = interpretMatch(raw);
       expect(match.matched).toBe(false);
       expect(match.message).toMatch(/Belum bisa digambar/);
-      expect(match.suggestions.map((item) => item.category)).toEqual(['cat', 'dog', 'flower', 'cup', 'toy-car', 'fish']);
+      expect(match.suggestions.map((item) => item.category)).toEqual(CATEGORY_LESSONS.map((entry) => entry.id));
     }
     expect(interpretMatch({ category: 'cat', confidence: 80, facing: 'left', pose: '', colours: [] }).confidence).toBe(0.8);
   });

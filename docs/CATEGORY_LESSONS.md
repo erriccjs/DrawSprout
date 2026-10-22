@@ -39,7 +39,7 @@ the contact sheets.
   it is not in the PNG export.
 
 Style for a new lesson: a classic how-to-draw page, not a chibi. Step 1 is
-one big simple shape (circle, oval, or dome). Each later line step adds one
+one big simple shape (circle, oval, dome, or the house's wall rectangle). Each later line step adds one
 meaningful part, large parts before small ones. Do not split one part across
 padding steps (five petals are one step). Use about 5–11 line steps. Colour
 steps follow the subject's real distinct colours.
@@ -57,19 +57,19 @@ the app then shows the friendly list instead of inventing a drawing.
 | cup | Cangkir | done |
 | toy-car | Mobil Mainan | done |
 | fish | Ikan | done |
-| house | Rumah | planned |
+| house | Rumah | done |
 | dinosaur | Dinosaurus | planned |
 | robot | Robot | planned |
 | person | Orang | planned |
-| butterfly | Kupu-kupu | planned |
-| bird | Burung | planned |
-| tree | Pohon | planned |
-| rabbit | Kelinci | planned |
-| turtle | Kura-kura | planned |
+| butterfly | Kupu-kupu | done |
+| bird | Burung | done |
+| tree | Pohon | done |
+| rabbit | Kelinci | done |
+| turtle | Kura-kura | done |
 | sun | Matahari | planned |
-| rocket | Roket | planned |
+| rocket | Roket | done |
 | boat | Perahu | planned |
-| apple | Apel | planned |
+| apple | Apel | done |
 | elephant | Gajah | planned |
 | horse | Kuda | planned |
 | lion | Singa | planned |
@@ -96,6 +96,11 @@ the app then shows the friendly list instead of inventing a drawing.
 A separate real-car lesson is not in the list, so the matcher is not split
 between two car ids.
 
+The picker already has lessons with ids `house` and `butterfly`. Those tiles
+stay the original packages. The category drawings use package ids
+`house-front` and `butterfly-front`, and the matcher still says `house` and
+`butterfly`. A shared id would open the wrong picture from the gallery.
+
 ## Matching, recolouring, and facing
 
 `POST /api/photo-match` takes the photo as the body (`image/jpeg`,
@@ -113,7 +118,7 @@ logged and are not stored.
 
 The app opens a lesson only when the category is **done** and `confidence`
 is at least **0.55**. Otherwise it shows "Belum bisa digambar. Coba salah
-satu ini." and the six done lessons. A confident "dinosaur" is still that
+satu ini." and every lesson marked done. A confident "dinosaur" is still that
 list, because the drawing does not exist yet.
 
 On a match, the client copies the lesson and replaces each colour step's
@@ -145,7 +150,7 @@ measured.
 ## How to add a lesson
 
 1. Draw it by hand in `src/categories/lessons/<id>.ts` with the helpers in
-   `author.ts`. Step 1 is one circle, oval, or dome. Then one part per step.
+   `author.ts`. Step 1 is one circle, oval, dome, or rectangle. Then one part per step.
    Put construction strokes only on the step that needs them.
 2. Add a `CategoryLesson`: id, Indonesian title, the facing, and the parts
    that map region ids to a colour the photo may replace.

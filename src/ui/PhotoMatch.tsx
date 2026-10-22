@@ -50,7 +50,7 @@ export function PhotoMatch({ onCancel, onOpenLesson, requestMatch = matchPhotoRe
   return (
     <section className="photo-match" aria-labelledby="photo-match-title">
       <h1 id="photo-match-title">Gambar dari foto</h1>
-      <p>Pilih foto kucing, anjing, bunga, cangkir, mobil mainan, atau ikan.</p>
+      <p>Pilih foto benda atau hewan yang sudah bisa digambar.</p>
       <div className="photo-match__actions">
         <label className="button">
           Pilih foto
