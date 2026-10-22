@@ -4,7 +4,8 @@
  * FR-13 requires finished strokes and checkpoints to be written through
  * IndexedDB transactions, and PRD section 11 forbids keeping drawing data in
  * localStorage. This is the only file in the project that knows IndexedDB
- * exists.
+ * exists for session data. Photo lessons use a separate database so this
+ * version stays 1.
  */
 
 import type { SessionPreferences, Stroke } from '../lesson-engine/types';
@@ -157,6 +158,21 @@ export class IndexedDbSessionStore implements SessionStore {
     await runTransaction(db, [CHECKPOINTS, STROKES], 'readwrite', (tx) => {
       tx.objectStore(CHECKPOINTS).delete(sessionId);
       tx.objectStore(STROKES).delete(sessionRange(sessionId));
+    });
+  }
+
+  async deleteSessionsForLesson(lessonId: string): Promise<void> {
+    const db = await this.dbPromise;
+    const checkpoints = await runTransaction(db, [CHECKPOINTS], 'readonly', async (tx) =>
+      request<SessionCheckpoint[]>(tx.objectStore(CHECKPOINTS).getAll()),
+    );
+    const ids = checkpoints.filter((checkpoint) => checkpoint.lessonId === lessonId).map((checkpoint) => checkpoint.sessionId);
+    if (ids.length === 0) return;
+    await runTransaction(db, [CHECKPOINTS, STROKES], 'readwrite', (tx) => {
+      for (const id of ids) {
+        tx.objectStore(CHECKPOINTS).delete(id);
+        tx.objectStore(STROKES).delete(sessionRange(id));
+      }
     });
   }
 

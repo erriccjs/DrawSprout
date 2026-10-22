@@ -13,7 +13,7 @@ import { IndexedDbSessionStore } from './indexeddb-store';
 import { MemorySessionStore } from './memory-store';
 import { IncompatibleCheckpointError, fromRestoredSession, toCheckpoint } from './mapping';
 import { PERSISTENCE_SCHEMA_VERSION, type SessionStore } from './types';
-import { applyAll, draw, lesson, newSessionState, stepIdAt } from '../test/factories';
+import { applyAll, draw, lesson, newSessionState, stepIdAt, strokeInput } from '../test/factories';
 
 async function save(store: SessionStore, state: SessionState, revision: number): Promise<void> {
   await store.saveProgress({
@@ -131,6 +131,20 @@ describe.each([
       'finished-empty',
       'older-art',
     ]);
+  });
+
+  it('deletes every session for one lesson and leaves the other', async () => {
+    const cat = draw(createSession(lesson, 'cat-a'), stepIdAt(0));
+    const otherLesson = { ...lesson, id: 'other-lesson' };
+    const other = reduceSession(otherLesson, createSession(otherLesson, 'other'), {
+      type: 'commit-stroke',
+      stroke: strokeInput(stepIdAt(0), { id: 'other-stroke' }),
+    });
+    await save(store, cat, 1);
+    await save(store, other, 2);
+    await store.deleteSessionsForLesson(lesson.id);
+    expect(await store.loadSession('cat-a')).toBeNull();
+    expect((await store.loadSession('other'))?.strokes).toHaveLength(1);
   });
 
   it('keeps sessions apart and deletes only the one asked for', async () => {

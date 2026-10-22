@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { ArtworkSurface } from './renderer/artwork-surface';
 import { getLesson } from './lesson-data';
 import type { LessonPackage } from './lesson-data/schema';
+import { readPhotoBeta } from './photo/beta';
+import type { PhotoLessonRecord } from './persistence/photo-lesson-store';
+import { IndexedDbPhotoLessonStore } from './persistence/photo-lesson-store';
 import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
 import type { SessionPreferences, SessionState, ToolPreferences } from './lesson-engine/types';
 import { fromRestoredSession } from './persistence/mapping';
@@ -13,6 +16,7 @@ import { DrawingPad } from './ui/DrawingPad';
 import { requestDocumentFullscreen } from './ui/fullscreen';
 import { RESUME_NOTICE } from './ui/resume-notice';
 import { LessonPicker } from './ui/LessonPicker';
+import { PhotoFlow } from './ui/PhotoFlow';
 import { TabletNotice } from './ui/TabletNotice';
 import { newId } from './ui/ids';
 import { dismissTabletNotice, isTabletNoticeDismissed } from './ui/tablet-notice';
@@ -57,6 +61,11 @@ export function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [saveInFlight, setSaveInFlight] = useState(false);
   const [tabletNoticeDismissed, setTabletNoticeDismissed] = useState(isTabletNoticeDismissed);
+  const [photoBeta] = useState(() => readPhotoBeta());
+  const photoStoreRef = useRef<IndexedDbPhotoLessonStore | null>(null);
+  const photoLessonsRef = useRef<readonly PhotoLessonRecord[]>([]);
+  const [photoLessons, setPhotoLessons] = useState<readonly PhotoLessonRecord[]>([]);
+  const [photoFlow, setPhotoFlow] = useState(false);
   const showTabletNotice = layout !== 'tablet' && !tabletNoticeDismissed;
 
   const dismissTabletHint = () => {
@@ -76,6 +85,23 @@ export function App() {
     if (updateGate.mayApply) applyUpdate();
   }, [updateGate.mayApply, applyUpdate]);
 
+  useEffect(() => {
+    if (!photoBeta) return;
+    const store = new IndexedDbPhotoLessonStore();
+    photoStoreRef.current = store;
+    let cancelled = false;
+    void store.list().then((rows) => {
+      if (cancelled) return;
+      photoLessonsRef.current = rows;
+      setPhotoLessons(rows);
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      store.close();
+      if (photoStoreRef.current === store) photoStoreRef.current = null;
+    };
+  }, [photoBeta]);
+
   if (bootstrap.status === 'loading') {
     return (
       <main className="shell shell--centered" data-layout={layout}>
@@ -93,6 +119,12 @@ export function App() {
     );
   }
 
+  const resolveLesson = (lessonId: string): LessonPackage => {
+    const photo = photoLessonsRef.current.find((row) => row.lesson.id === lessonId);
+    if (photo) return photo.lesson;
+    return getLesson(lessonId);
+  };
+
   const selectLesson = (lessonId: string) => {
     // This runs inside the picker's click. Fullscreen has to be asked for
     // here, not on the first stroke: the resize would smear that line (D-57).
@@ -103,7 +135,7 @@ export function App() {
     touchedRef.current = handoff !== null;
     controlsRef.current = { preferences: {}, tools: {} };
     setExitNotice(null);
-    const lesson = getLesson(lessonId);
+    const lesson = resolveLesson(lessonId);
     const initialState = handoff?.state ?? createSession(lesson, newId(), DEFAULT_PREFERENCES);
     setOpenLesson({ lesson, initialState, notice: null, restorePending: handoff === null, preferencesPending: true,
       pendingSave: handoff?.saved ?? null, revision: 0 });
@@ -194,7 +226,7 @@ export function App() {
       }
       let lesson: LessonPackage;
       try {
-        lesson = getLesson(restored.checkpoint.lessonId);
+        lesson = resolveLesson(restored.checkpoint.lessonId);
       } catch {
         setExitNotice('Pelajaran untuk karya ini sudah tidak ada.');
         return;
@@ -292,6 +324,21 @@ export function App() {
             });
           }}
         />
+      ) : photoFlow ? (
+        <PhotoFlow
+          onCancel={() => setPhotoFlow(false)}
+          onUse={async (lesson, targetHash) => {
+            const store = photoStoreRef.current;
+            if (!store) throw new Error('Pelajaran belum tersimpan di perangkat ini.');
+            const record: PhotoLessonRecord = { id: lesson.id, targetHash, createdAt: Date.now(), lesson };
+            await store.put(record);
+            const next = [record, ...photoLessonsRef.current.filter((row) => row.id !== record.id)];
+            photoLessonsRef.current = next;
+            setPhotoLessons(next);
+            setPhotoFlow(false);
+            selectLesson(lesson.id);
+          }}
+        />
       ) : (
         <>
           <LessonPicker
@@ -301,11 +348,22 @@ export function App() {
             updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}
             onApplyUpdate={requestApply}
             onDismissUpdate={() => { setUpdateDismissed(true); }}
+            photoBeta={photoBeta}
+            photoLessons={photoLessons}
+            onCreatePhoto={() => setPhotoFlow(true)}
+            onDeletePhoto={async (id) => {
+              await photoStoreRef.current?.delete(id);
+              await bootstrap.store.deleteSessionsForLesson(id);
+              const next = photoLessonsRef.current.filter((row) => row.id !== id);
+              photoLessonsRef.current = next;
+              setPhotoLessons(next);
+            }}
           />
           <ArtworkGallery
             store={bootstrap.store}
             actionsDisabled={updateGate.showPrompt && applyRequested}
             onOpen={openArtwork}
+            extraLessons={photoLessons.map((row) => row.lesson)}
           />
         </>
       )}

@@ -8,3 +8,5 @@ coverage/
 .vitest/
 # Wrangler local state. Not part of the deploy.
 .wrangler/
+.dev.vars
+photo-eval-out/

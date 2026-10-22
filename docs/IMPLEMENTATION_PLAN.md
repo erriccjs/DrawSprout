@@ -25,7 +25,7 @@ Two cautions carried over from the PRD itself:
 | **M1 — Vertical slice** | Tahap A prototype; section 16 phase 1 | One hand-authored cat lesson, end to end: canvas, pencil/finger modes, assistance modes, tool presets, undo/redo, manual navigation, colouring with optional boundaries, IndexedDB autosave/resume, PNG export | **Done** |
 | M2 — Pilot usability | section 16 phase 2 | Observe 5–8 children on real tablets, fix the main obstacles, close the AT-16..AT-22 device gap | Next |
 | M3 — MVP foundations | section 16 phase 3 | Lesson catalogue (~10 templates), local gallery, service worker and offline packaging, project backup import/export, audio instructions, automatic step completion, full error handling | **In progress** — the service worker, offline packaging, the safe update flow, a ten-lesson catalogue, the local gallery, and free drawing after the last step are in the tree. Backup, audio, automatic completion, and checkpoint migration are still deferred |
-| M4 — Photo spike | section 16 phase 4 | Photo → illustration candidates, geometry extraction, step sequencing, 30-photo rubric evaluation | Deferred |
+| M4 — Photo spike | section 16 phase 4 | Photo → illustration candidates, geometry extraction, step sequencing, 30-photo rubric evaluation | **In progress** — spike behind `?beta=foto` (D-66, D-67, D-68, D-69, D-70, D-71, D-72, D-73, D-74, D-75, D-76, D-77, D-78, D-79, D-80). Call A is a faithful simplified line drawing of this photo only. The lesson is a low-quality reverse erase, one planned part at a time, and stroke assignment is the fallback. Step 1 is a light grey dashed circle or oval at about 90% of the main mass. Colour is last, named by the smallest part that contains the region's centroid. OpenAI is the default image provider. A live compare was not a pass. The 30-photo go/no-go has not been run and is not claimed |
 | M5 — Beta integration | section 16 phase 5 | Backend, job queue, privacy and retention, parent area, device test matrix | Deferred |
 
 A generalised authoring pipeline and a hardening pass are M2+ work listed here
@@ -54,11 +54,11 @@ real tablet.
 | FR-12 | Free creation after the lesson | M3 | **Done** | After the last step, *Gambar bebas* keeps the strokes and hides the canvas guide. Pen, brush, eraser, and colours stay available (D-64). |
 | FR-13 | IndexedDB autosave and resume | M1 | **Done** | `src/persistence/indexeddb-store.ts`: strokes and checkpoint in one transaction; no localStorage anywhere. |
 | FR-14 | Local gallery and PNG export without hints | M1 **partial** | **Done** | PNG export and Karyaku, the gallery on the picture-choosing screen. Thumbnails and PNG files are painted from committed strokes only (D-63). |
-| FR-15 | Camera / photo picker | M4/M5 | **Deferred** | Out of scope by instruction. |
-| FR-16 | Photo transformation | M4/M5 | **Deferred** | Out of scope by instruction. |
-| FR-17 | Photo preview and approval | M4/M5 | **Deferred** | Out of scope by instruction. |
-| FR-18 | AI job lifecycle | M5 | **Deferred** | Out of scope by instruction. |
-| FR-19 | Privacy and parent controls | M5 | **Deferred** | No photos, no accounts and no network calls exist in M1, so there is nothing yet to control. |
+| FR-15 | Camera / photo picker | M4/M5 | **Partial** | Beta only (`?beta=foto`). File input for camera (`capture`) and gallery, crop, orientation, 1024px PNG re-encode that drops EXIF (`src/ui/PhotoFlow.tsx`, `src/photo/prepare.ts`, `src/photo/image-ops.ts`). |
+| FR-16 | Photo transformation | M4/M5 | **Partial** | OpenAI line-art edit, marching-squares tracer, 1000×750 lesson, validator (`src/photo/pipeline.ts`). Not a finished photo MVP: the section 8 gate has not been run. |
+| FR-17 | Photo preview and approval | M4/M5 | **Partial** | Side-by-side preview, *Gunakan* / *Lebih mirip foto* / *Lebih sederhana* / *Ganti foto*. Approval locks the illustration hash on the lesson. A Dice review banner does not block approval (D-66). |
+| FR-18 | AI job lifecycle | M5 | **Partial** | Idempotency key, 180s timeout, cancel, 6 requests / 10 minutes per IP, in-memory per isolate plus the OpenAI `Idempotency-Key` header. Not a durable queue. |
+| FR-19 | Privacy and parent controls | M5 | **Partial** | Indonesian consent before upload. Photos are not stored after processing and are not logged. Deleting a photo lesson deletes the package and its sessions. No accounts and no expiry job. |
 | FR-20 | Audio instructions | M3 | **Deferred** | Text and icons only. |
 | FR-21 | Cloud sync | M5 | **Deferred** | Out of scope by instruction. |
 | FR-22 | Pencil / finger input modes | M1 | **Done** (behaviour on real hardware is **Device**) | `src/input/pointer-mode.ts`. Pencil mode accepts `pointerType === 'pen'` only. **No palm rejection is claimed.** |
@@ -77,12 +77,12 @@ real tablet.
 | AT-05 | Close the tab after a checkpoint, resume | **Verified (automated)** | `src/persistence/round-trip.test.ts` restores step, assistance, tools and committed strokes through a real IndexedDB transaction (`fake-indexeddb`). A genuine tab close on a tablet is still untested. |
 | AT-06 | Zoom / rotate / resize keeps geometry aligned | **Verified (automated)**, device behaviour open | `coordinates.test.ts` maps the same touch to the same lesson point at two very different box sizes; `artwork-surface.test.ts` replays on resize. Real orientation change on a tablet is untested. |
 | AT-07 | Undo, redo, then a new stroke | **Verified (automated)** | `history.test.ts` "invalidates the redo chain once a new stroke is drawn". |
-| AT-08 | Photo keeps distinctive features | **Deferred** | No photo pipeline (M4). |
-| AT-09 | All steps of a photo lesson render | **Deferred** | No photo pipeline (M4). |
-| AT-10 | Job/approval retry is idempotent | **Deferred** | No backend (M5). |
+| AT-08 | Photo keeps distinctive features | **Not passed** | The prompt and the rubric exist (D-66). The 30-photo set has not been scored. `claimedPass` is always false. Do not read a harness run as this test. |
+| AT-09 | All steps of a photo lesson render | **Partial, automated only** | A traced rectangle becomes a package `findLessonProblems` accepts, and approval opens it in the existing engine. Not a device result, and not the 30-photo set. |
+| AT-10 | Job/approval retry is idempotent | **Partial, automated** | `src/photo/api.test.ts`: two requests with one key make one edit; a later retry is served from the in-memory result. The cache is per isolate. OpenAI also receives `Idempotency-Key`. |
 | AT-11 | Network drops after download | **Partial, not a device result** | The precache is what would serve drawing, resume, and export after the shell is cached. A headless Chrome simulation opened one lesson with the network off (section 7). A network drop on the pilot tablets has not been tested. There is no photo-lesson AI status to show. |
 | AT-12 | Cross-tenant asset access denied | **Deferred** | No backend (M5). |
-| AT-13 | Photo deletion and expiry | **Deferred** | No photos stored (M5). |
+| AT-13 | Photo deletion and expiry | **Partial** | Deleting a photo lesson removes its IndexedDB record and every session for that lesson. The source photo is not stored, so there is no server copy to expire. No 30-day job. |
 | AT-14 | Storage full during autosave | **Partial, not verified** | `StorageFullError` is a distinct type and the UI shows a recovery message; the single-transaction write means a failure cannot corrupt the previous checkpoint (`round-trip.test.ts` proves an aborted save leaves nothing behind). **A genuinely full device was never tested.** |
 | AT-15 | Auto-next waits for pen-up plus a pause | **Deferred** | FR-10 not built (M3). |
 | AT-16 | Pencil with the palm resting on the glass | **Device — unverified** | Needs a real iPad + Apple Pencil and an Android tablet + active stylus. Nothing here can establish it. |
@@ -161,7 +161,8 @@ not by itself pass the section 21 gate.
 Noted here rather than treated as done. Items 2 and 7 started with the offline
 slice. The lesson catalogue of about ten templates is done (D-62). Item 4,
 the local gallery, is done (D-63). Item 6, free creation and the in-lesson
-edit controls, is done (D-64). The rest are unchanged from milestone 1.
+edit controls, is done (D-64). Items 8 and 9 record the photo spike, which is
+not a finished photo MVP. The other open items are unchanged from milestone 1.
 
 1. **Automatic step completion** (FR-10, AT-15) — the policy field exists and is
    off everywhere.
@@ -183,9 +184,13 @@ edit controls, is done (D-64). The rest are unchanged from milestone 1.
 7. **Data migration** (the rest of FR-25, AT-21) — versions are checked and
    refused, and a service-worker update no longer reloads a live drawing.
    Nothing migrates an old checkpoint onto a new schema yet.
-8. **Parent area and privacy controls** (FR-19) — nothing to govern until photos
-   or a backend exist.
-9. **Photo pipeline and backend** (FR-15..FR-18, FR-21; AT-08..AT-13).
+8. **Parent area and privacy controls** (FR-19) — the photo spike has a consent
+   screen and delete-with-derived-data. A full parent area, accounts, and an
+   expiry job are still deferred.
+9. **Photo pipeline and backend** (FR-15..FR-18, FR-21; AT-08..AT-13) — a beta
+   spike exists (D-65, D-66). Cloud sync does not. The 30-photo go/no-go has
+   not been run and is not claimed. Until that gate is actually passed, this
+   is not a finished photo MVP.
 10. **Lesson authoring tooling** — the data format is deliberately plain so an
     authoring step or the photo pipeline can emit it, but no authoring tool is
     part of this milestone.

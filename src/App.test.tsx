@@ -42,6 +42,7 @@ let store: MemorySessionStore;
 const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
 beforeEach(() => {
+  sessionStorage.clear();
   resetOfflineStatus();
   lessons.splice(0, lessons.length, lessonData.CAT_LESSON, {
     ...lessonData.CAT_LESSON,
@@ -78,6 +79,18 @@ async function returnToPicker() {
 }
 
 describe('lesson picker', () => {
+  it('hides the photo spike until a parent turns the beta flag on', async () => {
+    const { unmount } = render(<App />);
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    expect(screen.queryByRole('button', { name: 'Buat dari foto' })).toBeNull();
+    unmount();
+
+    sessionStorage.setItem('drawsprout-beta-foto', '1');
+    render(<App />);
+    expect(await screen.findByRole('button', { name: 'Buat dari foto' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Dari foto' })).toBeTruthy();
+  });
+
   it('asks for fullscreen when a picture is opened, not when the first stroke starts', async () => {
     const requestFullscreen = vi.fn(() => Promise.resolve());
     const host = document.documentElement;

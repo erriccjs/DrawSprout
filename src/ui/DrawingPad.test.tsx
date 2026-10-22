@@ -792,21 +792,14 @@ describe('navigation and colouring', () => {
   it('keeps the outline example unchanged on a line step', () => {
     setup();
     const paths = previewPaths();
-    expect(paths).toHaveLength(CAT_LESSON.targetPreview.paths.length);
-    expect(paths.map((path) => path.getAttribute('d'))).toEqual(
-      CAT_LESSON.targetPreview.paths.map((path) => path.d),
-    );
+    const current = CAT_LESSON.steps[0]!.guidePaths;
+    expect(paths).toHaveLength(current.length);
+    expect(paths.map((path) => path.getAttribute('d'))).toEqual(current.map((path) => path.d));
     expect(paths.map((path) => [
       path.getAttribute('fill'),
       path.getAttribute('stroke'),
       path.getAttribute('stroke-width'),
-    ])).toEqual(
-      CAT_LESSON.targetPreview.paths.map((path) => [
-        'none',
-        path.id === 'head' ? '#4b6bfb' : '#8a9099',
-        path.id === 'head' ? '10' : '5',
-      ]),
-    );
+    ])).toEqual(current.map(() => ['none', '#e23b3b', '10']));
   });
 
   it('emphasises fur while leaving the later ear and nose regions blank on color-fur', () => {
@@ -836,7 +829,7 @@ describe('navigation and colouring', () => {
     expect(
       previewPaths()
         .filter((path) => path.getAttribute('fill') === 'none' && path.getAttribute('stroke') !== '#4b6bfb')
-        .every((path) => path.getAttribute('stroke') === '#8a9099'),
+        .every((path) => path.getAttribute('stroke') === '#2c2c2c'),
     ).toBe(true);
   });
 

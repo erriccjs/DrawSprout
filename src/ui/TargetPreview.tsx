@@ -24,13 +24,19 @@ interface TargetPreviewProps {
 }
 
 export function TargetPreview({ space, paths, title, step, steps, colorRegions }: TargetPreviewProps) {
-  const highlighted = new Set(step.guidePaths.map((path) => path.id));
+  const stepIndex = Math.max(0, steps.indexOf(step));
+  const currentIds = new Set(step.guidePaths.map((path) => path.id));
+  const drawnIds = new Set(
+    steps.slice(0, stepIndex + 1).flatMap((item) => item.guidePaths.map((path) => path.id)),
+  );
   const activeRegions = new Set(step.colorRegionIds);
-  const stepIndex = steps.indexOf(step);
   const completedColors = steps.slice(0, stepIndex + 1).filter((item) => item.phase === 'color');
   const futureRegions = new Set(
     steps.slice(stepIndex + 1).flatMap((item) => item.colorRegionIds),
   );
+  const reached = paths.filter((path) => drawnIds.has(path.id) || currentIds.has(path.id));
+  const guides = step.guidePaths.filter((path) => !reached.some((item) => item.id === path.id));
+  const lines = [...reached, ...guides];
   const viewBox = previewViewBox(space, [
     ...paths.map((path) => path.d),
     ...colorRegions.map((region) => region.d),
@@ -56,17 +62,24 @@ export function TargetPreview({ space, paths, title, step, steps, colorRegions }
             .map((region) => <path key={`future-${region.id}`} d={region.d} fill="var(--paper)" />)}
         </>
       )}
-      {paths.map((path) => (
-        <path
-          key={path.id}
-          d={path.d}
-          fill="none"
-          stroke={highlighted.has(path.id) ? '#4b6bfb' : '#8a9099'}
-          strokeWidth={highlighted.has(path.id) ? 10 : 5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      ))}
+      {lines.map((path) => {
+        const current = currentIds.has(path.id);
+        const construction = path.role === 'construction';
+        const stroke = construction ? '#b5b5b5' : current ? '#e23b3b' : '#2c2c2c';
+        const width = current && !construction ? 10 : construction ? 5 : 6;
+        return (
+          <path
+            key={path.id}
+            d={path.d}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={width}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            {...(construction ? { strokeDasharray: '8 10' } : {})}
+          />
+        );
+      })}
       {step.phase === 'color' &&
         colorRegions
           .filter((region) => activeRegions.has(region.id))

@@ -120,7 +120,9 @@ tablet and on a phone.
   (see the plan, section 7). That is not acceptance test AT-19: it was not an
   installed Home Screen icon, not Safari on iPad, and not Chrome on an Android
   tablet. `npm run dev` does not install the service worker.
-- No photo-to-lesson transformation, no backend, no accounts, no cloud sync.
+- Photo-to-lesson is a beta spike, not a finished photo MVP. It stays hidden
+  until a parent opens `?beta=foto`. The 30-photo go/no-go has not been run
+  and is not claimed. No accounts and no cloud sync. See [Photo beta](#photo-beta-spike).
 - No automatic "step finished" detection — the child presses *Lanjut*.
 - No project backup file or audio.
 - No migration of a drawing saved under an older lesson or storage schema. A
@@ -159,7 +161,117 @@ npm run preview
 ```
 
 The build output lands in `dist/` and is a static site; any static host will
-serve it.
+serve the shell. `npm run dev` does not serve `POST /api/photo-lesson`.
+
+## Photo beta (spike)
+
+Off by default. Open the site with `?beta=foto` (for example
+`https://drawsprout.erriccjs.cloud/?beta=foto`). That sets a flag in
+`sessionStorage` for the tab, not in the drawing database. `?beta=off` clears
+it. The picture list then shows *Buat dari foto* and a *Dari foto* section.
+Children do not see that entry until the flag is on.
+
+This is not a finished photo MVP. If the 30-photo evaluation has not passed,
+the photo feature stays a spike. Nothing in this repository claims that pass.
+
+The button calls `POST /api/photo-lesson` on the Worker. After a production
+build, local API development is:
+
+```bash
+npm run build
+npx wrangler dev
+```
+
+Put the key in `.dev.vars` (gitignored) as `OPENAI_API_KEY=...`, or set the
+production secret:
+
+```bash
+npx wrangler secret put OPENAI_API_KEY
+```
+
+The Replicate secret's name is `REPLICATE_API_KEY`. A local `.dev.vars` or
+the eval harness may still set `REPLICATE_API_TOKEN`; that name is used only
+when `REPLICATE_API_KEY` is absent (D-69).
+
+```bash
+npx wrangler secret put REPLICATE_API_KEY
+```
+
+The build does not read either secret. Workers Builds can succeed without
+them. The route then returns a clear error that the key is missing. Optional
+Worker vars, not secrets: `IMAGE_PROVIDER` (`openai` by default, or
+`replicate`), `OPENAI_IMAGE_MODEL` (`gpt-image-2`, `gpt-image-1.5`,
+`gpt-image-1`, or `gpt-image-1-mini`; default `gpt-image-1.5`),
+`OPENAI_TEXT_MODEL` (default `gpt-4.1-mini`), and `REPLICATE_IMAGE_MODEL`
+(default `black-forest-labs/flux-kontext-pro`). Default and *Lebih mirip foto*
+send `quality=medium` on OpenAI. *Lebih sederhana* stays on `gpt-image-1.5` at
+`quality=low` and ignores `OPENAI_IMAGE_MODEL` (D-67). Set
+`OPENAI_IMAGE_MODEL=gpt-image-1-mini` only for a default or faithful job.
+A photo makes a faithful simplified line drawing, then a flat colouring of
+that drawing at `quality=low`, then up to eight low-quality erases that remove
+one planned part at a time (D-74, D-75, D-76, D-77, D-78, D-79, D-80). The line
+drawing keeps this photo's pose and framing, both ways, and it draws only the
+subject: no table, surface items, people, leashes, props, or a branch that is
+not in the photo. A vision plan of this photo only orders the parts from one
+big shape down to the small details. The lesson is those erase stages. Stroke
+assignment is used only when an erase cannot be checked. Step 1 is a light grey
+dashed circle or oval at about 90% of the main mass, centered on that box.
+The real outline is the next step, and the guide is gone after that. Each later
+step adds one part, and the reference draws those new lines in red. A faint
+guide, such as a centre cross, is optional and is left out of the finished ink.
+Colour is last: one flat colour per region, named by the smallest planned part
+that contains the region's centroid. A white area is not a colour step.
+Drawing steps stay within about eleven. OpenAI stays the default image model.
+The earlier part-by-part builder is still covered by the regression tests (D-76).
+
+### Evaluation
+
+On a machine with the key, Node.js 20.16 or newer (`CompressionStream`; this
+repo's tests still need 22.12+), after `npm install`:
+
+```bash
+OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --out photo-eval-out-v14
+REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --provider replicate --model black-forest-labs/flux-kontext-pro
+OPENAI_API_KEY=... REPLICATE_API_KEY=... npm run photo-eval -- <photo-directory> --compare
+OPENAI_API_KEY=... npm run photo-eval -- <photo-directory> --steps both --out photo-eval-out-v14-steps
+```
+
+`<photo-directory>` is a folder of JPEG or PNG photos. The command writes
+`photo-eval-out/` (or `PHOTO_EVAL_OUT`, or `--out <directory>`): a contact
+sheet HTML and PNG (photo, illustration, then each cumulative step), per-photo
+time, token counts, list-price `costUsd`, and `rubric.csv`. It prints
+`claimedPass: false` and does not mean the gate passed. A thrown error prints
+`photo-eval failed:` and exits non-zero. Fill the CSV (scores 1–5, and `ya`
+in `cacat_struktur` for a critical structure error) and recompute without
+calling the API:
+
+```bash
+npm run photo-eval -- --score photo-eval-out/rubric.csv
+```
+
+`costUsd` uses OpenAI list prices for an OpenAI image model and the text
+model (D-67), or $0.04 per image for `flux-kontext-pro`, including a
+regeneration (D-69, D-71). `OPENAI_IMAGE_USD` or `REPLICATE_IMAGE_USD`, if you
+set it to a number, replaces that figure; `listCostUsd` in `metrics.json`
+stays the computed one. Metrics include `regenerated` when the line drawing was requested again
+after the first pair. The harness writes `illustrations/<photo>-line.png` and
+`illustrations/<photo>-colour.png`. Optional `PHOTO_EVAL_VARIANT` is
+`default`, `faithful`, or `simple`. `--compare` runs OpenAI and Kontext on
+one contact sheet and stops if either provider fails. `flux-1.1-pro` is
+unsuitable (it returns near-photos) and is not part of compare. Kontext uses
+its own short prompt and retries HTTP 429. The idempotency key for this
+revision ends in `v14`, so a rerun after the lesson-step change is a
+new paid job. Compare it with a v13 sheet by writing v14 to its own `--out`
+directory. The default is `--steps reverse`: one low-quality erase per planned
+part, at most eight edits including one retry. `--steps strokes` assigns the
+line drawing's strokes, and `--steps both` puts the reverse lesson first and
+the stroke lesson beside it. Each row in `metrics.json`
+includes `reviewReasons`, and a reverse run also includes `reverseCalls` and
+`reverseUsd`. `costUsd` is the whole job.
+`REPLICATE_API_TOKEN` is read only when `REPLICATE_API_KEY` is unset.
+
+CC0 samples, with credits, are in `scripts/photo-eval/samples/` (`LICENSES.md`).
+Running them does not pass the gate.
 
 ## Deploy
 
@@ -173,7 +285,9 @@ npx wrangler deploy
 ```
 
 `wrangler.jsonc` is the deploy. It uploads `./dist` as static assets and, for a
-path that is not a file, serves `index.html`. There is no Worker script.
+path that is not a file, serves `index.html`. `src/worker/index.ts` answers
+`/api/*` only (`run_worker_first`). `/sw.js` stays a static file. The Cloudflare
+Vite plugin is still not used.
 `npx wrangler deploy` uses the Wrangler 4 version locked in `package-lock.json`.
 A branch build on Workers Builds runs `npx wrangler preview` instead. That
 command needs the empty top-level `previews` object in `wrangler.jsonc`.

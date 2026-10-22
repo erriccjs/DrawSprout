@@ -864,3 +864,483 @@ is unchanged: bumping it would refuse every saved drawing, and migration is
 still deferred. The undo record for *Ulangi langkah ini* is session-only,
 same as *Hapus semua*. A free-drawing session is an ordinary saved drawing:
 Karyaku lists it and *Buka* restores `freeCreation` with the free strokes.
+
+### D-65 — A Worker script for `/api/*`, assets still serve the shell
+
+Photo lessons need `POST /api/photo-lesson`. An assets-only Wrangler config
+cannot answer that. Adding `@cloudflare/vite-plugin` is the failure from D-48:
+it collects assets before `drawsproutOffline()` writes `dist/sw.js`, and
+`/sw.js` becomes `index.html`.
+
+**Choice.** `wrangler.jsonc` keeps `assets.directory` `./dist`,
+`not_found_handling: single-page-application`, and the empty `previews` object.
+It gains `main: src/worker/index.ts`, an `ASSETS` binding, and
+`run_worker_first: ["/api/*"]`. Only `/api/*` enters the script. `/sw.js`,
+`_headers`, and the single-page fallback stay on the asset layer. The script
+delegates anything else to `env.ASSETS.fetch` in case it is invoked more
+broadly. `compatibility_date` stays `2026-10-19`. The build does not read
+`OPENAI_API_KEY`; a missing secret is a runtime error on the photo route.
+`npx wrangler types --include-runtime=false` writes `src/worker/env.d.ts`. The
+full workerd runtime is not loaded into the app TypeScript project, because
+that would replace the DOM types the shared photo code uses. `fetcher.d.ts`
+declares the `fetch` method the assets binding actually calls.
+
+### D-66 — Photo spike: OpenAI line art, a TypeScript tracer, beta off by default
+
+The owner chose OpenAI image models (`gpt-image-2`, `gpt-image-1.5`,
+`gpt-image-1`, `gpt-image-1-mini`). The key is `OPENAI_API_KEY`, set with
+`npx wrangler secret put OPENAI_API_KEY`, never committed. The default edit
+model is `gpt-image-1.5`. *Lebih sederhana* used `gpt-image-1-mini` in this
+decision; D-67 stops that. An unknown `OPENAI_IMAGE_MODEL` is ignored. The text model defaults to
+`gpt-4.1-mini` and may be overridden with `OPENAI_TEXT_MODEL`.
+
+**Choice.** The spike is off until a parent opens `?beta=foto` (cleared with
+`?beta=off`). The flag is `sessionStorage` for the tab, not drawing data.
+The child picture list does not show *Buat dari foto* without it.
+
+The browser picks a photo with a file input (`capture` for the camera, none
+for the gallery), crops, lets `createImageBitmap` apply orientation once, and
+re-encodes through a canvas to PNG at a 1024px long edge. That drops EXIF.
+A parent consent screen, in Indonesian, comes before the upload: the photo
+goes to the DrawSprout Worker and to OpenAI, is not stored after processing,
+and the lesson made from it can be deleted.
+
+The Worker accepts PNG only, caps size and pixel count, and calls the OpenAI
+image edit API. The prompt asks for black line art on white and forbids new
+limbs, objects, background, shading, and colour. Dominant colours are computed
+here from the source photo, not from the line art. Photos are not written to
+R2, KV, or logs. A log line is `{ route, status, ms }` only. The same
+idempotency key returns the in-memory JSON result (capped at 32, per isolate)
+or waits on the in-flight job, and the key is forwarded to OpenAI so a retry
+after the isolate dies is not a second billed edit. A new photo, *Lebih mirip
+foto*, or *Lebih sederhana* is a new key. New jobs are limited to 6 per 10
+minutes per `cf-connecting-ip`. The image call times out at 120 seconds and
+aborts with the request. A missing key fails before a rate slot is taken and
+before OpenAI is called.
+
+Line art becomes strokes with a marching-squares tracer and
+Ramer–Douglas–Peucker, in `src/photo/trace.ts`. Potrace's curve fit and a WASM
+build were skipped: the lesson path subset is straight segments, and one
+TypeScript file runs in the Worker, the browser, and `photo-eval` without a
+native toolchain. Contours are scaled into the 1000×750 space, grouped big
+shapes first by area and containment, then details, then colour regions from
+closed areas and the photo palette. Indonesian instructions come from the text
+model with a fixed sentence when that call fails. `assertValidLessons` runs
+before the package is returned. Re-rasterising the lesson and comparing ink
+with a Dice coefficient below 0.22 sets `needsReview`. That number is a spike
+heuristic. It is not the PRD section 8 gate, and a parent can still approve.
+
+Approval stores the lesson and the illustration hash in IndexedDB database
+`drawsprout-photo-lessons` (version 1). The session database stays at version
+1, and `PERSISTENCE_SCHEMA_VERSION` stays 1. The source photo and the
+illustration PNG are not stored. The lesson plays in the existing engine and
+is listed under *Dari foto*. Deleting it deletes that record and every session
+for the lesson id.
+
+`npm run photo-eval` runs the same `runPhotoPipeline` on a folder of JPEGs or
+PNGs. It writes `photo-eval-out/` and a CSV rubric. `computeRubric` can print
+`counted: go` as arithmetic and always sets `claimedPass` to false. The
+30-photo evaluation has not been run, the 80% threshold is not calibrated, and
+this spike does not claim the photo MVP. CC0 samples live in
+`scripts/photo-eval/samples/` with `LICENSES.md`. `OPENAI_IMAGE_USD`, when set,
+is recorded as a flat figure the operator supplied. The harness does not price
+tokens.
+
+The first live run on those five samples contradicted the mini-model choice
+and the flat cost. D-67 replaces both. The gate is still not claimed.
+
+### D-67 — Photo lessons after the first live run
+
+Five CC0 samples were run on another machine (default twice, plus simple).
+That run is not a pass, and `claimedPass` stays false. It did show bugs in
+the spike. The fixes below are still a spike.
+
+**PNG codec.** `deflate` and `inflate` start reading `stream.readable` before
+`writer.write`. On Node 20.19 and 22.23 a real-sized image filled the queue,
+`write()` never resolved, and the harness exited 13 with no message. The same
+functions run in the Worker and the browser. A test round-trips a 720×540
+image and fails if the codec is still stalled after 8 seconds. The harness
+prints `photo-eval failed: ...` and exits non-zero if the process throws.
+
+**Line art.** The edit prompt asks for one subject, one closed outer
+silhouette, no background (people, legs, leashes, scenery), and no letters,
+numbers, or barcodes unless the writing is the subject. `quality` is sent
+explicitly: `medium` for default and faithful, `low` for simple. Leaving it
+on `auto` made the same photo cost about 1.8k or 6.5k output tokens.
+*Lebih sederhana* stays on `gpt-image-1.5` at low quality. `gpt-image-1-mini`
+invented extra objects on the simple run (a wheel, a car, a bicycle) and is
+only used when `OPENAI_IMAGE_MODEL=gpt-image-1-mini` on a default or faithful
+job. That replaces the D-66 rule that simple always used mini.
+
+**Steps.** Step 1 is the closed contour with the largest bounding box, alone.
+Ranking by shoelace area had dropped a thin head outline. Specks smaller than
+about 2% of the short side are removed after tracing, and again in lesson
+space. Near-duplicate contours (the flower's repeated lines) are dropped.
+What remains is spread big-shapes-first, at most 3 paths per step and at most
+7 drawing steps. Colour steps are at most the 3 largest closed regions that
+are not the same area twice. If the largest shape covers under 35% of the
+subject box, `needsReview` is set. That check is a spike heuristic, not the
+section 8 gate, and a parent can still approve. D-68 replaces this grouping:
+guides are fitted primitives, the step count follows the real parts, and
+colour follows the photo.
+
+**Instructions.** The text call receives each step's phase, label, and
+position, plus a 512px PNG of the illustration, and must name the subject.
+A line that says "latar belakang" or "wajah anak" is discarded and the fixed
+sentence is used. Token counts read `input_tokens` or `prompt_tokens`, and
+`output_tokens` or `completion_tokens`. The first run stored text usage as
+0 in / 0 out because chat completions report `prompt_tokens`.
+
+**Cost.** `costUsd` is computed from those counts and OpenAI standard list
+prices (October 2026), per 1M tokens: `gpt-image-1.5` image input $8 and
+image output $32; `gpt-image-2` $8 / $30; `gpt-image-1` $10 / $40;
+`gpt-image-1-mini` $2.50 / $8. Text input on those models is $5, $5, $5, and
+$2. `gpt-4.1-mini` text is $0.40 in and $1.60 out. If the image usage does
+not split text and image input, every input token is priced as image input.
+Cached and batch rates are not applied. `OPENAI_IMAGE_USD`, when set, still
+replaces `costUsd`; `listCostUsd` in the metrics is the computed figure.
+The harness idempotency key ended in `v2` for that rerun. D-68 bumps it to `v3`.
+
+**Harness.** `PHOTO_EVAL_OUT` or `--out <dir>` chooses the output directory.
+The default is still `./photo-eval-out`. The contact sheet PNG and HTML show
+the photo, the illustration, and a cumulative render of each step with its
+Indonesian line.
+
+### D-68 — Photo steps are basic shapes, like the catalogue
+
+Owner feedback after the second live run: a photo lesson must teach like the
+hand-authored catalogue (`cat-lesson` and the others), not by tracing
+fragments. A child builds the subject from recognisable shapes. D-67's contour
+grouping (largest polyline first, ink-threshold details, at most 7 drawing
+steps and 3 colour steps) is superseded for step geometry. The speck and
+stripe cleaning, the closed-silhouette prompt, explicit quality, list-price
+cost, and the text-token fields from D-67 stay.
+
+**Primitives.** Each drawing step is one circle, ellipse, rounded rectangle,
+triangle, or a single line or curve. The guide is that shape — a circle uses
+the same two-arc form as the catalogue head, dashed as `final-outline` — not
+the marching-squares polyline. Symmetric pairs (two ears, two eyes, two
+wheels) are one step with two paths. The instruction names the shape and the
+part, for example "Gambar lingkaran besar untuk kepala." and "Tambahkan dua
+segitiga untuk telinga." Sentences are templates. A name that says "latar
+belakang", "wajah anak", "ventilasi", or "barcode" is discarded. Duplicate
+sentences are distinguished so two steps never share a line.
+
+**How many steps.** There is no fixed drawing-step cap and no total-step cap.
+A simple cup can be a few steps. A subject with more real parts gets more
+steps. Specks, near-duplicate contours, and near-empty strokes are not steps.
+The count follows the parts that remain.
+
+**Names.** The text model sees the illustration and the fitted parts
+(primitive, pair, bbox in the 1000×750 space) and returns a shape plan:
+Indonesian subject, title, and parts with a primitive, a noun, a pair flag,
+and an approximate bbox and rotation. Each proposal is snapped onto a traced
+part and can rename it, change the primitive, or join a symmetric pair. A
+proposal that does not overlap the ink is dropped. If the call fails, the
+lesson still builds, with names such as "bentuk utamanya".
+
+**Colour.** One colour step per distinct colour of the object in the photo,
+sampled inside each part. Near-white samples are the background and are not
+coloured. Near-identical colours are one step, with one region per part that
+shares that colour. A tiny area is merged into a nearby colour, or dropped
+when it is both tiny and a different colour. The number of colour steps
+follows the photo. It is not capped at 2 or 3.
+
+**Opaque ink.** The image edit asks for `background=opaque`. The returned PNG
+is flattened onto white before it is hashed, traced, previewed, or returned.
+Transparent pixels are often stored as black; flattening is what keeps the
+preview from painting that black.
+
+**Review.** `needsReview` is set when the fitted shapes together cover under
+35% of the ink bbox (`subjectFit`), or when the Dice overlap with the
+illustration is under the existing spike threshold. Two real parts that
+together cover the ink are a lesson, even when each piece is small. A parent
+can still approve. When `subjectFit` is under 35%, the pipeline asks for one
+more illustration with a stronger full-subject prompt and keeps the attempt
+that covers more of the ink. The idempotency key of that second call ends in
+`-silhouette`. Token usage is summed. This is not the section 8 gate.
+
+**Harness.** The eval idempotency key ended in `v3` for that shape-step run. D-70 replaces the primitive geometry and bumps the key to `v4`.
+
+### D-69 — Replicate as a second image provider
+
+The line-art call can use Replicate as well as OpenAI. `IMAGE_PROVIDER` is
+`openai` (the default) or `replicate`. The Worker secret for Replicate is
+`REPLICATE_API_KEY` (`npx wrangler secret put REPLICATE_API_KEY`). The build
+does not read it. `REPLICATE_API_TOKEN` is accepted only when
+`REPLICATE_API_KEY` is absent, so a local `.dev.vars` or the eval harness
+keeps working. The parent-facing error names `REPLICATE_API_KEY`.
+
+The default model is `black-forest-labs/flux-kontext-pro`: an edit with
+`input_image`, `output_format=png`, and `aspect_ratio=match_input_image`.
+`black-forest-labs/flux-1.1-pro` accepts `image_prompt`, but the v3 compare
+showed near-photos, so D-70 marks it unsuitable and leaves it out of
+`--compare`. `--model owner/name` may name another model; unknown ids that
+are not `flux-1.1-pro` use the Kontext input fields. D-70 gives Kontext its
+own short prompt. The PNG is still flattened onto white.
+
+The client sends `Prefer: wait=60` and `Idempotency-Key`, then polls
+`GET /v1/predictions/{id}`. Abort and the 110s deadline cancel the prediction.
+Output is downloaded only from `replicate.delivery`. Replicate list prices
+(20 October 2026, per output image): flux-kontext-pro $0.04, flux-1.1-pro
+$0.04. A model that is not in that table is unpriced. `REPLICATE_IMAGE_USD`
+overrides the harness figure the way `OPENAI_IMAGE_USD` does for OpenAI.
+Text names still use OpenAI when `OPENAI_API_KEY` is set; without it the
+shape templates stand. The harness flags are `--provider`, `--model`, and
+`--compare`. D-70 changes the Kontext prompt, drops flux-1.1-pro from
+compare, and serialises Replicate calls. The gate is still not claimed.
+
+### D-70 — Traced outlines, with a shape only when it fits
+
+The v3 compare (commit 7cf5349) showed OpenAI `gpt-image-1.5` illustrations
+were the best so far: one subject, opaque white. That path stays the default.
+The lessons were worse than the traced builder in a19f6f9. A flower became a
+rounded rectangle and circles, a cup a rectangle and an oval, a dog two ovals,
+and a cat's first step a short line whose 3% coverage was not rejected. Steps
+said "bagian berikutnya", and colour steps did not name a colour.
+`flux-kontext-pro` turned several subjects into cars. The shared prompt names
+vehicles in its negative list; Kontext followed those words. `flux-1.1-pro`
+returned near-photos and is unsuitable. Replicate also throttled at 6
+requests per minute with a burst of 1.
+
+**Outlines.** The vision model looks at the photo and the illustration and
+returns named parts in Indonesian, largest first, each with a box or polygon
+and a colour name. It also says whether the drawing is the same subject as
+the photo. Traced lines are assigned to those parts by overlap. A drawing
+step is one named part, or a symmetric pair, and its guide is that part's
+real lines, smoothed so a curve is not a jagged polyline. There is no step
+cap. A part with a banned or generic name ("bagian berikutnya", "bentuk
+utama", "buih", "wajah anak") is dropped. If no named part overlaps the ink,
+the lesson uses the a19f6f9 traced builder: largest closed contour first,
+then the remaining lines.
+
+**Construction.** A circle or oval may be the first step, role `construction`,
+only when its filled overlap with the main outline is at least 0.8. The next
+step is still that outline. A poor fit is skipped. A primitive never replaces
+the part.
+
+**Gates.** The largest closed contour has to cover about 60% of the subject
+box. Below that, or when a dilated Dice of the rendered lesson against the
+illustration is under the spike threshold, or when the vision model says the
+drawing is a different object, the pipeline asks for one new illustration and
+keeps the attempt that covers more. A parent can still approve. This is not
+the section 8 gate.
+
+**Colour.** One step per distinct colour. The sentence names the parts and
+the colour ("Warnai kepala dengan oranye"). The brush colour is that colour.
+The contact sheet fills those regions.
+
+**Replicate.** Kontext gets a short positive prompt that does not mention
+vehicles. Calls are serialised, and HTTP 429 waits and retries. A failed
+provider stops `--compare`. Compare is OpenAI plus Kontext only. The eval
+idempotency key ended in `v4` for that traced-outline run. D-71 bumps it to `v5`.
+
+### D-71 — Named pieces, subject colours, and a loop that stops
+
+The v4 compare (commit 769d890) kept the OpenAI illustrations and the finished
+drawings looked like the objects. The steps did not. A cat, a dog, and a car
+were two or three steps because one part box swallowed every line. A cup and a
+flower fell through to "Gambar bentuk yang paling besar" and "Tambahkan bagian
+kecil ini lagi". The third copy of that sentence hung: the suffix was always
+" lagi", so the duplicate check never saw a new sentence. A Worker request
+would hang the same way. White on the cup was sampled as grey, and the flower
+as pink, because near-white pixels were skipped and the rest were averaged.
+Replicate's $0.04 price did not count a regeneration.
+
+**Duplicates.** Each extra copy gets its own suffix (`yang lain`, then
+`lagi (2)`, `lagi (3)`, …). The loop also stops after a fixed number of tries
+and then uses the step index, so a bad suffix cannot spin. Lessons should not
+need that: unnamed scraps are omitted instead of given a generic sentence.
+
+**Parts.** The vision model returns a box or polygon per part and the piece
+numbers that belong to it (outline, ears, eyes, wheels, handle, petals, coffee,
+and the rest). The outline step is only the silhouette. An interior line goes
+to the smallest part that contains it, and only when that box is at most about
+72% of the subject. A box around the whole subject cannot claim the pieces
+inside it. If interiors stay unnamed, one more text call asks for labels. If
+that still fails, those lines are left out and `needsReview` is set. A parent
+can still approve. This is not the section 8 gate.
+
+**Colour.** Samples come from subject pixels inside the part, not from the
+white page. Near-white is `putih`. An all-white photo is a blank plate and is
+not coloured. A part with two colours gets a step for each (`Warnai cangkir
+dengan putih`, `Warnai kopi dengan cokelat`). The sentence names the part.
+
+**Review.** `needsReview` is also set when there are fewer than three drawing
+steps, when any instruction is still generic, or when a multi-colour subject
+has a single colour step.
+
+**Ink.** Detail lines are thinned before tracing so a thick ring becomes one
+midline. Short parallel bars are erased even when they touch the main drawing,
+which is what was keeping a barcode. The outer silhouette still comes from the
+filled subject. A solid rectangle is not thinned into a spine.
+
+**Cost.** A Replicate regeneration adds another $0.04. OpenAI token totals
+already include a redraw, so they are not multiplied again. The harness records
+`regenerated`. The eval idempotency key ended in `v5` for that run. D-72 bumps
+it to `v6`. The gate is still not claimed.
+
+### D-72 — Colour stays inside the part
+
+The v5 run (commit 5095e28, OpenAI only) finally drew a real lesson: a cat was
+outline, head, ears, eyes, whiskers; a dog was outline, head, ears, eyes,
+nose, tongue; a car was outline, wheels, steering wheel, seat. Those drawing
+steps stay. Colour did not. Each colour step filled the whole silhouette, so
+the last step painted over the earlier ones. The palette also picked up the
+background (grass, sky, leaves). A contact sheet showed the flower's
+construction circle as heavy ink, "Gambar garis luar garis luar", and "dua"
+on a single handle and on five petals. The review gate flagged none of the
+five. This is not a pass. `claimedPass` stays false.
+
+**Colour.** One part gets one colour. The fill is that part's closed region,
+not the whole silhouette. The body is painted first and smaller parts paint
+on top, so the colours accumulate. A colour that dominates the photo's frame
+and not its centre is background and is dropped. A strong sample inside the
+part beats a wrong name from the model, which is why a white cup stays
+`putih` and the coffee stays `cokelat`. Tiny grey patches are dropped once
+there are already more than four colours. A saturated named part, such as a
+collar, is kept. If the subject really has more than four colours, the steps
+stay and `needsReview` is set. `putih` fills as `#ffffff`, and the dark
+outline is drawn after the fill.
+
+**Words.** A part already called "garis luar …" is not prefixed again. A name
+that is only "garis luar" is dropped and the title is used. "Dua" is used
+only when the model counted two and the step has two lines. Five petals stay
+"Gambar kelopak."
+
+**Construction.** The filled overlap has to be at least 0.9. The contact sheet
+draws that guide as a light dashed grey, and only before the outline exists.
+It is not part of the final ink and it is not scored as ink.
+
+**Prompt.** The image edit is told to keep the photo's framing and crop, so a
+close-up stays a close-up. The text model is asked for `count`, and for a
+collar, tongue, and seat as their own parts when they are visible.
+
+**Ink.** A second stroke that runs next to a similar line is dropped. Two
+separated parts, such as two wheels, stay.
+
+**Review.** `needsReview` is also set when there are more than four colour
+steps, when a colour is not inside the subject, when an instruction repeats a
+word, when a construction guide is in the final drawing, or when "tambahkan
+dua" does not match two lines. A parent can still approve. These flags do not
+ask for another illustration. This is not the section 8 gate.
+
+The eval idempotency key ended in `v6` for that colour-fill run. D-73 bumps it to `v7`. The gate is still not claimed.
+
+### D-73 — Colours come from one flat illustration
+
+The v6 run (commit 4759f94, OpenAI only) kept the drawing fixes: framing stayed a close-up, the construction circle was gone from the finished ink, collar, tongue, and seat were named, and the doubled "garis luar" and false "dua" were gone. Colour regressed. Four of five lessons rendered no fill pixels (only the car wheels filled). Names were still wrong (blue whiskers, a yellow collar on a red one, blue and green petals on a white flower, grey coffee), and the main body colour was missing. The review gate flagged none of the five. A rubric preview scored colour 1–2. This is not a pass. `claimedPass` stays false.
+
+**Colour.** The image edit now asks for one colouring-book page: bold black outlines, flat fills, no shading, and the photo's true colours. Line art is the dark outlines of that page, then thinned and traced as before. Colour regions are the enclosed areas between those outlines. Small gaps are closed first, then the page background is flooded away, so a region is closed by construction and the background cannot leak in. A bulky near-black body is hollowed into a `hitam` fill with its outline kept. Each region's colour is the Lab-nearest name in the Indonesian palette, including `cokelat tua` for dark coffee. `putih` fills as `#ffffff`, and the outline is drawn after the fill. One step per colour, largest area first, so later fills sit on top. A region is named from the part box that contains a pixel of that region.
+
+**Drawing.** Steps that add no new ink are dropped, and a step that only retraces existing ink is flagged. A piece id is used only when the ink also sits inside that part, so an eye id cannot draw a collar. Pieces of the same part are one step. Drawing steps, including the outline and a construction guide, stay at seven or fewer. Step 1 names the subject without adjectives: "anjing", not "anjing hitam lucu".
+
+**Review.** `needsReview` is also set when a colour step would not fill, when a named colour is not in the illustration, when a step adds no line, or when there are still more than seven drawing steps. A parent can still approve. These flags do not ask for another illustration. This is not the section 8 gate.
+
+**Prompt.** The barcode line now also refuses a QR code, a price sticker, and a row of vertical bars, and tells the model to leave that area blank. The OpenAI prompt still refuses extra vehicles and wheels. The Kontext prompt stays positive and does not name them.
+
+The eval idempotency key ended in `v7` for that flat-page run. D-74 bumps it to `v8`. The gate is still not claimed.
+
+### D-74 — Line art and colour are two aligned images
+
+The v7 run (commit 99dff63) coloured well and drew badly. The flat pages had the right colours (a black dog with a red collar and a pink tongue, white cup with dark coffee, white petals with a dark-red centre, a grey car with a brown seat). The drawing steps did not: the cup's first step was a rim fragment, the dog and the flower had one drawing step, and the cat's later steps were empty. Colour regions were mis-named and painted over one another (the red collar came out `oranye`, the cat became beige, coffee was named as the cup, leaves as petals). A rubric preview was a no-go. This is not a pass. `claimedPass` stays false.
+
+**Two calls.** Call A is the v6 line drawing: black lines only, no fill. Every drawing step is traced from that image (outline, named parts, piece ids, at most seven steps). Call B is an image edit of that line drawing, with the photo as a second reference. It is told to fill each enclosed area with one flat colour from the photo and not to change, add, or move a line, so the colour page lines up with the line drawing. A normal photo is two image calls. A redraw is another pair. `regenerated` means more than those two. The job timeout is 180 seconds so both calls fit. About $0.13 a photo on the OpenAI list price is accepted for this spike.
+
+**Regions.** Enclosed areas come from the line drawing, after a small gap is closed and the paper outside the subject is flooded away. They are not taken from the colour page. Each region's colour is the mode of the colour page's pixels inside it, then the Lab-nearest name. A bright red with little green is `merah`, not `oranye`. A warm grey is `abu-abu`, not beige. One region gets exactly one colour. A region that is actually two colours is still given its mode and `needsReview` is set. The name is the vision part whose box contains the region: coffee is not the cup, a collar is not the eyes or the body, a leaf is `daun` not a petal, a wheel is `roda`.
+
+**White.** A white region is not a colour step. The paper is already white, and a white fill was painting over the parts inside it (the cup wall, the petals). The outline still shows those shapes. This is a change from D-73, which painted `putih`.
+
+**Empty steps.** New ink is counted on the path that is actually shipped, not on a contour that the stroke then hides. A step with no new visible ink is dropped and flagged. `needsReview` is also set when fewer than three drawing steps remain, when a colour step would not change the picture, or when one region holds more than one colour. These flags do not ask for another illustration.
+
+The harness writes `illustrations/<photo>-line.png` and `illustrations/<photo>-colour.png`. The eval idempotency key ended in `v8` for that two-image run. D-75 bumps it to `v9`. The gate is still not claimed.
+
+### D-75 — Interior lines, sampled fills, and a quieter review gate
+
+The v8 run (commit 49a1732) was the best so far. The toy car was the first sample at 4 or better on every rubric dimension in the owner's preview, and the cat was close. Colours were mostly right and visible. It is not a pass. `claimedPass` stays false.
+
+**Lines.** Open interior strokes (eyes, nose, whiskers, petal divisions) were dropped, so a lesson could be only the outer outline plus closed areas. A stroke inside the outline becomes its own step when a vision part sits on that ink. A cup and a saucer are two outline steps when they are two large closed shapes. A step whose label does not overlap its ink, or whose path adds nothing past the lines already drawn, is dropped.
+
+**Colour.** Call B was redrawing the page: only about half to three quarters of A's lines sat within 3 pixels of B's dark lines, and B added a number and a barcode. The colour prompt now says to only fill and to keep every line exactly, including no new numbers or barcodes. Before sampling, B is shifted and scaled by a small search so its dark lines land on A's. Each region's colour is the median of an eroded interior, so B's offset black outline does not vote. A red collar stays red. Dark brown coffee stays `cokelat tua` or `hitam`, not `abu-abu`. The fill is that sampled colour snapped to a flat step, not a stock swatch of a different brightness. One part and one colour is one step, so an eye is not labelled as the nose and the face.
+
+**Cost.** Call A stays at the variant's quality. Call B uses `quality=low`. The harness cost is the measurement of whether the cheaper fill is enough.
+
+**Review.** All five v8 lessons were flagged, including the good car, and the reason was not in the output. `reviewReasons` is written into `metrics.json` and the contact-sheet HTML. A lesson is not sent back just because the illustration has extra ink the steps do not draw, or because a duplicate stroke was dropped. A lesson like the car, with several visible drawing steps and colours that match their parts, is not flagged. A blank or mismatched drawing still is. These flags do not ask for another illustration. This is not the section 8 gate.
+
+The eval idempotency key ended in `v9`. D-76 bumps it to `v10`. The gate is still not claimed.
+
+### D-76 — Enclosing parts, whole regions, and the photo's framing
+
+The v9 run (commit 420b5ef, OpenAI default, five samples) was a regression against v8. No sample was 4 or better on every rubric dimension. The cat's interior lines, the dark coffee, and the red collar stayed, and call B at `quality=low` was about $0.09 a photo. Colour names attached to the wrong part (every cat colour was `kumis`, the tongue was `hidung`, leaves were `kelopak`). The grey face and the grey car body were missing. The same region was painted twice, and tiny junk colours appeared. The flower still had no petal steps. Step 1 said "garis luar kumis" or a garbled title. The standing dog was cropped to the head. The cup and saucer were still one outline. The review gate did not flag the flower or the car. This is not a pass. `claimedPass` stays false.
+
+**Names.** A colour region is named by the smallest part that contains it: at least half of the region's area lies inside that part. A wide whisker box does not name the face, and a huge face box is not skipped. Step 1 uses the subject's plain noun from the title ("mobil", not "mobil anak klasik" and not "kumis"). A part whose ink is not inside its box is dropped.
+
+**Regions.** Light grey is `abu-abu`, not paper white. Areas of one colour that interior lines sliced apart are joined, and a large body fill is added when those slices would hide it. A tiny region is dropped. Dark brown and black that cover the same coffee are one colour. Same-colour regions are one step.
+
+**Lines.** A thin stroke stays even when a thick outline is reduced to its centre, so a petal line is not erased. The part of a stroke that runs inside the outline is kept when the rest only copies the outline. A cup and saucer drawn as one silhouette become two outline steps.
+
+**Framing.** Both image prompts keep the photo's crop in both directions: do not zoom in, and do not zoom out. A full body stays a full body. A close-up stays a close-up.
+
+**Review.** `needsReview` is also set when the same part name has two colours (two wheels, one grey and one black), when the largest coloured area is small next to the subject, or when an instruction repeats "garis luar" or adds "yang lain". These flags do not ask for another illustration. A lesson like the car, with a large body colour and matching part colours, is not flagged.
+
+The eval idempotency key ended in `v10`. D-77 bumps it to `v11`. The gate is still not claimed.
+
+### D-77 — Construction plan, then one part at a time
+
+v8, v9, and v10 each fixed one failure and broke another. They traced a detailed drawing and then tried to cut that drawing into parts. The lessons the owner wants look like a how-to-draw page: one big simple shape, then one part at a time, new lines in a distinct colour, and flat colour last. This is not a pass. `claimedPass` stays false.
+
+**Call A.** The line drawing is a kid-book cartoon of the photo: thick closed shapes, chibi proportions for animals, no texture and no shading. It keeps the pose, the key features, and the framing in both directions. Call B is unchanged: fill that drawing at `quality=low`. A normal photo is still those two image calls.
+
+**Plan.** The vision model returns an ordered construction plan. Each part has a name, a basic shape, a box in the line drawing's coordinates, what it is drawn onto, and whether it is only a guide. The order is big to small. A missing order falls back to the box size.
+
+**Steps.** The default lesson assigns the cartoon's own strokes to those parts. Step 1 is one circle, oval, or dome for the main mass. Each later step adds one part. A centre cross, a guide oval, or a torso triangle is a construction line and is left out of the finished ink. Drawing steps stay within about eleven. Colour is last: one flat colour per region, named by the planned part that contains it. The v10 pins still hold on this path and on `buildPhotoLesson`: cat eyes, nose, whiskers, and ears; dark coffee; a red collar; one brown car seat; flower petals.
+
+**Reverse.** The harness can also edit call A at low quality, removing the last part one at a time, so every step image is still that cartoon. At most five of those edits. They count in `imageCalls` and they do not set `regenerated`. The default, including the app, does not run them, so a photo stays near the v10 cost and under about $0.25. `--steps strokes` is the default, `--steps reverse` uses the erase pass as the lesson, and `--steps both` keeps the stroke lesson and adds the erase images.
+
+**Reference.** The example panel shows lines up to the current step. Lines already drawn are dark. The current step's new lines are red. A guide is a dashed red line and is gone on the next step.
+
+The eval idempotency key ended in `v11`. D-78 bumps it to `v12`. The gate is still not claimed.
+
+### D-78 — Faithful line art, this photo's parts only
+
+The v11 run (commit d22a359, OpenAI, `--steps both`, five samples) was a no-go. The how-to-draw step order was starting to show, and the new lines were red, but call A invented subjects: the cup grew a cat, and the flower became a cat in a toy car. The shared prompt listed every sample's parts and asked for a chibi cartoon, so the model drew them. Step 1 said "oval" or "dome" and drew the full silhouette. A lying close-up became a sitting full body. The dog stopped at the silhouette, the neck, and the tail. The pink inside of the ears and part of the red collar were dropped, and the tongue was named leher. Reverse erase stages shifted, so the red lines doubled. The cat passed review with the wrong pose. One wheel of a pair was highlighted. The job cost $1.06 with reverse. This is not a pass. `claimedPass` stays false.
+
+**Call A.** The line drawing is a simplified, faithful illustration of this exact subject: clean, thick, closed outlines, little texture, and no shading. It is not a cartoon and it does not use chibi proportions. The pose and the framing are binding, including a subject that is lying stays lying and a close-up stays a close-up. The shared prompt names no other sample's parts. A photo-only vision call lists the parts of this photo, and only those names are added to the prompt.
+
+**Gate.** After call A, the vision model names the objects in the drawing and in the photo and checks the pose and the crop. A wrong or extra subject, or a different pose or framing, is drawn once more. If it is still wrong, `needsReview` is set and the lesson is not drawn again.
+
+**Steps.** The step order is still a how-to-draw page, and that order is not a drawing style. Step 1 is the circle, oval, or dome fitted to the planned mass. The real outline is the next step. Each planned part is its own step, including when the trace has no separate contour. An animal plan that lists four or more of those details must show each of them. Repeated parts, such as both wheels, share one step and every instance is highlighted. Colour stays last.
+
+**Colour.** A small region with its own colour is kept, down to a few dozen pixels, including a separate patch of a colour that is already used. A small region is named by the tightest planned part that overlaps it.
+
+**Reverse.** Each erase stage is aligned to the previous one before the new ink is taken, so a small shift does not paint the whole drawing red. `reverseCalls` and `reverseUsd` are recorded on their own. `costUsd` stays the whole job. Reverse remains opt-in. The default, including the app, is still stroke assignment and two image calls.
+
+The eval idempotency key ended in `v12`. D-79 bumps it to `v13`. The gate is still not claimed.
+
+### D-79 — Dashed mass guide, subject only, petals kept
+
+The v12 run (commit 4c4d7ef, OpenAI, `--steps both`, five samples) was a no-go. The line drawings were faithful: no invented cats, and the pose and the crop matched. Strokes cost about $0.09 a photo and reverse added about $0.066. The lessons regressed. This is not a pass. `claimedPass` stays false.
+
+**Guide.** Step 1 is a light grey dashed circle or oval fitted inside the main mass (the head, the cup body, the flower head), not a solid line and not a semicircle. It disappears once the real outline is drawn. It is not in the finished lesson or the comparison.
+
+**Subject.** The line prompt draws only the subject. It leaves out the table, the surface, anything on it, people, leashes, and props. A drawing that adds those, including a leash or coffee beans that are in the photo, is drawn once more. If they are still there, `needsReview` is set. They are not lesson steps.
+
+**Strokes.** Petal lines that touch the outline stay one kelopak step. The centre is its own step. A cup and saucer that share one silhouette become two outlines. Whiskers and legs stay even when they touch the outline. A colour region is named by the part that overlaps it most, so eyes are not mulut and a collar is not tali. A brown spill across a white cup is not painted as the cup; the coffee inside the cup stays dark brown.
+
+**Reverse.** Each erase stage is registered to the finished line drawing, and new ink is kept only inside the erased part. Doubled outlines outside that part are not a step.
+
+The eval idempotency key ended in `v13`. D-80 bumps it to `v14`. The gate is still not claimed.
+
+### D-80 — Reverse is the lesson, one part at a time
+
+The v13 run (commit 9a2d318, OpenAI, `--steps both`, five samples) was a no-go. The dashed guide did disappear after step 1, and call A no longer drew beans, a leash, or a person's leg. The lessons were still wrong. Reverse drew whole lines: the cup then the saucer, and the cat's full face. Stroke steps were fragments inside the outline. Five photos cost $1.17, of which $0.31 was reverse. This is not a pass. `claimedPass` stays false.
+
+**Reverse.** The app and the harness use reverse by default. Strokes remain the lesson only when an erase cannot be checked, or when `--steps strokes` is set. `--steps both` shows the reverse lesson first and the stroke lesson beside it. Every planned part except the mass gets its own erase, up to eight low-quality edits, including one retry. Guides and background props are not erased. The centre is erased before the petals when both are planned. After each edit, the removed ink has to sit in that part's box and the rest of the drawing has to stay put. A new circle outside the body is rejected. One retry uses a stricter erase. If it still fails, that part is merged into the neighbouring step and the bad edit is not used. A transient `fetch failed`, or HTTP 502, 503, or 504, is tried once more with the same idempotency key.
+
+**Guide.** Step 1 is a circle or oval at about 90% of the main mass box (the head, the cup body, the flower head, the car body), centered on that box. It is not cropped to the top of the box and it is not shrunk until it floats.
+
+**Colour.** A region is named by the smallest planned part that contains its centroid. A part much smaller than the paint does not rename the whole face. The coffee keeps the dark pixels from the colour image. A small patch whose only name is the whole subject, such as a harness the line drawing does not have, is not a colour step. The colour prompt fills only enclosed areas and does not add a collar, harness, or strap. Colour fills are shifted and scaled onto the line drawing, up to about 12%, so a fill that sits past the ears lands on the drawing.
+
+**Other.** A guide that is not the opening cross, such as a neck construction line with no ink, is not a step. The part of the saucer behind the cup is hidden. Call A does not add a branch, a bud, or a stem that is not in the photo. The photo request waits long enough for the erase pass.
+
+The eval idempotency key ends in `v14`. The gate is still not claimed.

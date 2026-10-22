@@ -39,7 +39,7 @@ export default tseslint.config(
   {
     // The offline folder is not a React component tree. The refresh rule would
     // otherwise flag the worker, the manifest builder and the status store.
-    files: ['src/offline/**/*.{ts,tsx}'],
+    files: ['src/offline/**/*.{ts,tsx}', 'src/photo/**/*.{ts,tsx}', 'src/worker/**/*.{ts,tsx}'],
     rules: {
       'react-refresh/only-export-components': 'off',
     },
