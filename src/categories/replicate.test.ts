@@ -147,6 +147,8 @@ describe('replicate photo match', () => {
     expect(replicateMatchModel('../nope')).toBe('openai/gpt-4.1-mini');
     const input = replicateMatchInput('image/jpeg', 'aaaa');
     expect(input.image_input).toEqual(['data:image/jpeg;base64,aaaa']);
+    expect(input.prompt).toContain('Return exactly {"category":"<id>","confidence":0.0,"facing":"left|right|front|unknown","pose":"","colours":[{"part":"<part id>","color":"#rrggbb"}]}');
+    expect(input.prompt).toContain('Colours must be objects using the part ids listed for that category.');
     expect(parseModelJson('```json\n{"category":"dog"}\n```')).toEqual({ category: 'dog' });
     const source = readFileSync(path.join(process.cwd(), 'src/categories/replicate.ts'), 'utf8');
     expect(source).not.toMatch(/console\.(log|info|debug|warn|error)/);

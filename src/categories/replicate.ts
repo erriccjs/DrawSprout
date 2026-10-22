@@ -14,9 +14,11 @@ const PREDICT_URL = 'https://api.replicate.com/v1/models';
 const PREFER_WAIT_SECONDS = 20;
 const POLL_MS = 1_000;
 
+const MATCH_OUTPUT_EXAMPLE = '{"category":"<id>","confidence":0.0,"facing":"left|right|front|unknown","pose":"","colours":[{"part":"<part id>","color":"#rrggbb"}]}';
+
 export function replicateMatchInput(mediaType: string, imageBase64: string): Record<string, unknown> {
   return {
-    prompt: `${matchPrompt()}\nReturn one JSON object and nothing else.`,
+    prompt: `${matchPrompt()}\nReturn exactly ${MATCH_OUTPUT_EXAMPLE}. Colours must be objects using the part ids listed for that category.`,
     system_prompt: 'You match a photo to a drawing lesson. Return only JSON with category, confidence, facing, pose, and colours.',
     image_input: [`data:${mediaType};base64,${imageBase64}`],
     temperature: 0,

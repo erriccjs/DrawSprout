@@ -107,7 +107,8 @@ The matcher still says `house` and `butterfly`.
 ## Matching, recolouring, and facing
 
 `POST /api/photo-match` takes the photo as the body (`image/jpeg`,
-`image/png`, `image/webp`, or `image/gif`, up to 6 MB). The default provider
+`image/png`, `image/webp`, or `image/gif`, up to 6 MB). The browser
+downscales first: longest side 1024 px, JPEG quality 0.85. The default provider
 is Replicate (`MATCH_PROVIDER=replicate`). The Worker calls the official
 model `openai/gpt-4.1-mini` (`MATCH_REPLICATE_MODEL`) with `Prefer: wait`,
 then polls the prediction if it is still running. The photo is sent as a

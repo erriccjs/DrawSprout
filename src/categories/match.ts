@@ -101,15 +101,45 @@ function readFacing(value: unknown): Facing {
 }
 
 function readColours(value: unknown, lesson: { readonly parts: readonly { readonly id: string }[] } | undefined): MatchColour[] {
-  if (!Array.isArray(value) || !lesson) return [];
-  const allowed = new Set(lesson.parts.map((part) => part.id));
+  if (!lesson) return [];
+  const parts = lesson.parts.map((part) => part.id);
+  const allowed = new Set(parts);
+  if (Array.isArray(value)) {
+    if (value.length > 0 && value.every((item) => typeof item === 'string')) {
+      const colours: MatchColour[] = [];
+      for (let index = 0; index < value.length && index < parts.length; index += 1) {
+        const part = parts[index];
+        const text = value[index];
+        if (!part || typeof text !== 'string') continue;
+        const color = normalizeHex(text);
+        if (!color) continue;
+        colours.push({ part, color });
+      }
+      return colours;
+    }
+    const colours: MatchColour[] = [];
+    for (const item of value) {
+      const record = asRecord(item);
+      if (!record || typeof record.part !== 'string' || typeof record.color !== 'string') continue;
+      const part = record.part.trim().toLowerCase();
+      if (!allowed.has(part)) continue;
+      const color = normalizeHex(record.color);
+      if (!color) continue;
+      colours.push({ part, color });
+    }
+    return colours;
+  }
+  const record = asRecord(value);
+  if (!record) return [];
+  const byPart = new Map<string, string>();
+  for (const [key, text] of Object.entries(record)) {
+    if (typeof text === 'string') byPart.set(key.trim().toLowerCase(), text);
+  }
   const colours: MatchColour[] = [];
-  for (const item of value) {
-    const record = asRecord(item);
-    if (!record || typeof record.part !== 'string') continue;
-    const part = record.part.trim().toLowerCase();
-    if (!allowed.has(part) || typeof record.color !== 'string') continue;
-    const color = normalizeHex(record.color);
+  for (const part of parts) {
+    const text = byPart.get(part);
+    if (!text) continue;
+    const color = normalizeHex(text);
     if (!color) continue;
     colours.push({ part, color });
   }

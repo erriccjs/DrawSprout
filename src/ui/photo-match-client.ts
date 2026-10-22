@@ -20,14 +20,35 @@ export interface ClientMatch {
   readonly message: string;
 }
 
+/** Longest side of a photo sent to the matcher. Phone pictures are several megabytes. */
+export const MATCH_PHOTO_LONG_EDGE = 1024;
+
+/** JPEG quality for that upload. High enough that part colours stay readable. */
+export const MATCH_JPEG_QUALITY = 0.85;
+
+const UNREADABLE_PHOTO = 'Foto tidak dapat dibaca. Pilih gambar lain.';
+
+export function fittedSize(width: number, height: number, longEdge = MATCH_PHOTO_LONG_EDGE): { readonly width: number; readonly height: number } {
+  const longest = Math.max(width, height);
+  if (longest <= longEdge) {
+    return { width: Math.max(1, Math.round(width)), height: Math.max(1, Math.round(height)) };
+  }
+  const scale = longEdge / longest;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
 export async function matchPhotoRequest(file: File, signal?: AbortSignal): Promise<ClientMatch> {
+  const photo = await downscaleMatchPhoto(file);
   const response = await fetch('/api/photo-match', {
     method: 'POST',
     headers: {
-      'content-type': file.type || 'image/jpeg',
+      'content-type': 'image/jpeg',
       'idempotency-key': crypto.randomUUID(),
     },
-    body: file,
+    body: photo,
     ...(signal ? { signal } : {}),
   });
   const payload = await response.json() as unknown;
@@ -36,6 +57,35 @@ export async function matchPhotoRequest(file: File, signal?: AbortSignal): Promi
     throw new Error(typeof record.error === 'string' ? record.error : 'Foto ini belum bisa dipakai. Coba lagi ya.');
   }
   return readClientMatch(payload);
+}
+
+async function downscaleMatchPhoto(file: File): Promise<File> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    throw new Error(UNREADABLE_PHOTO);
+  }
+  try {
+    const size = fittedSize(bitmap.width, bitmap.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = size.width;
+    canvas.height = size.height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error(UNREADABLE_PHOTO);
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((value) => {
+        if (value) resolve(value);
+        else reject(new Error(UNREADABLE_PHOTO));
+      }, 'image/jpeg', MATCH_JPEG_QUALITY);
+    });
+    return new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+  } finally {
+    bitmap.close();
+  }
 }
 
 export function lessonFromMatch(match: ClientMatch): LessonPackage | null {
