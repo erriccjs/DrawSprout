@@ -5,14 +5,16 @@
  * A missing category or a low confidence returns the friendly list.
  */
 
+import { PHOTO_MATCH_PATH } from '../photo/paths';
+import { scopedCacheKey } from '../worker/shared/cache-key';
+import { clientKey, json, sameOrigin } from '../worker/shared/http';
+import { rateGateFrom, type RateGate } from '../worker/shared/limit';
 import { interpretMatch, type PhotoMatch } from './match';
 import type { ClassifyResult } from './openai';
 
-export const PHOTO_MATCH_PATH = '/api/photo-match';
+export { PHOTO_MATCH_PATH };
 
 const MAX_BYTES = 6_000_000;
-const RATE_LIMIT = 6;
-const RATE_WINDOW_MS = 10 * 60 * 1000;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 export class MissingMatchKey extends Error {
@@ -51,22 +53,22 @@ export interface PhotoMatchDeps {
   ) => Promise<ClassifyResult>;
   readonly now?: () => number;
   readonly rateBuckets?: Map<string, number[]>;
+  /** Production passes the Durable Object gate. Tests pass `rateBuckets` instead. */
+  readonly rateGate?: RateGate;
   readonly cache?: Map<string, string>;
 }
 
 export async function handlePhotoMatch(request: Request, deps: PhotoMatchDeps): Promise<Response> {
   if (request.method !== 'POST') return json({ error: 'Tidak ada.', code: 'method' }, 405);
+  if (!sameOrigin(request)) return json({ error: 'Foto tidak dapat dipakai. Pilih gambar lain.', code: 'bad_request' }, 403);
   const now = deps.now ?? Date.now;
-  const buckets = deps.rateBuckets ?? new Map<string, number[]>();
-  if (!allow(clientKey(request), buckets, now())) {
+  const gate = rateGateFrom(deps);
+  if (!await gate.allow(clientKey(request), now())) {
     return json({ error: 'Terlalu banyak foto. Coba lagi nanti ya.', code: 'rate' }, 429);
   }
 
   const idempotencyKey = request.headers.get('idempotency-key')?.trim() ?? '';
   const cache = deps.cache ?? new Map<string, string>();
-  if (idempotencyKey && cache.has(idempotencyKey)) {
-    return json(JSON.parse(cache.get(idempotencyKey) ?? '{}') as unknown, 200);
-  }
 
   const mediaType = (request.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
   if (!ALLOWED_TYPES.has(mediaType)) {
@@ -82,12 +84,19 @@ export async function handlePhotoMatch(request: Request, deps: PhotoMatchDeps): 
     return json({ error: 'Fotonya terlalu besar. Coba foto yang lebih kecil.', code: 'size' }, 413);
   }
 
+  const cacheKey = idempotencyKey
+    ? await scopedCacheKey(clientKey(request), idempotencyKey, image, mediaType)
+    : '';
+  if (cacheKey && cache.has(cacheKey)) {
+    return json(JSON.parse(cache.get(cacheKey) ?? '{}') as unknown, 200);
+  }
+
   try {
     // Long enough for Prefer: wait and a short poll if the prediction is still running.
     const classified = await deps.classify(image, mediaType, idempotencyKey || crypto.randomUUID(), AbortSignal.timeout(45_000));
     const match = interpretMatch(classified.raw);
     const body = responseBody(match, classified);
-    if (idempotencyKey) remember(cache, idempotencyKey, body);
+    if (cacheKey) remember(cache, cacheKey, body);
     return json(body, 200);
   } catch (error) {
     if (error instanceof MissingMatchKey) {
@@ -115,17 +124,6 @@ function responseBody(match: PhotoMatch, classified: ClassifyResult): Record<str
   };
 }
 
-function allow(key: string, buckets: Map<string, number[]>, now: number): boolean {
-  const recent = (buckets.get(key) ?? []).filter((stamp) => now - stamp < RATE_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT) {
-    buckets.set(key, recent);
-    return false;
-  }
-  recent.push(now);
-  buckets.set(key, recent);
-  return true;
-}
-
 function remember(cache: Map<string, string>, key: string, body: Record<string, unknown>): void {
   if (cache.size > 100) {
     const oldest = cache.keys().next().value;
@@ -134,18 +132,3 @@ function remember(cache: Map<string, string>, key: string, body: Record<string, 
   cache.set(key, JSON.stringify(body));
 }
 
-function clientKey(request: Request): string {
-  return request.headers.get('cf-connecting-ip')
-    ?? request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    ?? 'local';
-}
-
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
-    },
-  });
-}

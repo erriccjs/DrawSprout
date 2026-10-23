@@ -32,5 +32,17 @@
   "vars": {
     "MATCH_PROVIDER": "replicate",
     "MATCH_REPLICATE_MODEL": "openai/gpt-4.1-mini"
-  }
+  },
+  // One strict 6-per-10-minutes window per client, shared by every isolate.
+  // The Rate Limiting binding is per location, approximate, and only 10 or 60
+  // seconds, so it cannot hold this budget. The class is exported from main.
+  // The next deploy applies the migration. The dashboard is not used.
+  "durable_objects": {
+    "bindings": [
+      { "name": "PAID_RATE_LIMIT", "class_name": "PaidRateLimit" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1-paid-rate-limit", "new_sqlite_classes": ["PaidRateLimit"] }
+  ]
 }

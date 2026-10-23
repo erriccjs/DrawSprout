@@ -144,8 +144,10 @@ Lessons authored `facing: left` or `right` are mirrored when the photo faces
 the opposite way. `x` becomes `width - x`. Arc sweep flags flip. A `front`
 lesson (the flower) is never mirrored. `unknown` facing does not mirror.
 
-The same idempotency key returns the cached JSON. A client is limited to
-6 matches in 10 minutes. There is no image generation on this path.
+The same idempotency key returns the cached JSON only for the same client
+and the same photo. A client is limited to 6 matches in 10 minutes. That
+window is one Durable Object per client address, shared by every isolate.
+There is no image generation on this path.
 
 ## Cost per photo
 

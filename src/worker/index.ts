@@ -15,6 +15,10 @@ import { handlePhotoLessonRequest, PHOTO_API_PATH, type JobCache } from '../phot
 import { openAiClients } from '../photo/openai';
 import { imageProvider, replicateApiKey } from '../photo/provider';
 import { replicateEditor } from '../photo/replicate';
+import { durableRateGate, PaidRateLimit } from './rate-limit';
+import { json } from './shared/http';
+
+export { PaidRateLimit };
 
 type WorkerEnv = Env & {
   readonly OPENAI_API_KEY?: string;
@@ -29,9 +33,7 @@ type WorkerEnv = Env & {
 };
 
 const photoCache: JobCache = { success: new Map(), inflight: new Map() };
-const photoRateBuckets = new Map<string, number[]>();
 const matchCache = new Map<string, string>();
-const matchRateBuckets = new Map<string, number[]>();
 
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
@@ -53,7 +55,7 @@ export default {
             signal,
           });
         },
-        rateBuckets: matchRateBuckets,
+        rateGate: durableRateGate(env.PAID_RATE_LIMIT),
         cache: matchCache,
       });
       console.log(JSON.stringify({ route: 'photo-match', status: response.status, ms: Date.now() - started }));
@@ -70,7 +72,7 @@ export default {
         images: images ?? { edit() { return Promise.reject(new Error('missing key')); } },
         ...(openai ? { instructions: openai.instructions } : {}),
         cache: photoCache,
-        rateBuckets: photoRateBuckets,
+        rateGate: durableRateGate(env.PAID_RATE_LIMIT),
       });
       console.log(JSON.stringify({
         route: 'photo-lesson',
@@ -80,10 +82,7 @@ export default {
       return response;
     }
     if (url.pathname.startsWith('/api/')) {
-      return new Response(JSON.stringify({ error: 'Tidak ada.', code: 'not_found' }), {
-        status: 404,
-        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-      });
+      return json({ error: 'Tidak ada.', code: 'not_found' }, 404);
     }
     return env.ASSETS.fetch(request);
   },

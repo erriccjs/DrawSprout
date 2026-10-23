@@ -8,8 +8,8 @@
 
 import type { LessonPackage } from '../lesson-data/schema';
 import { findLessonProblems } from '../lesson-data/validate';
-import { PHOTO_API_PATH } from './api';
-import { base64ToBytes } from './openai';
+import { base64ToBytes } from './bytes';
+import { PHOTO_API_PATH } from './paths';
 import type { PhotoVariant } from './prompts';
 
 export interface PhotoLessonRequest {

@@ -81,6 +81,32 @@ describe('photo-match endpoint', () => {
     expect(blocked.status).toBe(429);
   });
 
+  it('rejects a cross-origin browser before classification', async () => {
+    const calls = vi.fn();
+    const response = await handlePhotoMatch(post(png, { origin: 'https://evil.example' }), { classify: calls });
+    expect(response.status).toBe(403);
+    expect(calls).not.toHaveBeenCalled();
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('permissions-policy')).toContain('camera=(self)');
+  });
+
+  it('does not share a cached match across clients or different photos', async () => {
+    const calls = vi.fn(() => Promise.resolve(classify({
+      category: 'cat',
+      confidence: 0.9,
+      facing: 'front',
+      pose: '',
+      colours: [],
+    })));
+    const cache = new Map<string, string>();
+    const headers = { 'idempotency-key': 'shared-key', 'cf-connecting-ip': '1.1.1.1' };
+    await handlePhotoMatch(post(png, headers), { classify: calls, cache });
+    await handlePhotoMatch(post(png, { ...headers, 'cf-connecting-ip': '2.2.2.2' }), { classify: calls, cache });
+    await handlePhotoMatch(post(Uint8Array.from([137, 80, 78, 71, 9]), headers), { classify: calls, cache });
+    await handlePhotoMatch(post(png, headers), { classify: calls, cache });
+    expect(calls).toHaveBeenCalledTimes(3);
+  });
+
   it('reports a missing key without calling the model', async () => {
     const response = await handlePhotoMatch(post(), {
       classify: () => Promise.reject(new MissingMatchKey()),

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { bytesToBase64 } from './openai';
+import { bytesToBase64 } from './bytes';
 import { replicateApiKey } from './provider';
 import { replicateAspect, replicateEditor, replicateModelFor, replicateUsesImagePrompt } from './replicate';
 

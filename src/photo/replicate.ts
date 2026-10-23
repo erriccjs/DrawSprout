@@ -6,7 +6,8 @@
  * connection, then this polls, and an abort cancels the prediction.
  */
 
-import { bytesToBase64, type ImageEditor, type ImageEditRequest, type ImageEditResult } from './openai';
+import { bytesToBase64 } from './bytes';
+import type { ImageEditor, ImageEditRequest, ImageEditResult } from './openai';
 import { replicatePrompt } from './prompts';
 
 export const DEFAULT_REPLICATE_MODEL = 'black-forest-labs/flux-kontext-pro';

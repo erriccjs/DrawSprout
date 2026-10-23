@@ -1,6 +1,10 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { drawsproutOffline } from './src/offline/vite-plugin';
+
+const root = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react(), drawsproutOffline()],
@@ -12,5 +16,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    alias: {
+      'cloudflare:workers': path.join(root, 'src/worker/durable-object-shim.ts'),
+    },
   },
 });
