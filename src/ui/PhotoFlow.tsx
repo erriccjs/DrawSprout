@@ -6,6 +6,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { LanguageSwitch } from '../i18n/LanguageSwitch';
+import { useI18n } from '../i18n/context';
+import { say } from '../i18n/generated';
 import type { ChangeEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { LessonPackage } from '../lesson-data/schema';
 import { requestPhotoLesson, type PhotoLessonApiResult, type PhotoLessonRequest } from '../photo/client';
@@ -28,6 +31,7 @@ export function PhotoFlow({
   prepare = preparePhotoFile,
   request = requestPhotoLesson,
 }: PhotoFlowProps) {
+  const { t, locale } = useI18n();
   const [stage, setStage] = useState<Stage>('pick');
   const [file, setFile] = useState<File | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
@@ -123,88 +127,85 @@ export function PhotoFlow({
 
   return (
     <section className="photo-flow" aria-labelledby="photo-flow-title">
-      <h1 id="photo-flow-title">Buat dari foto</h1>
-      {error && <p className="banner banner--warning" role="alert">{error}</p>}
+      <LanguageSwitch />
+      <h1 id="photo-flow-title">{t('photoFlowTitle')}</h1>
+      {error && <p className="banner banner--warning" role="alert">{say(locale, error)}</p>}
 
       {stage === 'pick' && (
         <>
-          <p>Pilih foto benda utamanya. Ini untuk orang tua, bukan untuk anak.</p>
+          <p>{t('photoFlowLead')}</p>
           <div className="photo-flow__actions">
             <button type="button" className="button button--primary" onClick={() => document.getElementById('photo-camera')?.click()}>
-              Ambil foto
+              {t('takePhoto')}
             </button>
             <button type="button" className="button" onClick={() => document.getElementById('photo-gallery')?.click()}>
-              Pilih dari galeri
+              {t('pickFromGallery')}
             </button>
-            <button type="button" className="button" onClick={onCancel}>Batal</button>
+            <button type="button" className="button" onClick={onCancel}>{t('cancel')}</button>
           </div>
-          <input id="photo-camera" className="photo-flow__file" type="file" accept="image/*" capture="environment" aria-label="Kamera" onChange={onFile} />
-          <input id="photo-gallery" className="photo-flow__file" type="file" accept="image/*" aria-label="Galeri" onChange={onFile} />
+          <input id="photo-camera" className="photo-flow__file" type="file" accept="image/*" capture="environment" aria-label={t('camera')} onChange={onFile} />
+          <input id="photo-gallery" className="photo-flow__file" type="file" accept="image/*" aria-label={t('gallery')} onChange={onFile} />
         </>
       )}
 
       {stage === 'crop' && fileUrl && (
         <>
-          <p>Pilih bagian utamanya, lalu lanjut.</p>
+          <p>{t('cropLead')}</p>
           <CropBox crop={crop} imageUrl={fileUrl} onChange={setCrop} />
           <div className="photo-flow__actions">
-            <button type="button" className="button button--primary" onClick={() => void confirmCrop()}>Pakai bagian ini</button>
-            <button type="button" className="button" onClick={() => setStage('pick')}>Ganti foto</button>
-            <button type="button" className="button" onClick={onCancel}>Batal</button>
+            <button type="button" className="button button--primary" onClick={() => void confirmCrop()}>{t('useThisPart')}</button>
+            <button type="button" className="button" onClick={() => setStage('pick')}>{t('changePhoto')}</button>
+            <button type="button" className="button" onClick={onCancel}>{t('cancel')}</button>
           </div>
         </>
       )}
 
       {(stage === 'consent' || stage === 'working') && preparedUrl && (
         <>
-          <h2>Sebelum foto dikirim</h2>
-          <p>
-            Foto ini dikirim ke server DrawSprout dan ke OpenAI supaya bisa dibuat menjadi gambar garis.
-            Foto tidak disimpan setelah diproses. Pelajaran yang dihasilkan tersimpan di perangkat ini,
-            dan menghapusnya menghapus gambar turunan itu juga.
-          </p>
-          <img className="photo-flow__still" src={preparedUrl} alt="Foto yang akan dikirim" />
+          <h2>{t('beforeSendTitle')}</h2>
+          <p>{t('beforeSendBody')}</p>
+          <img className="photo-flow__still" src={preparedUrl} alt={t('photoToSend')} />
           {stage === 'working' ? (
-            <p role="status">Membuat garis…</p>
+            <p role="status">{t('makingLines')}</p>
           ) : null}
           <div className="photo-flow__actions">
             {stage === 'consent' && (
               <button type="button" className="button button--primary" onClick={() => void generate(attempt?.variant ?? 'default', attempt !== null)}>
-                {attempt ? 'Coba lagi' : 'Saya setuju, lanjut'}
+                {attempt ? t('tryAgain') : t('iAgree')}
               </button>
             )}
             {stage === 'working' && (
-              <button type="button" className="button" onClick={() => abortRef.current?.abort()}>Batalkan</button>
+              <button type="button" className="button" onClick={() => abortRef.current?.abort()}>{t('cancelRequest')}</button>
             )}
-            {stage === 'consent' && <button type="button" className="button" onClick={onCancel}>Batal</button>}
+            {stage === 'consent' && <button type="button" className="button" onClick={onCancel}>{t('cancel')}</button>}
           </div>
         </>
       )}
 
       {stage === 'preview' && result && preparedUrl && illustrationUrl && (
         <>
-          <h2>Cek dulu</h2>
+          <h2>{t('checkFirst')}</h2>
           {result.needsReview && result.reviewReason && (
-            <p className="banner banner--warning" role="status">{result.reviewReason}</p>
+            <p className="banner banner--warning" role="status">{say(locale, result.reviewReason)}</p>
           )}
           <div className="photo-flow__compare">
             <figure>
-              <img src={preparedUrl} alt="Foto yang dipilih" />
-              <figcaption>Foto</figcaption>
+              <img src={preparedUrl} alt={t('photoChosen')} />
+              <figcaption>{t('photoCaption')}</figcaption>
             </figure>
             <figure>
-              <img src={illustrationUrl} alt="Ilustrasi garis" />
-              <figcaption>Ilustrasi</figcaption>
+              <img src={illustrationUrl} alt={t('lineArt')} />
+              <figcaption>{t('illustrationCaption')}</figcaption>
             </figure>
           </div>
           <div className="photo-flow__actions">
-            <button type="button" className="button button--primary" disabled={saving} onClick={() => void approve()}>Gunakan</button>
+            <button type="button" className="button button--primary" disabled={saving} onClick={() => void approve()}>{t('useIt')}</button>
             {error && attempt && (
-              <button type="button" className="button" disabled={saving} onClick={() => void generate(attempt.variant, true)}>Coba lagi</button>
+              <button type="button" className="button" disabled={saving} onClick={() => void generate(attempt.variant, true)}>{t('tryAgain')}</button>
             )}
-            <button type="button" className="button" disabled={saving} onClick={() => void generate('faithful', false)}>Lebih mirip foto</button>
-            <button type="button" className="button" disabled={saving} onClick={() => void generate('simple', false)}>Lebih sederhana</button>
-            <button type="button" className="button" disabled={saving} onClick={() => setStage('pick')}>Ganti foto</button>
+            <button type="button" className="button" disabled={saving} onClick={() => void generate('faithful', false)}>{t('moreLikePhoto')}</button>
+            <button type="button" className="button" disabled={saving} onClick={() => void generate('simple', false)}>{t('simpler')}</button>
+            <button type="button" className="button" disabled={saving} onClick={() => setStage('pick')}>{t('changePhoto')}</button>
           </div>
         </>
       )}
@@ -221,6 +222,7 @@ function CropBox({
   readonly imageUrl: string;
   readonly onChange: (crop: NormalizedCrop) => void;
 }) {
+  const { t } = useI18n();
   const frame = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ mode: 'move' | 'resize'; x: number; y: number; crop: NormalizedCrop } | null>(null);
 
@@ -247,7 +249,7 @@ function CropBox({
 
   return (
     <div className="photo-crop" ref={frame}>
-      <img src={imageUrl} alt="Foto untuk dipotong" />
+      <img src={imageUrl} alt={t('photoToCrop')} />
       <div
         className="photo-crop__box"
         style={{ left: `${crop.x * 100}%`, top: `${crop.y * 100}%`, width: `${crop.width * 100}%`, height: `${crop.height * 100}%` }}
@@ -258,7 +260,7 @@ function CropBox({
         <button
           type="button"
           className="photo-crop__handle"
-          aria-label="Ubah ukuran bagian"
+          aria-label={t('resizePart')}
           onPointerDown={(event) => down(event, 'resize')}
           onPointerMove={move}
           onPointerUp={() => { drag.current = null; }}

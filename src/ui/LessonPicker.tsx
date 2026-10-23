@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { lessonsForPicker } from '../categories/library';
+import { LanguageSwitch } from '../i18n/LanguageSwitch';
+import { useI18n } from '../i18n/context';
+import { say } from '../i18n/generated';
+import { presentLesson } from '../i18n/present';
 import { PREVIEW_INK, stepPreview } from '../lesson-data/step-preview';
 import type { LessonPackage } from '../lesson-data/schema';
 import type { PhotoLessonRecord } from '../persistence/photo-lesson-store';
@@ -34,31 +38,33 @@ export function LessonPicker({
   onCreatePhoto,
   onDeletePhoto,
 }: LessonPickerProps) {
+  const { t, locale } = useI18n();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const applying = updatePhase === 'applying';
   return (
     <section className="lesson-picker" aria-labelledby="lesson-picker-title">
-      <h1 id="lesson-picker-title">Mau gambar apa hari ini?</h1>
-      <p>Pilih gambar yang kamu suka, lalu ikuti langkahnya.</p>
+      <LanguageSwitch />
+      <h1 id="lesson-picker-title">{t('pickerTitle')}</h1>
+      <p>{t('pickerLead')}</p>
       <button type="button" className="button button--primary lesson-picker__photo" onClick={onPhoto}>
-        Gambar dari foto
+        {t('drawFromPhoto')}
       </button>
-      {notice && <p className="banner" role="status">{notice}</p>}
+      {notice && <p className="banner" role="status">{say(locale, notice)}</p>}
       {offlineReady && (
-        <p className="lesson-picker__offline">Bisa dibuka tanpa internet.</p>
+        <p className="lesson-picker__offline">{t('offlineReady')}</p>
       )}
       {updatePhase !== 'hidden' && (
         <div className="banner update-prompt" role="status" aria-busy={updatePhase === 'applying'}>
           {updatePhase === 'applying' ? (
-            <p>Memuat versi baru…</p>
+            <p>{t('updateLoading')}</p>
           ) : (
             <>
-              <p>Ada versi baru. Gambar yang sudah tersimpan tetap ada.</p>
+              <p>{t('updateReady')}</p>
               <div className="update-prompt__actions">
-                <button type="button" className="button" onClick={onDismissUpdate}>Nanti saja</button>
+                <button type="button" className="button" onClick={onDismissUpdate}>{t('later')}</button>
                 <button type="button" className="button button--primary" onClick={onApplyUpdate}>
-                  Muat versi baru
+                  {t('loadUpdate')}
                 </button>
               </div>
             </>
@@ -66,35 +72,40 @@ export function LessonPicker({
         </div>
       )}
       <div className="lesson-picker__choices">
-        {lessonsForPicker().map((lesson) => (
-          <button
-            className="lesson-picker__choice"
-            key={lesson.id}
-            type="button"
-            disabled={applying}
-            onClick={() => onSelect(lesson.id)}
-          >
-            <LessonPicture lesson={lesson} />
-            <span className="lesson-picker__name">{lesson.title}</span>
-            <span className="lesson-picker__subtitle">{lesson.subtitle}</span>
-          </button>
-        ))}
+        {lessonsForPicker().map((lesson) => {
+          const shown = presentLesson(lesson, locale);
+          return (
+            <button
+              className="lesson-picker__choice"
+              key={lesson.id}
+              type="button"
+              disabled={applying}
+              onClick={() => onSelect(lesson.id)}
+            >
+              <LessonPicture lesson={shown} />
+              <span className="lesson-picker__name">{shown.title}</span>
+              <span className="lesson-picker__subtitle">{shown.subtitle}</span>
+            </button>
+          );
+        })}
       </div>
       {photoBeta && onCreatePhoto && (
         <div className="lesson-picker__photo">
           <button type="button" className="button" disabled={applying} onClick={onCreatePhoto}>
-            Buat dari foto
+            {t('createFromPhoto')}
           </button>
         </div>
       )}
       {photoBeta && (
         <div className="lesson-picker__photo-lessons">
-          <h2>Dari foto</h2>
-          {deleteError && <p className="banner banner--warning" role="alert">{deleteError}</p>}
-          {photoLessons.length === 0 && <p>Belum ada pelajaran dari foto.</p>}
+          <h2>{t('fromPhoto')}</h2>
+          {deleteError && <p className="banner banner--warning" role="alert">{say(locale, deleteError)}</p>}
+          {photoLessons.length === 0 && <p>{t('noPhotoLessons')}</p>}
           {photoLessons.length > 0 && (
             <div className="lesson-picker__choices">
-              {photoLessons.map((record) => (
+              {photoLessons.map((record) => {
+                const shown = presentLesson(record.lesson, locale);
+                return (
                 <div className="lesson-picker__photo-card" key={record.id}>
                   <button
                     className="lesson-picker__choice"
@@ -102,14 +113,14 @@ export function LessonPicker({
                     disabled={applying}
                     onClick={() => onSelect(record.lesson.id)}
                   >
-                    <LessonPicture lesson={record.lesson} />
-                    <span className="lesson-picker__name">{record.lesson.title}</span>
-                    <span className="lesson-picker__subtitle">{record.lesson.subtitle}</span>
+                    <LessonPicture lesson={shown} />
+                    <span className="lesson-picker__name">{shown.title}</span>
+                    <span className="lesson-picker__subtitle">{shown.subtitle}</span>
                   </button>
                   {confirmingId === record.id ? (
-                    <div className="lesson-picker__photo-confirm" role="group" aria-label="Hapus pelajaran foto ini?">
-                      <p>Hapus pelajaran foto ini?</p>
-                      <button type="button" className="button" onClick={() => setConfirmingId(null)}>Batal</button>
+                    <div className="lesson-picker__photo-confirm" role="group" aria-label={t('deletePhotoLesson')}>
+                      <p>{t('deletePhotoLesson')}</p>
+                      <button type="button" className="button" onClick={() => setConfirmingId(null)}>{t('cancel')}</button>
                       <button
                         type="button"
                         className="button button--primary"
@@ -121,7 +132,7 @@ export function LessonPicker({
                           }).catch(() => setDeleteError('Pelajaran foto belum terhapus. Coba lagi.'));
                         }}
                       >
-                        Hapus
+                        {t('delete')}
                       </button>
                     </div>
                   ) : (
@@ -129,14 +140,15 @@ export function LessonPicker({
                       type="button"
                       className="button"
                       disabled={applying}
-                      aria-label={`Hapus pelajaran ${record.lesson.title}`}
+                      aria-label={t('deleteLesson', { title: shown.title })}
                       onClick={() => setConfirmingId(record.id)}
                     >
-                      Hapus
+                      {t('delete')}
                     </button>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -147,13 +159,14 @@ export function LessonPicker({
 
 /** The finished coloured drawing, used as the tile picture. */
 function LessonPicture({ lesson }: { readonly lesson: LessonPackage }) {
+  const { t } = useI18n();
   const preview = stepPreview(lesson, Math.max(0, lesson.steps.length - 1));
   return (
     <svg
       className="lesson-picker__picture"
       viewBox={`0 0 ${lesson.coordinateSpace.width} ${lesson.coordinateSpace.height}`}
       role="img"
-      aria-label={`Gambar ${lesson.title}`}
+      aria-label={t('pictureOf', { title: lesson.title })}
     >
       {preview.fills.map((fill) => (
         <path key={fill.id} d={fill.d} fill={fill.fill === 'paper' ? 'var(--paper)' : fill.fill} stroke="none" />

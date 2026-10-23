@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { ToolPreset } from '../lesson-data/schema';
 import type { SessionAction, SessionState } from '../lesson-engine/types';
 import { rememberColor } from './color-history';
+import { useI18n } from '../i18n/context';
+import { paletteName } from '../i18n/messages';
 import { PALETTE, paletteLabel } from './palette';
 
 interface ColorWellProps {
@@ -43,7 +45,8 @@ export function ColorWell({ state, preset, dispatch }: ColorWellProps) {
     dispatch({ type: 'set-custom-color', color });
   };
 
-  const activeLabel = paletteLabel(preset.color) ?? 'campuran';
+  const { t, locale } = useI18n();
+  const activeLabel = paletteName(locale, paletteLabel(preset.color) ?? t('mixed'));
 
   return (
     <div className="color-well" ref={rootRef}>
@@ -51,7 +54,7 @@ export function ColorWell({ state, preset, dispatch }: ColorWellProps) {
         type="button"
         className="color-well__orb"
         style={{ backgroundColor: preset.color }}
-        aria-label={`Pilih warna, ${activeLabel}`}
+        aria-label={t('pickColor', { name: activeLabel })}
         aria-expanded={open}
         aria-pressed={colorSource === 'custom'}
         onClick={() => setOpen((current) => !current)}
@@ -63,9 +66,9 @@ export function ColorWell({ state, preset, dispatch }: ColorWellProps) {
           aria-pressed={colorSource === 'guide'}
           onClick={() => dispatch({ type: 'use-guide-color' })}
         >
-          Ikuti panduan
+          {t('followGuide')}
         </button>
-        <div className="swatches" role="group" aria-label="Palet">
+        <div className="swatches" role="group" aria-label={t('palette')}>
           {PALETTE.map((entry) => {
             const active = colorSource === 'custom' && customColor.toLowerCase() === entry.color.toLowerCase();
             return (
@@ -74,7 +77,7 @@ export function ColorWell({ state, preset, dispatch }: ColorWellProps) {
                 type="button"
                 className="swatch"
                 style={{ backgroundColor: entry.color }}
-                aria-label={`Warna ${entry.label}`}
+                aria-label={t('colorSwatch', { name: paletteName(locale, entry.label) })}
                 aria-pressed={active}
                 onClick={() => choose(entry.color)}
               />
@@ -82,7 +85,7 @@ export function ColorWell({ state, preset, dispatch }: ColorWellProps) {
           })}
         </div>
         {recents.length > 0 && (
-          <div className="swatches color-well__recents" role="group" aria-label="Warna terakhir">
+          <div className="swatches color-well__recents" role="group" aria-label={t('recentColors')}>
             {recents.map((color) => {
               const label = paletteLabel(color) ?? color;
               const active = colorSource === 'custom' && customColor.toLowerCase() === color.toLowerCase();
@@ -92,7 +95,7 @@ export function ColorWell({ state, preset, dispatch }: ColorWellProps) {
                   type="button"
                   className="swatch"
                   style={{ backgroundColor: color }}
-                  aria-label={`Warna terakhir ${label}`}
+                  aria-label={t('recentColor', { name: paletteName(locale, label) })}
                   aria-pressed={active}
                   onClick={() => choose(color)}
                 />
@@ -101,8 +104,8 @@ export function ColorWell({ state, preset, dispatch }: ColorWellProps) {
           </div>
         )}
         <p className="toolbar__readout">
-          Warna sekarang: <span className="dot" style={{ backgroundColor: preset.color }} />
-          {colorSource === 'custom' ? ' warna pilihanku' : ' warna panduan'}
+          {t('currentColor')} <span className="dot" style={{ backgroundColor: preset.color }} />
+          {colorSource === 'custom' ? t('myColor') : t('guideColor')}
         </p>
       </div>
     </div>

@@ -11,6 +11,7 @@ import { fromRestoredSession } from './persistence/mapping';
 import type { SessionCheckpoint } from './persistence/types';
 import { gateUpdate } from './offline/update-policy';
 import { useOfflineSupport } from './offline/useOffline';
+import { useI18n } from './i18n/context';
 import { ArtworkGallery } from './ui/ArtworkGallery';
 import { DrawingPad } from './ui/DrawingPad';
 import { requestDocumentFullscreen } from './ui/fullscreen';
@@ -39,10 +40,10 @@ interface ControlOverrides {
   tools: { -readonly [K in keyof ToolPreferences]?: ToolPreferences[K] };
 }
 
-const BOOTSTRAP_FAILURE_NOTICE = 'Maaf, pelajaran belum bisa dibuka sekarang. Coba lagi nanti ya.';
 const LOAD_FAILURE_NOTICE = 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mulai menggambar lagi.';
 
 export function App() {
+  const { t } = useI18n();
   const layout = useLayoutTier();
   const bootstrap = useSessionBootstrap();
   const {
@@ -107,7 +108,7 @@ export function App() {
   if (bootstrap.status === 'loading') {
     return (
       <main className="shell shell--centered" data-layout={layout}>
-        <p role="status">Menyiapkan pelajaran…</p>
+        <p role="status">{t('preparing')}</p>
       </main>
     );
   }
@@ -115,8 +116,8 @@ export function App() {
   if (bootstrap.status === 'error') {
     return (
       <main className="shell shell--centered" data-layout={layout}>
-        <h1>Pelajaran tidak dapat dibuka</h1>
-        <p className="banner banner--warning">{BOOTSTRAP_FAILURE_NOTICE}</p>
+        <h1>{t('lessonUnavailable')}</h1>
+        <p className="banner banner--warning">{t('bootstrapFailure')}</p>
       </main>
     );
   }

@@ -8,6 +8,7 @@
  */
 
 import { useLayoutEffect, useState } from 'react';
+import { useI18n } from '../i18n/context';
 import type { LessonPackage, LessonStep } from '../lesson-data/schema';
 import { referencePresentation } from './reference-spot';
 import { TargetPreview } from './TargetPreview';
@@ -36,6 +37,7 @@ interface StepReferenceProps {
 }
 
 export function StepReference({ lesson, step, presentation }: StepReferenceProps) {
+  const { t } = useI18n();
   const layout = useLayoutTier();
   const landscape = useLandscape();
   const spot = presentation ?? referencePresentation(layout, landscape);
@@ -56,7 +58,7 @@ export function StepReference({ lesson, step, presentation }: StepReferenceProps
       <button
         type="button"
         className={`step-reference step-reference--${spot}`}
-        aria-label="Perbesar contoh"
+        aria-label={t('enlargeExample')}
         onClick={() => setOpen(true)}
       >
         {preview()}
@@ -66,11 +68,11 @@ export function StepReference({ lesson, step, presentation }: StepReferenceProps
           className="example-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label="Contoh besar"
+          aria-label={t('bigExample')}
           onClick={() => setOpen(false)}
         >
           <button type="button" className="button example-lightbox__close" onClick={() => setOpen(false)}>
-            Tutup contoh
+            {t('closeExample')}
           </button>
           {preview()}
         </div>

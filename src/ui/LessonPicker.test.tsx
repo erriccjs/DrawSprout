@@ -36,7 +36,9 @@ describe('lesson picker', () => {
     const choices = document.querySelectorAll('.lesson-picker__choice');
     expect(choices).toHaveLength(lessonsForPicker().length);
     expect(screen.getByRole('button', { name: 'Gambar dari foto' })).toBeTruthy();
-    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 1);
+    expect(screen.getByRole('button', { name: 'English' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Indonesia' })).toBeTruthy();
+    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 3);
 
     const names = [...document.querySelectorAll('.lesson-picker__name')].map((node) => node.textContent);
     expect(new Set(names).size).toBe(names.length);
