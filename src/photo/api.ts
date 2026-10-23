@@ -1,21 +1,26 @@
 /**
  * POST /api/photo-lesson.
  *
- * Validates the upload, rate-limits new jobs, and dedupes a retry by
- * idempotency key before any second call to OpenAI. Photo bytes are not
- * written to logs. The in-memory success cache is per isolate only; the
- * OpenAI Idempotency-Key header is what prevents a duplicate billed job
- * after the isolate goes away.
+ * Validates the upload, rate-limits new jobs, and dedupes a retry before any
+ * second call to the image provider. The success cache is per isolate. Its
+ * key is the client, the idempotency key, the variant, and a hash of the PNG,
+ * so one client's key cannot read another's lesson. The provider
+ * Idempotency-Key header is still the client-supplied key. Photo bytes are
+ * not written to logs.
  */
 
-import { bytesToBase64 } from './openai';
+import { bytesToBase64 } from './bytes';
 import type { ImageEditor, InstructionWriter } from './openai';
 import { runPhotoPipeline } from './pipeline';
 import { imageProvider, replicateApiKey } from './provider';
 import { DEFAULT_TEXT_MODEL, type PhotoVariant } from './prompts';
 import { decodePng } from './png';
+import { PHOTO_API_PATH } from './paths';
+import { scopedCacheKey } from '../worker/shared/cache-key';
+import { json, jsonHeaders, clientKey, sameOrigin } from '../worker/shared/http';
+import { rateGateFrom, type RateGate } from '../worker/shared/limit';
 
-export const PHOTO_API_PATH = '/api/photo-lesson';
+export { PHOTO_API_PATH };
 
 export interface PhotoEnv {
   readonly OPENAI_API_KEY?: string;
@@ -38,14 +43,14 @@ export interface PhotoApiDeps {
   readonly now?: () => number;
   readonly cache?: JobCache;
   readonly rateBuckets?: Map<string, number[]>;
+  /** Production passes the Durable Object gate. Tests pass `rateBuckets` instead. */
+  readonly rateGate?: RateGate;
   readonly newLessonId?: () => string;
 }
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_EDGE = 2048;
 const MAX_PIXELS = 2048 * 2048;
-const RATE_LIMIT = 6;
-const RATE_WINDOW_MS = 10 * 60 * 1000;
 const PNG = [137, 80, 78, 71, 13, 10, 26, 10];
 
 const parentMessages = {
@@ -78,7 +83,7 @@ export async function handlePhotoLessonRequest(
   if (request.method !== 'POST') return json({ error: 'Tidak ada.', code: 'method' }, 405);
   if (!sameOrigin(request)) return fail('bad_request', 403);
   const cache: JobCache = deps.cache ?? { success: new Map<string, string>(), inflight: new Map<string, Promise<string>>() };
-  const buckets: Map<string, number[]> = deps.rateBuckets ?? new Map<string, number[]>();
+  const gate = rateGateFrom(deps);
   const now = deps.now ?? Date.now;
 
   let form: FormData;
@@ -94,10 +99,19 @@ export async function handlePhotoLessonRequest(
   if (!/^[A-Za-z0-9_-]{8,80}$/.test(idempotencyKey)) return fail('bad_request', 400);
   const variant = parseVariant(stringField(form.get('variant')));
   if (!variant) return fail('bad_request', 400);
+  const file = asBlob(form.get('image'));
+  if (!file) return fail('bad_request', 400);
+  const fileType = 'type' in file && typeof file.type === 'string' ? file.type : '';
+  if (fileType !== '' && fileType !== 'image/png' && fileType !== 'application/octet-stream') {
+    return fail('bad_request', 400);
+  }
+  if (file.size > MAX_BYTES) return fail('too_large', 413);
+  const png = new Uint8Array(await file.arrayBuffer());
+  const cacheKey = await scopedCacheKey(clientKey(request), idempotencyKey, png, variant);
 
-  const cached = cache.success.get(idempotencyKey);
+  const cached = cache.success.get(cacheKey);
   if (cached) return new Response(cached, { status: 200, headers: jsonHeaders() });
-  const pending = cache.inflight.get(idempotencyKey);
+  const pending = cache.inflight.get(cacheKey);
   if (pending) {
     try {
       return new Response(await pending, { status: 200, headers: jsonHeaders() });
@@ -113,20 +127,13 @@ export async function handlePhotoLessonRequest(
     rejectWork = reject;
   });
   // A retry can lose the race and find no waiter. Swallow that rejection here;
-  // the leader still returns the parent-facing response.
+  // the leader still returns the parent-facing response. Set the waiter in this
+  // turn, before the next await, so a parallel retry of the same body joins it.
   work.catch(() => undefined);
-  cache.inflight.set(idempotencyKey, work);
+  cache.inflight.set(cacheKey, work);
 
   try {
     if (!hasImageSecret(env)) throw new PhotoRequestError('missing_key', 500);
-    const file = asBlob(form.get('image'));
-    if (!file) throw new PhotoRequestError('bad_request', 400);
-    const fileType = 'type' in file && typeof file.type === 'string' ? file.type : '';
-    if (fileType !== '' && fileType !== 'image/png' && fileType !== 'application/octet-stream') {
-      throw new PhotoRequestError('bad_request', 400);
-    }
-    if (file.size > MAX_BYTES) throw new PhotoRequestError('too_large', 413);
-    const png = new Uint8Array(await file.arrayBuffer());
     if (!isPng(png)) throw new PhotoRequestError('bad_request', 400);
     try {
       const image = await decodePng(png);
@@ -137,7 +144,7 @@ export async function handlePhotoLessonRequest(
       if (error instanceof PhotoRequestError) throw error;
       throw new PhotoRequestError('bad_request', 400);
     }
-    if (!allow(buckets, clientKey(request), now())) throw new PhotoRequestError('rate_limited', 429);
+    if (!await gate.allow(clientKey(request), now())) throw new PhotoRequestError('rate_limited', 429);
 
     const provider = imageProvider(env.IMAGE_PROVIDER);
     const configuredImageModel = provider === 'replicate' ? env.REPLICATE_IMAGE_MODEL : env.OPENAI_IMAGE_MODEL;
@@ -165,7 +172,7 @@ export async function handlePhotoLessonRequest(
       imageUsage: result.imageUsage,
       textUsage: result.textUsage,
     });
-    cache.success.set(idempotencyKey, body);
+    cache.success.set(cacheKey, body);
     if (cache.success.size > 32) {
       const oldest = cache.success.keys().next().value;
       if (oldest) cache.success.delete(oldest);
@@ -176,38 +183,13 @@ export async function handlePhotoLessonRequest(
     rejectWork(error);
     return failureResponse(error);
   } finally {
-    cache.inflight.delete(idempotencyKey);
+    cache.inflight.delete(cacheKey);
   }
 }
 
 function hasImageSecret(env: PhotoEnv): boolean {
   if (imageProvider(env.IMAGE_PROVIDER) === 'replicate') return replicateApiKey(env) !== undefined;
   return Boolean(env.OPENAI_API_KEY);
-}
-
-function allow(buckets: Map<string, number[]>, key: string, nowMs: number): boolean {
-  const recent = (buckets.get(key) ?? []).filter((time) => nowMs - time < RATE_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT) {
-    buckets.set(key, recent);
-    return false;
-  }
-  recent.push(nowMs);
-  buckets.set(key, recent);
-  return true;
-}
-
-function clientKey(request: Request): string {
-  return request.headers.get('cf-connecting-ip') ?? 'local';
-}
-
-function sameOrigin(request: Request): boolean {
-  const origin = request.headers.get('origin');
-  if (!origin) return true;
-  try {
-    return origin === new URL(request.url).origin;
-  } catch {
-    return false;
-  }
 }
 
 function parseVariant(value: string): PhotoVariant | null {
@@ -242,10 +224,3 @@ function fail(code: keyof typeof parentMessages, status: number): Response {
   return json({ error: parentMessages[code], code }, status);
 }
 
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), { status, headers: jsonHeaders() });
-}
-
-function jsonHeaders(): Headers {
-  return new Headers({ 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-}

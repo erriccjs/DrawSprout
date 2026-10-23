@@ -45,6 +45,44 @@ export default tseslint.config(
     },
   },
   {
+    // The browser bundle must not reach a module that holds keys, upstream
+    // calls, or the lesson builder. Shared constants live in neutral files.
+    files: [
+      'src/main.tsx',
+      'src/App.tsx',
+      'src/ui/**/*.{ts,tsx}',
+      'src/offline/**/*.{ts,tsx}',
+      'src/photo/client.ts',
+    ],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{
+          group: [
+            '**/photo/api',
+            '**/photo/openai',
+            '**/photo/pipeline',
+            '**/photo/replicate',
+            '**/photo/provider',
+            '**/photo/lesson-build',
+            '**/photo/lesson/*',
+            '**/worker/*',
+            '**/categories/http',
+            '**/categories/openai',
+            '**/categories/replicate',
+            '**/categories/classify',
+            './api',
+            './openai',
+            './pipeline',
+            './replicate',
+            './provider',
+            './lesson-build',
+          ],
+          message: 'Browser code cannot import a server module. Put the shared value in a neutral file.',
+        }],
+      }],
+    },
+  },
+  {
     files: ['*.config.{js,ts}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: { globals: globals.node },

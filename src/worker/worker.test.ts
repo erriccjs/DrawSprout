@@ -5,6 +5,13 @@ import worker from './index';
 
 const png = Uint8Array.from([137, 80, 78, 71]);
 
+function allowingLimit() {
+  return {
+    idFromName: (name: string) => ({ name }),
+    get: () => ({ allow: () => Promise.resolve(true) }),
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -17,6 +24,8 @@ describe('worker routing', () => {
     expect(config).toContain('"run_worker_first": ["/api/*"]');
     expect(config).toContain('"not_found_handling": "single-page-application"');
     expect(config).toContain('"previews": {}');
+    expect(config).toContain('"class_name": "PaidRateLimit"');
+    expect(config).toContain('"tag": "v1-paid-rate-limit"');
     expect(config).not.toContain('@cloudflare/vite-plugin');
 
     const env = {
@@ -26,12 +35,17 @@ describe('worker routing', () => {
           return Promise.resolve(new Response(`asset:${url}`, { status: 200 }));
         },
       },
+      PAID_RATE_LIMIT: allowingLimit(),
     };
     const shell = await worker.fetch(new Request('https://drawsprout.test/sw.js'), env);
     expect(await shell.text()).toContain('/sw.js');
 
     const missing = await worker.fetch(new Request('https://drawsprout.test/api/other'), env);
     expect(missing.status).toBe(404);
+    expect(missing.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(missing.headers.get('content-security-policy')).toContain("default-src 'self'");
+    expect(missing.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+    expect(missing.headers.get('permissions-policy')).toContain('camera=(self)');
   });
 
   it('sends /api/photo-match to the matcher and leaves /sw.js on the asset layer', async () => {
@@ -43,6 +57,7 @@ describe('worker routing', () => {
           return Promise.resolve(new Response('/* service worker */', { headers: { 'content-type': 'application/javascript' } }));
         },
       },
+      PAID_RATE_LIMIT: allowingLimit(),
     };
     const sw = await worker.fetch(new Request('https://drawsprout.example/sw.js'), env);
     expect(await sw.text()).toContain('service worker');
@@ -77,6 +92,7 @@ describe('worker routing', () => {
     form.set('image', new File([Uint8Array.from([1, 2, 3, 4])], 'x.png', { type: 'image/png' }));
     const response = await worker.fetch(new Request('https://drawsprout.test/api/photo-lesson', { method: 'POST', body: form }), {
       ASSETS: { fetch: () => Promise.resolve(new Response('no')) },
+      PAID_RATE_LIMIT: allowingLimit(),
     });
     expect(response.status).toBe(500);
     const line = JSON.parse(logs[0] ?? '{}') as { route: string; status: number };
@@ -115,7 +131,7 @@ describe('worker routing', () => {
         metrics: { input_token_count: 20, output_token_count: 8 },
       })));
     });
-    const assets = { ASSETS: { fetch: () => Promise.resolve(new Response('no')) } };
+    const assets = { ASSETS: { fetch: () => Promise.resolve(new Response('no')) }, PAID_RATE_LIMIT: allowingLimit() };
     const photo = () => new Request('https://drawsprout.test/api/photo-match', {
       method: 'POST',
       headers: { 'content-type': 'image/png' },
@@ -140,5 +156,27 @@ describe('worker routing', () => {
     expect(openai.status).toBe(200);
     expect(calls[0]?.url).toContain('https://api.openai.com/v1/chat/completions');
     expect((await openai.json() as { category: string }).category).toBe('cat');
+  });
+
+  it('denies a paid match when the shared limiter cannot be reached', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', (url: string) => {
+      calls.push(String(url));
+      return Promise.resolve(new Response('{}'));
+    });
+    const response = await worker.fetch(new Request('https://drawsprout.test/api/photo-match', {
+      method: 'POST',
+      headers: { 'content-type': 'image/png' },
+      body: png as unknown as BodyInit,
+    }), {
+      ASSETS: { fetch: () => Promise.resolve(new Response('no')) },
+      REPLICATE_API_KEY: 'replicate-secret-value',
+      PAID_RATE_LIMIT: {
+        idFromName: (name: string) => ({ name }),
+        get: () => ({ allow: () => Promise.reject(new Error('limiter down')) }),
+      },
+    });
+    expect(response.status).toBe(429);
+    expect(calls).toEqual([]);
   });
 });

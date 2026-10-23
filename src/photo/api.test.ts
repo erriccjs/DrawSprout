@@ -26,12 +26,16 @@ function fileFrom(bytes: Uint8Array, type = 'image/png'): File {
   return new File([copy], 'photo.png', { type });
 }
 
-function post(bytes: Uint8Array, key: string, variant = '', type?: string): Request {
+function post(bytes: Uint8Array, key: string, variant = '', type?: string, headers?: Record<string, string>): Request {
   const form = new FormData();
   form.set('image', type === undefined ? fileFrom(bytes) : fileFrom(bytes, type));
   form.set('idempotencyKey', key);
   if (variant) form.set('variant', variant);
-  return new Request('https://drawsprout.test/api/photo-lesson', { method: 'POST', body: form });
+  return new Request('https://drawsprout.test/api/photo-lesson', {
+    method: 'POST',
+    body: form,
+    ...(headers ? { headers } : {}),
+  });
 }
 
 describe('POST /api/photo-lesson', () => {
@@ -67,6 +71,35 @@ describe('POST /api/photo-lesson', () => {
       ...(extra.instructions ? { instructions: extra.instructions } : {}),
     };
   }
+
+  it('rejects a cross-origin browser before the editor runs', async () => {
+    const mock = editor();
+    const response = await handlePhotoLessonRequest(
+      post(art, 'origin-key-1', '', undefined, { origin: 'https://evil.example' }),
+      { OPENAI_API_KEY: 'test-key' },
+      deps(mock.images),
+    );
+    expect(response.status).toBe(403);
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it('does not return one client’s lesson to another client with the same key', async () => {
+    const mock = editor();
+    const shared = deps(mock.images);
+    const first = await handlePhotoLessonRequest(
+      post(art, 'shared-lesson-key', '', undefined, { 'cf-connecting-ip': '1.1.1.1' }),
+      { OPENAI_API_KEY: 'test-key' },
+      shared,
+    );
+    const second = await handlePhotoLessonRequest(
+      post(art, 'shared-lesson-key', '', undefined, { 'cf-connecting-ip': '2.2.2.2' }),
+      { OPENAI_API_KEY: 'test-key' },
+      shared,
+    );
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(mock.calls).toHaveLength(4);
+  });
 
   it('rejects a non-png and does not call OpenAI', async () => {
     const mock = editor();
