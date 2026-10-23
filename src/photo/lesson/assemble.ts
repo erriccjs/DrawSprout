@@ -4,6 +4,8 @@
  * the steps like a how-to-draw page.
  */
 
+import { localizeBuiltLesson } from '../../i18n/generated';
+import type { Locale } from '../../i18n/locale';
 import type { ColorRegion, GuidePath, LessonStep } from '../../lesson-data/schema';
 import { flatColourRegions } from '../flat-colour';
 import type { FlatRegion } from '../flat-colour';
@@ -30,6 +32,11 @@ export function buildPhotoLesson(input: {
   readonly parts?: readonly DetectedPart[];
   /** Closed colour regions in the same pixel space as `contours`. */
   readonly flatRegions?: readonly FlatRegion[];
+  /**
+   * English is applied after the Indonesian lesson is checked. Omitted means
+   * Indonesian, which is what saved lessons and the existing tests expect.
+   */
+  readonly locale?: Locale;
 }): BuiltLesson {
   const mapped = input.contours
     .map((contour) => mapContour(contour, input.sourceWidth, input.sourceHeight))
@@ -37,8 +44,7 @@ export function buildPhotoLesson(input: {
     .map((contour, id) => ({ ...contour, id }));
   if (mapped.length === 0) throw new Error('No drawable shapes were found in the illustration');
   const named = buildFromParts(input, mapped);
-  if (named) return named;
-  return buildTracedFallback(input, mapped);
+  return localizeBuiltLesson(named ?? buildTracedFallback(input, mapped), input.locale);
 }
 
 /**
@@ -55,7 +61,7 @@ export function buildTutorialLesson(input: Parameters<typeof buildPhotoLesson>[0
   const main = pickMain(mapped);
   const coverage = boxOf(main.points).area / Math.max(1, subject.area);
   const assigned = assignGroups(mapped, orderParts(parts), subject);
-  return assembleTutorial(input, mapped, assigned.groups, coverage, assigned.unnamed);
+  return localizeBuiltLesson(assembleTutorial(input, mapped, assigned.groups, coverage, assigned.unnamed), input.locale);
 }
 
 /**
@@ -89,7 +95,7 @@ export function buildNamedLesson(input: Parameters<typeof buildPhotoLesson>[0] &
   const subject = unionBox(mapped.map((contour) => boxOf(contour.points)));
   const main = pickMain(mapped);
   const coverage = boxOf(main.points).area / Math.max(1, subject.area);
-  return assembleTutorial(input, mapped, groups, coverage, 0);
+  return localizeBuiltLesson(assembleTutorial(input, mapped, groups, coverage, 0), input.locale);
 }
 
 export function buildFromParts(input: {

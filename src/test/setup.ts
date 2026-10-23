@@ -6,8 +6,17 @@
  * changes application behaviour.
  */
 
+import { beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
+import { LOCALE_STORAGE_KEY } from '../i18n/locale';
 import { constructedPathData, createRecordingCanvas, registerRecording } from './fake-canvas';
+
+// The product default is English. Existing tests assert the original
+// Indonesian copy, so each test starts as if the child already chose it.
+beforeEach(() => {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(LOCALE_STORAGE_KEY, 'id');
+});
 
 /** Records the path data so tests can assert what geometry was clipped with. */
 class FakePath2D {

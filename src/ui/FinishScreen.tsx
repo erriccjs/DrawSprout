@@ -6,7 +6,10 @@
  * and the target illustration included in neither (FR-14, AT-01).
  */
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { LanguageSwitch } from '../i18n/LanguageSwitch';
+import { useI18n } from '../i18n/context';
+import { presentLesson } from '../i18n/present';
 import { motionPreference, type MotionPreference } from './motion';
 import type { LessonPackage } from '../lesson-data/schema';
 import type { SessionState } from '../lesson-engine/types';
@@ -29,6 +32,8 @@ interface FinishScreenProps {
 const PREVIEW_WIDTH_PX = 900;
 
 export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFreely, onChoosePicture, onStartFresh, restartError }: FinishScreenProps) {
+  const { t, locale } = useI18n();
+  const shown = useMemo(() => presentLesson(lesson, locale), [lesson, locale]);
   const previewRef = useRef<HTMLDivElement>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
@@ -55,9 +60,9 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
     });
     canvas.className = 'finish__canvas';
     canvas.setAttribute('role', 'img');
-    canvas.setAttribute('aria-label', `Karyamu: ${lesson.title}`);
+    canvas.setAttribute('aria-label', t('yourArtwork', { title: shown.title }));
     host.replaceChildren(canvas);
-  }, [lesson, state.strokes, clipPaths]);
+  }, [lesson, state.strokes, clipPaths, shown.title, t]);
 
   const save = async () => {
     setExportError(null);
@@ -67,7 +72,7 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
         strokes: toRenderStrokes(state.strokes),
         clipPaths,
       });
-      const fileName = artworkFileName(lesson.title);
+      const fileName = artworkFileName(shown.title);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -89,33 +94,34 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
       <div className="celebration" data-motion={motion} aria-hidden="true">
         <span /><span /><span />
       </div>
-      <h1 className="finish__title">Selesai! Ini karyamu.</h1>
+      <LanguageSwitch />
+      <h1 className="finish__title">{t('finishTitle')}</h1>
       <p className="finish__lead">
-        Gambar ini milikmu. Garis panduan dan contoh tidak ikut tersimpan.
+        {t('finishLead')}
       </p>
 
       <div className="finish__preview" ref={previewRef} />
 
       <div className="finish__actions">
         <button type="button" className="button button--primary" onClick={() => void save()}>
-          Simpan gambar (PNG)
+          {t('savePicture')}
         </button>
         <button type="button" className="button" onClick={onDrawFreely}>
-          Gambar bebas
+          {t('freeDraw')}
         </button>
         <button type="button" className="button" onClick={onChoosePicture}>
-          Pilih gambar lain
+          {t('chooseAnother')}
         </button>
         {!askingToClear && (
           <button type="button" className="button" onClick={() => setAskingToClear(true)}>
-            ← Gambar lagi
+            {t('drawAgain')}
           </button>
         )}
       </div>
 
       {askingToClear && (
         <ClearArtworkPrompt
-          label="Pilihan gambar lagi"
+          label={t('choiceDrawAgain')}
           onKeep={onKeepDrawing}
           onClear={onStartFresh}
         />
@@ -123,14 +129,13 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
 
       {savedName !== null && (
         <p className="banner" role="status">
-          File {savedName} dikirim ke unduhan browser. Tempat penyimpanannya diatur oleh
-          browser dan sistem, bukan oleh aplikasi ini.
+          {t('downloadSent', { name: savedName })}
         </p>
       )}
       {exportError !== null && (
-        <p className="banner banner--warning">Gagal menyimpan gambar: {exportError}</p>
+        <p className="banner banner--warning">{t('saveImageFailed', { detail: exportError })}</p>
       )}
-      {restartError !== null && <p className="banner banner--warning" role="alert">{restartError}</p>}
+      {restartError !== null && <p className="banner banner--warning" role="alert">{t('restartFailed')}</p>}
     </div>
   );
 }

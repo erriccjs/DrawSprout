@@ -11,6 +11,11 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, RefObject } from 'react';
+import { LanguageSwitch } from '../i18n/LanguageSwitch';
+import { useI18n } from '../i18n/context';
+import { say } from '../i18n/generated';
+import { presentLesson } from '../i18n/present';
+import type { MessageKey } from '../i18n/messages';
 import type { LessonPackage } from '../lesson-data/schema';
 import {
   activeClipRegionIds,
@@ -87,6 +92,8 @@ interface PendingStroke {
 
 export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onControlChange, onChoosePicture, tabletNoticeOpen = false }: DrawingPadProps) {
   const layout = useLayoutTier();
+  const { t, locale } = useI18n();
+  const copy = useMemo(() => presentLesson(lesson, locale), [lesson, locale]);
   const [state, setState] = useState(initialState);
   const stateRef = useRef(state);
   const preferencesDirtyRef = useRef(false);
@@ -124,12 +131,12 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     const timer = window.setTimeout(() => setResumeToastHidden(true), RESUME_TOAST_MS);
     return () => window.clearTimeout(timer);
   }, [notice]);
-  const step = activeStep(lesson, state);
+  const step = activeStep(copy, state);
   const shownStep = state.freeCreation
     ? {
         ...step,
-        instruction: 'Gambar bebas.',
-        hint: 'Semua alat dan warna bisa dipakai. Tidak ada garis panduan.',
+        instruction: t('freeDrawInstruction'),
+        hint: t('freeDrawHint'),
         guidePaths: [],
         colorRegionIds: [],
       }
@@ -532,7 +539,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
             ref={setCanvas}
             className="stage__canvas"
             role="img"
-            aria-label={`Kanvas gambar. ${shownStep.instruction}`}
+            aria-label={t('canvasLabel', { instruction: shownStep.instruction })}
           />
           {viewport && (
             <GuideOverlay
@@ -550,48 +557,42 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         <header className="float-header">
           <button type="button" className="button float-header__back" onClick={choosePicture}>
             <span aria-hidden="true">← </span>
-            <span className="button__text">Pilih gambar</span>
+            <span className="button__text">{t('choosePicture')}</span>
           </button>
           <div className="float-header__titles">
-            <h1 className="pad__title">{lesson.title}</h1>
-            <p className="pad__subtitle">{lesson.subtitle}</p>
+            <h1 className="pad__title">{copy.title}</h1>
+            <p className="pad__subtitle">{copy.subtitle}</p>
           </div>
           <p className="pad__status" role="status">
-            {statusLabel(saveStatus, durable)}
+            {statusLabel(saveStatus, durable, t)}
           </p>
           <ColorWell state={state} preset={preset} dispatch={dispatch} />
         </header>
 
         {notice === RESUME_NOTICE && !resumeToastHidden && (
           <div className="resume-toast" role="status">
-            <p>{notice}</p>
+            <p>{say(locale, notice)}</p>
             <button type="button" className="resume-toast__action" onClick={startOver}>
-              Mulai ulang
+              {t('startOver')}
             </button>
           </div>
         )}
 
         <div className="float-notices">
-          {notice !== null && notice !== RESUME_NOTICE && <p className="banner">{notice}</p>}
+          {notice !== null && notice !== RESUME_NOTICE && <p className="banner">{say(locale, notice)}</p>}
           {!durable && (
-            <p className="banner banner--warning">
-              Penyimpanan permanen tidak tersedia di browser ini, jadi karya ini hanya bertahan
-              selama tab terbuka.
-            </p>
+            <p className="banner banner--warning">{t('notDurable')}</p>
           )}
           {saveStatus.kind === 'storage-full' && (
-            <p className="banner banner--warning">
-              Penyimpanan penuh. Karya yang sudah tersimpan tetap aman, tetapi goresan terbaru belum
-              tersimpan. Kosongkan ruang, lalu coba lagi.
-            </p>
+            <p className="banner banner--warning">{t('storageFull')}</p>
           )}
           {saveStatus.kind === 'failed' && (
-            <p className="banner banner--warning">Karya terbaru mungkin belum tersimpan.</p>
+            <p className="banner banner--warning">{t('saveMaybeFailed')}</p>
           )}
           {restartError !== null && (
-            <p className="banner banner--warning" role="alert">{restartError}</p>
+            <p className="banner banner--warning" role="alert">{say(locale, restartError)}</p>
           )}
-          {rejection !== null && <p className="banner">{rejection}</p>}
+          {rejection !== null && <p className="banner">{say(locale, rejection)}</p>}
         </div>
 
         <BrushSlider
@@ -601,9 +602,9 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           dispatch={dispatch}
         />
 
-        <StepReference lesson={lesson} step={shownStep} />
+        <StepReference lesson={copy} step={shownStep} />
         <div className="step-card">
-          <StepPanel lesson={lesson} state={state} step={shownStep} startCollapsed={layout !== 'tablet'} />
+          <StepPanel lesson={copy} state={state} step={shownStep} startCollapsed={layout !== 'tablet'} />
         </div>
         <div className="step-nav">
           <StepNavigation
@@ -626,7 +627,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           <button
             type="button"
             className="chip float-dock__help"
-            aria-label="Bantuan"
+            aria-label={t('help')}
             aria-pressed={controlTab === 'help'}
             aria-expanded={controlTab === 'help'}
             onClick={() => setControlTab((tab) => (tab === 'help' ? 'drawing' : 'help'))}
@@ -638,14 +639,15 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
             <button
               type="button"
               className="chip float-dock__fit"
-              aria-label="Sesuai layar"
-              title="Sesuai layar"
+              aria-label={t('fitScreen')}
+              title={t('fitScreen')}
               onClick={() => applyView(FIT_VIEW, true)}
             >
               <FitIcon />
             </button>
           )}
           <div className="pad__control-panel float-help" data-active={controlTab === 'help'}>
+            <LanguageSwitch />
             <ToolbarSettings
               state={state}
               isColorStep={isColorStep}
@@ -676,6 +678,7 @@ function FitIcon() {
 }
 
 function FullscreenToggle() {
+  const { t } = useI18n();
   const [active, setActive] = useState(isDocumentFullscreen);
   useEffect(() => {
     const sync = () => setActive(isDocumentFullscreen());
@@ -686,7 +689,7 @@ function FullscreenToggle() {
     <button
       type="button"
       className="chip float-dock__fullscreen"
-      aria-label={active ? 'Keluar layar penuh' : 'Layar penuh'}
+      aria-label={active ? t('exitFullscreen') : t('enterFullscreen')}
       aria-pressed={active}
       onClick={() => {
         if (isDocumentFullscreen()) exitDocumentFullscreen();
@@ -731,18 +734,22 @@ function sizeCanvas(canvas: HTMLCanvasElement, viewport: Viewport): void {
   canvas.style.height = `${viewport.cssHeight}px`;
 }
 
-function statusLabel(status: SaveStatus, durable: boolean): string {
-  if (!durable) return 'Tidak tersimpan permanen';
+function statusLabel(
+  status: SaveStatus,
+  durable: boolean,
+  t: (key: MessageKey) => string,
+): string {
+  if (!durable) return t('notDurableShort');
   switch (status.kind) {
     case 'idle':
-      return 'Siap';
+      return t('ready');
     case 'saving':
-      return 'Menyimpan…';
+      return t('saving');
     case 'saved':
-      return 'Tersimpan';
+      return t('saved');
     case 'storage-full':
-      return 'Penyimpanan penuh';
+      return t('storageFullShort');
     case 'failed':
-      return 'Gagal menyimpan';
+      return t('saveFailedShort');
   }
 }

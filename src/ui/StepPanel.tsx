@@ -8,15 +8,17 @@
  */
 
 import { useState } from 'react';
+import { useI18n } from '../i18n/context';
+import type { MessageKey } from '../i18n/messages';
 import type { LessonPackage, LessonStep } from '../lesson-data/schema';
 import { drawingStepId } from '../lesson-engine/session';
 import type { AssistanceMode, HintDurationMs, SessionAction, SessionState } from '../lesson-engine/types';
 import { ClearArtworkPrompt } from './ClearArtworkPrompt';
 
-const ASSISTANCE_CHOICES: readonly { mode: AssistanceMode; label: string; help: string }[] = [
-  { mode: 'visible', label: 'Garis terlihat', help: 'Garis tetap tampil.' },
-  { mode: 'temporary', label: 'Petunjuk sementara', help: 'Garis tampil sebentar.' },
-  { mode: 'independent', label: 'Mandiri', help: 'Tanpa garis di kanvas.' },
+const ASSISTANCE_CHOICES: readonly { mode: AssistanceMode; label: MessageKey; help: MessageKey }[] = [
+  { mode: 'visible', label: 'guidesVisible', help: 'guidesVisibleHelp' },
+  { mode: 'temporary', label: 'guidesTemporary', help: 'guidesTemporaryHelp' },
+  { mode: 'independent', label: 'guidesIndependent', help: 'guidesIndependentHelp' },
 ];
 
 const HINT_DURATIONS: readonly HintDurationMs[] = [3000, 5000, 10000];
@@ -49,6 +51,7 @@ export function StepPanel({
   step,
   startCollapsed = false,
 }: StepPanelProps) {
+  const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(startCollapsed);
   const stepNumber = state.currentStepIndex + 1;
   const stepCount = lesson.steps.length;
@@ -58,8 +61,8 @@ export function StepPanel({
       <div className="step-panel__header">
         <p className="step-panel__counter">
           <span className="sr-only">
-            Tahap {stepNumber} dari {stepCount}
-            <span className="step-panel__phase"> · {phaseLabel(step.phase)}</span>
+            {t('stepOf', { current: stepNumber, total: stepCount })}
+            <span className="step-panel__phase"> · {phaseLabel(step.phase, t)}</span>
           </span>
           <span className="step-dots" aria-hidden="true">
             {lesson.steps.map((item, index) => (
@@ -79,7 +82,7 @@ export function StepPanel({
         type="button"
         className="step-card__toggle"
         aria-expanded={!collapsed}
-        aria-label={collapsed ? 'Tampilkan langkah' : 'Sembunyikan langkah'}
+        aria-label={collapsed ? t('showStep') : t('hideStep')}
         onClick={() => setCollapsed((current) => !current)}
       >
         <span aria-hidden="true">{collapsed ? '▴' : '▾'}</span>
@@ -89,6 +92,7 @@ export function StepPanel({
 }
 
 export function StepNavigation({ lesson, state, onFinish, dispatch }: StepNavigationProps) {
+  const { t } = useI18n();
   const isLastStep = state.currentStepIndex === lesson.steps.length - 1;
   const inFreeDraw = state.freeCreation;
 
@@ -101,11 +105,11 @@ export function StepNavigation({ lesson, state, onFinish, dispatch }: StepNaviga
         onClick={() => dispatch(inFreeDraw ? { type: 'leave-free-creation' } : { type: 'prev-step' })}
       >
         <span aria-hidden="true">← </span>
-        <span className="button__text">Kembali</span>
+        <span className="button__text">{t('back')}</span>
       </button>
       {isLastStep ? (
         <button type="button" className="button button--primary" onClick={onFinish}>
-          Selesai ✓
+          {t('done')}
         </button>
       ) : (
         <button
@@ -113,7 +117,7 @@ export function StepNavigation({ lesson, state, onFinish, dispatch }: StepNaviga
           className="button button--primary"
           onClick={() => dispatch({ type: 'next-step' })}
         >
-          Lanjut →
+          {t('next')}
         </button>
       )}
     </div>
@@ -121,10 +125,11 @@ export function StepNavigation({ lesson, state, onFinish, dispatch }: StepNaviga
 }
 
 export function StepControls({ state, guidesVisible, onShowHint, dispatch }: StepControlsProps) {
+  const { t } = useI18n();
   return (
     <div className="step-controls">
       <fieldset className="step-panel__group">
-        <legend>Bantuan</legend>
+        <legend>{t('help')}</legend>
         {ASSISTANCE_CHOICES.map((choice) => (
           <label key={choice.mode} className="radio">
             <input
@@ -135,19 +140,19 @@ export function StepControls({ state, guidesVisible, onShowHint, dispatch }: Ste
               onChange={() => dispatch({ type: 'set-assistance-mode', mode: choice.mode })}
             />
             <span>
-              {choice.label}
-              <small>{choice.help}</small>
+              {t(choice.label)}
+              <small>{t(choice.help)}</small>
             </span>
           </label>
         ))}
 
         <button type="button" className="button" onClick={onShowHint}>
-          {guidesVisible ? 'Tampilkan petunjuk lagi' : 'Tampilkan petunjuk'}
+          {guidesVisible ? t('showHintAgain') : t('showHint')}
         </button>
 
         {state.assistanceMode !== 'visible' && (
           <label className="field">
-            Lama petunjuk
+            {t('hintLength')}
             <select
               value={state.hintDurationMs}
               onChange={(event) =>
@@ -159,7 +164,7 @@ export function StepControls({ state, guidesVisible, onShowHint, dispatch }: Ste
             >
               {HINT_DURATIONS.map((ms) => (
                 <option key={ms} value={ms}>
-                  {ms / 1000} detik
+                  {t('seconds', { count: ms / 1000 })}
                 </option>
               ))}
             </select>
@@ -182,6 +187,7 @@ interface LessonEditsProps {
  * "Ulangi langkah ini" is one undoable action. "Mulai ulang" asks first.
  */
 export function LessonEdits({ lesson, state, dispatch, onRestart }: LessonEditsProps) {
+  const { t } = useI18n();
   const [confirmingRestart, setConfirmingRestart] = useState(false);
   const stepId = drawingStepId(lesson, state);
   const canRepeat = state.strokes.some((stroke) => stroke.stepId === stepId);
@@ -189,10 +195,10 @@ export function LessonEdits({ lesson, state, dispatch, onRestart }: LessonEditsP
 
   return (
     <fieldset className="lesson-edits">
-      <legend>Langkah ini</legend>
+      <legend>{t('thisStep')}</legend>
       {onLastStep && !state.freeCreation && (
         <button type="button" className="button" onClick={() => dispatch({ type: 'enter-free-creation' })}>
-          Gambar bebas
+          {t('freeDraw')}
         </button>
       )}
       <button
@@ -201,12 +207,12 @@ export function LessonEdits({ lesson, state, dispatch, onRestart }: LessonEditsP
         disabled={!canRepeat}
         onClick={() => dispatch({ type: 'clear-step' })}
       >
-        Ulangi langkah ini
+        {t('repeatStep')}
       </button>
       {confirmingRestart ? (
         <ClearArtworkPrompt
           compact
-          label="Mulai ulang karya"
+          label={t('restartChoice')}
           onKeep={() => setConfirmingRestart(false)}
           onClear={onRestart}
         />
@@ -214,23 +220,23 @@ export function LessonEdits({ lesson, state, dispatch, onRestart }: LessonEditsP
         <button
           type="button"
           className="button"
-          aria-label="Mulai ulang karya"
+          aria-label={t('restartArtwork')}
           onClick={() => setConfirmingRestart(true)}
         >
-          Mulai ulang
+          {t('startOver')}
         </button>
       )}
     </fieldset>
   );
 }
 
-function phaseLabel(phase: LessonStep['phase']): string {
+function phaseLabel(phase: LessonStep['phase'], t: (key: MessageKey) => string): string {
   switch (phase) {
     case 'outline':
-      return 'bentuk besar';
+      return t('phaseOutline');
     case 'detail':
-      return 'detail';
+      return t('phaseDetail');
     case 'color':
-      return 'mewarnai';
+      return t('phaseColor');
   }
 }

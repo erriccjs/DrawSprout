@@ -3,18 +3,21 @@
  * says a tablet is the more comfortable place.
  */
 
+import { useI18n } from '../i18n/context';
+
 interface TabletNoticeProps {
   readonly onDismiss: () => void;
 }
 
 export function TabletNotice({ onDismiss }: TabletNoticeProps) {
+  const { t } = useI18n();
   return (
     <div className="tablet-notice" role="status">
       <p>
-        <strong>DrawSprout paling nyaman di tablet.</strong> Di HP tetap bisa menggambar.
+        <strong>{t('tabletNotice')}</strong>
       </p>
       <button type="button" className="button" onClick={onDismiss}>
-        Mengerti
+        {t('tabletOk')}
       </button>
     </div>
   );

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { LocaleProvider } from './i18n/context';
 import { requestPersistentStorage } from './persistence/indexeddb-store';
 import './styles.css';
 
@@ -13,6 +14,8 @@ void requestPersistentStorage();
 
 createRoot(host).render(
   <StrictMode>
-    <App />
+    <LocaleProvider>
+      <App />
+    </LocaleProvider>
   </StrictMode>,
 );

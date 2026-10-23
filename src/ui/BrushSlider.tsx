@@ -7,6 +7,7 @@
  * current size and colour; the marks at the ends show thin and thick.
  */
 
+import { useI18n } from '../i18n/context';
 import type { ToolPreset } from '../lesson-data/schema';
 import type { SessionAction, ToolKind } from '../lesson-engine/types';
 import { brushPreviewPx, brushWidthRange, sliderFollowsStep, snapWidth } from './brush-size';
@@ -19,6 +20,7 @@ interface BrushSliderProps {
 }
 
 export function BrushSlider({ stepWidth, tool, preset, dispatch }: BrushSliderProps) {
+  const { t } = useI18n();
   const range = brushWidthRange(stepWidth);
   const value = snapWidth(preset.widthViewbox, range);
   const dot = brushPreviewPx(value, range);
@@ -39,8 +41,8 @@ export function BrushSlider({ stepWidth, tool, preset, dispatch }: BrushSliderPr
         max={range.max}
         step={range.step}
         value={value}
-        aria-label="Ukuran kuas"
-        aria-valuetext={sliderFollowsStep(stepWidth, tool, value) ? 'Ukuran langkah' : 'Ukuran pilihanku'}
+        aria-label={t('brushSize')}
+        aria-valuetext={sliderFollowsStep(stepWidth, tool, value) ? t('stepSize') : t('mySize')}
         onChange={(event) => {
           const next = snapWidth(Number(event.target.value), range);
           if (sliderFollowsStep(stepWidth, tool, next)) {

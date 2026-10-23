@@ -79,6 +79,24 @@ body {
   font-size: clamp(2rem, 4vw, 3rem);
 }
 
+.language-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.language-switch .chip {
+  min-width: 112px;
+}
+
+.float-help .language-switch,
+.finish .language-switch,
+.photo-match .language-switch,
+.photo-flow .language-switch {
+  margin: 0 0 12px;
+}
+
 .lesson-picker > p {
   font-size: 1.125rem;
 }

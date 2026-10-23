@@ -7,14 +7,16 @@
  */
 
 import { useState } from 'react';
+import { useI18n } from '../i18n/context';
+import type { MessageKey } from '../i18n/messages';
 import { canClearAll } from '../lesson-engine/session';
 import type { SessionAction, SessionState, ToolKind } from '../lesson-engine/types';
 import { ClearArtworkPrompt } from './ClearArtworkPrompt';
 
-const TOOLS: readonly { kind: ToolKind; label: string; icon: string }[] = [
-  { kind: 'pen', label: 'Pen', icon: '✏️' },
-  { kind: 'brush', label: 'Kuas', icon: '🖌️' },
-  { kind: 'eraser', label: 'Penghapus', icon: '🧽' },
+const TOOLS: readonly { kind: ToolKind; label: MessageKey; icon: string }[] = [
+  { kind: 'pen', label: 'pen', icon: '✏️' },
+  { kind: 'brush', label: 'brush', icon: '🖌️' },
+  { kind: 'eraser', label: 'eraser', icon: '🧽' },
 ];
 
 function PencilIcon() {
@@ -58,17 +60,18 @@ export function Toolbar({
   canRedo,
   dispatch,
 }: ToolbarProps) {
+  const { t } = useI18n();
   const { toolPreferences } = state;
 
   return (
     <div className="toolbar">
       <fieldset className="toolbar__group toolbar__group--mode">
-        <legend>Cara menggambar</legend>
+        <legend>{t('drawMode')}</legend>
         <button
           type="button"
           className="chip chip--mode"
-          aria-label="Mode pensil"
-          title="Pensil"
+          aria-label={t('pencilMode')}
+          title={t('pencil')}
           aria-pressed={state.inputMode === 'pencil'}
           onClick={() => dispatch({ type: 'set-input-mode', mode: 'pencil' })}
         >
@@ -77,8 +80,8 @@ export function Toolbar({
         <button
           type="button"
           className="chip chip--mode"
-          aria-label="Mode jari"
-          title="Jari"
+          aria-label={t('fingerMode')}
+          title={t('finger')}
           aria-pressed={state.inputMode === 'finger'}
           onClick={() => dispatch({ type: 'set-input-mode', mode: 'finger' })}
         >
@@ -87,18 +90,18 @@ export function Toolbar({
       </fieldset>
 
       <fieldset className="toolbar__group toolbar__group--tools">
-        <legend>Alat</legend>
+        <legend>{t('tools')}</legend>
         {TOOLS.map((tool) => (
           <button
             key={tool.kind}
             type="button"
             className="chip"
-            aria-label={tool.label}
+            aria-label={t(tool.label)}
             aria-pressed={toolPreferences.activeTool === tool.kind}
             onClick={() => dispatch({ type: 'set-tool', tool: tool.kind })}
           >
             <span aria-hidden="true">{tool.icon}</span>
-            <span className="chip__label">{tool.label}</span>
+            <span className="chip__label">{t(tool.label)}</span>
           </button>
         ))}
         {/* Inside the tool group, and only while the eraser is the chosen
@@ -110,11 +113,11 @@ export function Toolbar({
       </fieldset>
 
       <fieldset className="toolbar__group toolbar__group--history">
-        <legend>Riwayat</legend>
+        <legend>{t('history')}</legend>
         <button
           type="button"
           className="chip chip--icon"
-          aria-label="Batalkan"
+          aria-label={t('undo')}
           disabled={!canUndo}
           onClick={() => dispatch({ type: 'undo' })}
         >
@@ -123,7 +126,7 @@ export function Toolbar({
         <button
           type="button"
           className="chip chip--icon"
-          aria-label="Ulangi"
+          aria-label={t('redo')}
           disabled={!canRedo}
           onClick={() => dispatch({ type: 'redo' })}
         >
@@ -148,12 +151,13 @@ function EraserClearAll({
   readonly state: SessionState;
   readonly dispatch: (action: SessionAction) => void;
 }) {
+  const { t } = useI18n();
   const [asking, setAsking] = useState(false);
 
   if (asking) {
     return (
       <ClearArtworkPrompt
-        label="Pilihan hapus semua"
+        label={t('clearAllChoice')}
         compact
         onKeep={() => setAsking(false)}
         onClear={() => {
@@ -171,27 +175,26 @@ function EraserClearAll({
       disabled={!canClearAll(state)}
       onClick={() => setAsking(true)}
     >
-      <span aria-hidden="true">🧽</span> Hapus semua
+      <span aria-hidden="true">🧽</span> {t('clearAll')}
     </button>
   );
 }
 
 export function ToolbarSettings({ state, isColorStep, dispatch }: ToolbarSettingsProps) {
+  const { t } = useI18n();
   const { toolPreferences } = state;
   return (
     <div className="toolbar toolbar--settings">
       <fieldset className="toolbar__group">
-        <legend>Cara menggambar</legend>
+        <legend>{t('drawMode')}</legend>
         <p className="toolbar__readout toolbar__readout--muted">
-          Ganti mode di tombol Jari atau Pensil. Mode pensil hanya menerima stylus.
-          Sentuhan yang sangat lebar diabaikan di mode jari, tetapi penolakan telapak
-          tangan dari sistem tidak dijamin.
+          {t('drawModeNote')}
         </p>
       </fieldset>
 
       {isColorStep && (
         <fieldset className="toolbar__group">
-          <legend>Bantuan warna</legend>
+          <legend>{t('colorHelp')}</legend>
           <button
             type="button"
             className="chip"
@@ -203,10 +206,10 @@ export function ToolbarSettings({ state, isColorStep, dispatch }: ToolbarSetting
               })
             }
           >
-            {toolPreferences.colorBoundaryAssist ? 'Batas area: aktif' : 'Batas area: nonaktif'}
+            {toolPreferences.colorBoundaryAssist ? t('boundaryOn') : t('boundaryOff')}
           </button>
           <p className="toolbar__readout toolbar__readout--muted">
-            Warna tetap di dalam bentuk contoh. Matikan jika garismu berbeda.
+            {t('boundaryNote')}
           </p>
         </fieldset>
       )}

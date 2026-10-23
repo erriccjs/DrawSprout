@@ -7,6 +7,8 @@
  * the focused button: a stray tap keeps the drawing.
  */
 
+import { useI18n } from '../i18n/context';
+
 interface ClearArtworkPromptProps {
   /** Names the group for assistive technology; the question itself is shared. */
   readonly label: string;
@@ -19,19 +21,20 @@ interface ClearArtworkPromptProps {
 }
 
 export function ClearArtworkPrompt({ label, onKeep, onClear, compact = false }: ClearArtworkPromptProps) {
+  const { t } = useI18n();
   return (
     <div
       className={compact ? 'finish__choice finish__choice--compact' : 'finish__choice'}
       role="group"
       aria-label={label}
     >
-      <h2>Mau mulai dengan gambar kosong?</h2>
+      <h2>{t('clearQuestion')}</h2>
       <div className="finish__actions">
         <button type="button" className="button" onClick={onKeep} autoFocus>
-          Gambar lama tetap ada
+          {t('keepDrawing')}
         </button>
         <button type="button" className="button" onClick={onClear}>
-          Ya, mulai gambar baru
+          {t('startNew')}
         </button>
       </div>
     </div>

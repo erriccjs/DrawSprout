@@ -5,6 +5,10 @@
 
 import { useState } from 'react';
 import { doneCategory } from '../categories/library';
+import { LanguageSwitch } from '../i18n/LanguageSwitch';
+import { useI18n } from '../i18n/context';
+import { say } from '../i18n/generated';
+import { categoryName } from '../i18n/present';
 import type { LessonPackage } from '../lesson-data/schema';
 import { requestDocumentFullscreen } from './fullscreen';
 import { lessonFromMatch, matchPhotoRequest, type ClientMatch } from './photo-match-client';
@@ -16,6 +20,7 @@ interface PhotoMatchProps {
 }
 
 export function PhotoMatch({ onCancel, onOpenLesson, requestMatch = matchPhotoRequest }: PhotoMatchProps) {
+  const { t, locale } = useI18n();
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,11 +54,12 @@ export function PhotoMatch({ onCancel, onOpenLesson, requestMatch = matchPhotoRe
 
   return (
     <section className="photo-match" aria-labelledby="photo-match-title">
-      <h1 id="photo-match-title">Gambar dari foto</h1>
-      <p>Pilih foto benda atau hewan yang sudah bisa digambar.</p>
+      <LanguageSwitch />
+      <h1 id="photo-match-title">{t('photoMatchTitle')}</h1>
+      <p>{t('photoMatchLead')}</p>
       <div className="photo-match__actions">
         <label className="button">
-          Pilih foto
+          {t('choosePhoto')}
           <input
             className="photo-match__file"
             type="file"
@@ -66,15 +72,15 @@ export function PhotoMatch({ onCancel, onOpenLesson, requestMatch = matchPhotoRe
           />
         </label>
         <button type="button" className="button button--primary" disabled={!file || busy} onClick={submit}>
-          {busy ? 'Sedang melihat fotomu…' : 'Buat pelajarannya'}
+          {busy ? t('lookingAtPhoto') : t('makingLesson')}
         </button>
-        <button type="button" className="button" onClick={onCancel}>Kembali</button>
+        <button type="button" className="button" onClick={onCancel}>{t('back')}</button>
       </div>
       {file && <p className="photo-match__file-name">{file.name}</p>}
-      {error && <p className="banner banner--warning" role="alert">{error}</p>}
+      {error && <p className="banner banner--warning" role="alert">{say(locale, error)}</p>}
       {miss && (
         <div className="photo-match__miss" role="status">
-          <p>{miss.message}</p>
+          <p>{say(locale, miss.message)}</p>
           <div className="photo-match__suggestions">
             {miss.suggestions.map((suggestion) => (
               <button
@@ -83,7 +89,7 @@ export function PhotoMatch({ onCancel, onOpenLesson, requestMatch = matchPhotoRe
                 className="button"
                 onClick={() => openSuggestion(suggestion.category)}
               >
-                {suggestion.title}
+                {categoryName(locale, suggestion.category, suggestion.title)}
               </button>
             ))}
           </div>

@@ -18,6 +18,7 @@ export function paintArtworkThumbnail(
   host: HTMLElement,
   lesson: LessonPackage,
   strokes: readonly Stroke[],
+  label?: string,
 ): void {
   const canvas = renderArtworkToCanvas({
     space: lesson.coordinateSpace,
@@ -27,7 +28,7 @@ export function paintArtworkThumbnail(
   });
   canvas.className = 'artwork-card__canvas';
   canvas.setAttribute('role', 'img');
-  canvas.setAttribute('aria-label', `Karya ${lesson.title}`);
+  canvas.setAttribute('aria-label', label ?? `Karya ${lesson.title}`);
   host.replaceChildren(canvas);
 }
 
@@ -48,9 +49,9 @@ export async function downloadArtwork(lesson: LessonPackage, strokes: readonly S
   return fileName;
 }
 
-/** Indonesian date and time for a saved artwork. */
-export function formatArtworkWhen(updatedAt: number, timeZone?: string): string {
-  return new Intl.DateTimeFormat('id-ID', {
+/** Date and time for a saved artwork, in the language on screen. */
+export function formatArtworkWhen(updatedAt: number, timeZone?: string, locale: 'en' | 'id' = 'id'): string {
+  return new Intl.DateTimeFormat(locale === 'en' ? 'en' : 'id-ID', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

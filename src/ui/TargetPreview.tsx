@@ -11,6 +11,7 @@
  * not a constraint — the child's own colour choice stays available (FR-04).
  */
 
+import { useI18n } from '../i18n/context';
 import type { ColorRegion, CoordinateSpace, GuidePath, LessonStep } from '../lesson-data/schema';
 import { previewStrokeWidth, PREVIEW_INK, stepPreview } from '../lesson-data/step-preview';
 import { previewViewBox } from './preview-frame';
@@ -25,6 +26,7 @@ interface TargetPreviewProps {
 }
 
 export function TargetPreview({ space, paths, title, step, steps, colorRegions }: TargetPreviewProps) {
+  const { t } = useI18n();
   const preview = stepPreview({ steps, colorRegions }, Math.max(0, steps.indexOf(step)));
   const viewBox = previewViewBox(space, [
     ...paths.map((path) => path.d),
@@ -36,7 +38,7 @@ export function TargetPreview({ space, paths, title, step, steps, colorRegions }
       className="target-preview"
       viewBox={viewBox}
       role="img"
-      aria-label={`Contoh hasil akhir: ${title}`}
+      aria-label={t('targetPreview', { title })}
     >
       {preview.fills.map((fill) => (
         <path key={fill.id} d={fill.d} fill={fill.fill === 'paper' ? 'var(--paper)' : fill.fill} />

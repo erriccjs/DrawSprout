@@ -5,8 +5,11 @@
  * strokes only, then offers open, PNG export, and delete-with-confirmation.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getPlayableLesson } from '../categories/library';
+import { useI18n } from '../i18n/context';
+import { say } from '../i18n/generated';
+import { presentLesson } from '../i18n/present';
 import type { LessonPackage } from '../lesson-data/schema';
 import type { Stroke } from '../lesson-engine/types';
 import { fromRestoredSession } from '../persistence/mapping';
@@ -22,6 +25,7 @@ interface ArtworkGalleryProps {
 }
 
 export function ArtworkGallery({ store, actionsDisabled, onOpen, extraLessons = [] }: ArtworkGalleryProps) {
+  const { t } = useI18n();
   const [artworks, setArtworks] = useState<readonly SavedArtworkSummary[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -42,9 +46,9 @@ export function ArtworkGallery({ store, actionsDisabled, onOpen, extraLessons = 
 
   return (
     <section className="artwork-gallery" aria-labelledby="artwork-gallery-title">
-      <h2 id="artwork-gallery-title">Karyaku</h2>
-      {loadError && <p className="banner banner--warning">Daftar karya belum bisa dibuka.</p>}
-      {artworks?.length === 0 && <p className="artwork-gallery__empty">Belum ada karya tersimpan.</p>}
+      <h2 id="artwork-gallery-title">{t('galleryTitle')}</h2>
+      {loadError && <p className="banner banner--warning">{t('galleryLoadError')}</p>}
+      {artworks?.length === 0 && <p className="artwork-gallery__empty">{t('galleryEmpty')}</p>}
       {artworks && artworks.length > 0 && (
         <ul className="artwork-gallery__list">
           {artworks.map((artwork) => (
@@ -74,8 +78,10 @@ interface ArtworkCardProps {
 }
 
 function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, onDeleted }: ArtworkCardProps) {
+  const { t, locale } = useI18n();
   const lesson = lookupLesson(artwork.lessonId, extraLessons);
-  const title = lesson?.title ?? 'Pelajaran lama';
+  const shown = useMemo(() => (lesson ? presentLesson(lesson, locale) : null), [lesson, locale]);
+  const title = shown?.title ?? t('oldLesson');
   const [confirming, setConfirming] = useState(false);
   const [exportName, setExportName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +94,7 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
       if (cancelled || !restored) return;
       try {
         const strokes = fromRestoredSession(restored).strokes;
-        paintArtworkThumbnail(pictureHost, lesson, strokes);
+        paintArtworkThumbnail(pictureHost, lesson, strokes, t('artworkNamed', { title }));
       } catch {
         /* A broken log leaves the card usable for delete. */
       }
@@ -96,7 +102,7 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
     return () => {
       cancelled = true;
     };
-  }, [pictureHost, lesson, store, artwork.sessionId]);
+  }, [pictureHost, lesson, store, artwork.sessionId, t, title]);
 
   const savePng = async () => {
     if (!lesson) return;
@@ -131,54 +137,54 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
       <div className="artwork-card__picture" ref={setPictureHost} />
       <h3 className="artwork-card__title">{title}</h3>
       <time className="artwork-card__when" dateTime={new Date(artwork.updatedAt).toISOString()}>
-        {formatArtworkWhen(artwork.updatedAt)}
+        {formatArtworkWhen(artwork.updatedAt, undefined, locale)}
       </time>
       <div className="artwork-card__actions">
         <button
           type="button"
           className="button button--primary"
           disabled={actionsDisabled}
-          aria-label={`Buka ${title}`}
+          aria-label={t('openNamed', { title })}
           onClick={() => onOpen(artwork.sessionId)}
         >
-          Buka
+          {t('open')}
         </button>
         <button
           type="button"
           className="button"
           disabled={actionsDisabled || lesson === null}
-          aria-label={`Simpan PNG ${title}`}
+          aria-label={t('savePngNamed', { title })}
           onClick={() => void savePng()}
         >
-          Simpan PNG
+          {t('savePng')}
         </button>
         {!confirming && (
           <button
             type="button"
             className="button"
             disabled={actionsDisabled}
-            aria-label={`Hapus ${title}`}
+            aria-label={t('deleteNamed', { title })}
             onClick={() => setConfirming(true)}
           >
-            Hapus
+            {t('delete')}
           </button>
         )}
       </div>
       {confirming && (
-        <div className="artwork-card__confirm" role="group" aria-label="Hapus karya ini?">
-          <p>Hapus karya ini?</p>
+        <div className="artwork-card__confirm" role="group" aria-label={t('deleteArtworkQuestion')}>
+          <p>{t('deleteArtworkQuestion')}</p>
           <div className="artwork-card__actions">
-            <button type="button" className="button" onClick={() => setConfirming(false)}>Batal</button>
-            <button type="button" className="button button--primary" onClick={() => void remove()}>Hapus</button>
+            <button type="button" className="button" onClick={() => setConfirming(false)}>{t('cancel')}</button>
+            <button type="button" className="button button--primary" onClick={() => void remove()}>{t('delete')}</button>
           </div>
         </div>
       )}
       {exportName !== null && (
         <p className="banner" role="status">
-          File {exportName} dikirim ke unduhan browser.
+          {t('downloadSentShort', { name: exportName })}
         </p>
       )}
-      {error !== null && <p className="banner banner--warning" role="alert">{error}</p>}
+      {error !== null && <p className="banner banner--warning" role="alert">{say(locale, error)}</p>}
     </li>
   );
 }
