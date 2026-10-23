@@ -2,6 +2,37 @@
 
 A tablet-first web app that teaches a child to draw, one small step at a time.
 
+<p align="center">
+  <img src="docs/screenshots/picker.webp" alt="The picture list on a tablet, a scrolling grid of coloured lesson tiles such as a cat, a dog, a flower, and a cup." width="920">
+</p>
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/lesson-step.webp" alt="The cat lesson on step 5 of 9. Earlier lines are dark, and the new curved tail is drawn in red.">
+      <br>
+      Earlier lines stay dark. The line for this step is red.
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/colour.webp" alt="The last colouring step of the cat. The fur is filled, and the inner ears and nose are the part still to colour.">
+      <br>
+      Colour comes last. The example fills in, and the child still picks the colour.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/photo.webp" alt="The photo screen, with buttons to choose a photo of an object or animal the app can already draw.">
+      <br>
+      A photo of something already in the list opens that lesson.
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/phone.webp" alt="The same picture list on a phone, stacked in one column under the heading Mau gambar apa hari ini." width="280">
+      <br>
+      On a phone the list is one column. A tablet is still the comfortable size.
+    </td>
+  </tr>
+</table>
+
 This repository has ten hand-authored lessons: "Kucing Duduk" (a sitting
 cat), "Bunga Ceria" (a smiling flower), "Ikan Lucu" (a cheerful fish),
 "Matahari Ceria" (a smiling sun), "Pohon Apel" (an apple tree), "Bola
@@ -10,8 +41,9 @@ roof, door, and window), "Mobil" (body, cabin, window, and two wheels),
 "Kupu-kupu" (body, four wings, and antennae), and "Bintang" (a smiling
 five-point star). Each can be played from the first line to a saved PNG,
 with autosave and resume and an export containing only the child's drawing.
-The picture list is a scrolling grid so the ten choices stay readable on a
-tablet and on a phone.
+The picture list is a scrolling grid. It shows those lessons together with
+every finished category lesson, and it stays readable on a tablet and on a
+phone.
 
 - Product requirements: [`docs/PRD_Aplikasi_Belajar_Menggambar_Anak.md`](docs/PRD_Aplikasi_Belajar_Menggambar_Anak.md)
 - Requirement and acceptance-test mapping: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
@@ -20,8 +52,8 @@ tablet and on a phone.
 
 ## What works today
 
-- A picture-choosing screen ("Mau gambar apa hari ini?") listing every bundled
-  lesson with its preview. Choosing a picture opens it straight away and
+- A picture-choosing screen ("Mau gambar apa hari ini?") listing each picture
+  with its finished preview. Choosing a picture opens it straight away and
   reopens that picture's latest saved drawing; leaving a drawing returns to the
   screen without waiting on storage. Changing a tool or mode while the drawing
   opens keeps the saved strokes, and an empty session cannot replace them.
