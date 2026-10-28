@@ -333,7 +333,21 @@ body {
   transform-origin: center center;
 }
 
+.stage__photo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.stage__photo[data-locked='false'] {
+  pointer-events: auto;
+  z-index: 3;
+  cursor: move;
+}
+
 .stage__canvas {
+  position: relative;
+  z-index: 1;
   display: block;
   /* The drawing surface gives up browser pan and pinch so a stroke stays a
      stroke (PRD section 11). The page zoom lock stays off (see index.html). */
@@ -366,7 +380,7 @@ html:has(.pad) body {
   pointer-events: none;
 }
 
-.pad__chrome :is(button, a, input, select, label, .step-card, .step-nav, .step-reference, .example-lightbox, .float-dock, .float-header, .float-notices, .float-help, .resume-toast) {
+.pad__chrome :is(button, a, input, select, label, .step-card, .step-nav, .step-reference, .example-lightbox, .float-dock, .float-header, .float-notices, .float-help, .resume-toast, .trace-controls) {
   pointer-events: auto;
 }
 
@@ -800,6 +814,61 @@ html:has(.pad) body {
   min-height: 0;
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.trace-controls,
+.trace-setup__actions,
+.trace-setup__scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.trace-controls {
+  position: absolute;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 4;
+  width: min(920px, calc(100% - 24px));
+  margin: 0;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.12);
+}
+
+.trace-controls input[type='range'],
+.trace-setup__scale input[type='range'] {
+  width: 140px;
+  margin-left: 8px;
+}
+
+.trace-setup {
+  padding: 24px 16px 48px;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.trace-setup__paper {
+  background: white;
+  border-radius: 16px;
+  touch-action: none;
+  cursor: move;
+}
+
+.trace-setup__paper svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.trace-controls__include {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 12px;
 }
 
 .sr-only {
@@ -2522,6 +2591,10 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 }
 
 .lesson-picker__photo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
   margin: 8px 0 20px;
 }
 

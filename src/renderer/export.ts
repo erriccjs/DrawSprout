@@ -8,6 +8,7 @@
  * canvas, so it is not part of any canvas this code can read either.
  */
 
+import { paintTracePhoto } from '../trace/paint';
 import { ArtworkSurface } from './artwork-surface';
 import type { CanvasFactory, RenderSpace, RenderStroke, Viewport } from './types';
 
@@ -17,6 +18,15 @@ const DEFAULT_BACKGROUND = '#ffffff';
 /** Wide enough to print or share without being wasteful on a tablet. */
 export const DEFAULT_EXPORT_WIDTH_PX = 2000;
 
+export interface ExportUnderlay {
+  readonly image: CanvasImageSource;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly opacity: number;
+}
+
 export interface ExportOptions {
   readonly space: RenderSpace;
   readonly strokes: readonly RenderStroke[];
@@ -24,6 +34,8 @@ export interface ExportOptions {
   readonly pixelWidth?: number;
   readonly background?: string | null;
   readonly createCanvas?: CanvasFactory;
+  /** A tracing photo drawn under the strokes. Omitted means the lines only. */
+  readonly underlay?: ExportUnderlay;
 }
 
 const defaultCanvasFactory: CanvasFactory = (widthPx, heightPx) => {
@@ -42,6 +54,7 @@ export function renderArtworkToCanvas(options: ExportOptions): HTMLCanvasElement
     pixelWidth = DEFAULT_EXPORT_WIDTH_PX,
     background = DEFAULT_BACKGROUND,
     createCanvas = defaultCanvasFactory,
+    underlay,
   } = options;
 
   const scale = pixelWidth / space.width;
@@ -66,6 +79,12 @@ export function renderArtworkToCanvas(options: ExportOptions): HTMLCanvasElement
   // the paper beforehand would wipe it; `destination-over` slides the
   // background underneath what is already there instead.
   surface.compositeTo(ctx);
+  if (underlay) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-over';
+    paintTracePhoto(ctx, underlay.image, underlay, underlay.opacity, scale);
+    ctx.restore();
+  }
   if (background !== null) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'destination-over';

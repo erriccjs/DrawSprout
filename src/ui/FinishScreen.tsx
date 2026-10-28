@@ -13,7 +13,7 @@ import { presentLesson } from '../i18n/present';
 import { motionPreference, type MotionPreference } from './motion';
 import type { LessonPackage } from '../lesson-data/schema';
 import type { SessionState } from '../lesson-engine/types';
-import { artworkFileName, exportArtworkPng, renderArtworkToCanvas } from '../renderer/export';
+import { artworkFileName, exportArtworkPng, renderArtworkToCanvas, type ExportUnderlay } from '../renderer/export';
 import { ClearArtworkPrompt } from './ClearArtworkPrompt';
 import { toRenderStrokes } from './render-adapter';
 
@@ -26,12 +26,16 @@ interface FinishScreenProps {
   readonly onChoosePicture: () => void;
   readonly onStartFresh: () => void;
   readonly restartError: string | null;
+  /** When set, the saved PNG and the preview include the tracing photo. */
+  readonly underlay?: ExportUnderlay;
+  readonly includePhoto?: boolean;
+  readonly onIncludePhoto?: (include: boolean) => void;
 }
 
 /** Small enough to render instantly, large enough to look right on a tablet. */
 const PREVIEW_WIDTH_PX = 900;
 
-export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFreely, onChoosePicture, onStartFresh, restartError }: FinishScreenProps) {
+export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFreely, onChoosePicture, onStartFresh, restartError, underlay, includePhoto = false, onIncludePhoto }: FinishScreenProps) {
   const { t, locale } = useI18n();
   const shown = useMemo(() => presentLesson(lesson, locale), [lesson, locale]);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -57,12 +61,13 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
       strokes: toRenderStrokes(state.strokes),
       clipPaths,
       pixelWidth: PREVIEW_WIDTH_PX,
+      ...(underlay ? { underlay } : {}),
     });
     canvas.className = 'finish__canvas';
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', t('yourArtwork', { title: shown.title }));
     host.replaceChildren(canvas);
-  }, [lesson, state.strokes, clipPaths, shown.title, t]);
+  }, [lesson, state.strokes, clipPaths, shown.title, t, underlay]);
 
   const save = async () => {
     setExportError(null);
@@ -71,6 +76,7 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
         space: lesson.coordinateSpace,
         strokes: toRenderStrokes(state.strokes),
         clipPaths,
+        ...(underlay ? { underlay } : {}),
       });
       const fileName = artworkFileName(shown.title);
       const url = URL.createObjectURL(blob);
@@ -101,6 +107,17 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
       </p>
 
       <div className="finish__preview" ref={previewRef} />
+
+      {onIncludePhoto && (
+        <label className="trace-controls__include">
+          <input
+            type="checkbox"
+            checked={includePhoto}
+            onChange={(event) => onIncludePhoto(event.target.checked)}
+          />
+          {t('traceInclude')}
+        </label>
+      )}
 
       <div className="finish__actions">
         <button type="button" className="button button--primary" onClick={() => void save()}>
