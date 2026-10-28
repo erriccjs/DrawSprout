@@ -10,6 +10,8 @@ const DONE_IDS = [
   'cat', 'dog', 'flower', 'cup', 'toy-car', 'fish',
   'house', 'tree', 'butterfly', 'bird', 'rabbit', 'turtle', 'rocket', 'apple',
   'person-standing', 'character',
+  'elephant', 'lion', 'giraffe', 'panda', 'teddy-bear',
+  'chicken', 'duck', 'horse', 'cow', 'dinosaur',
 ];
 
 const doc = readFileSync(path.join(process.cwd(), 'docs/CATEGORY_LESSONS.md'), 'utf8');

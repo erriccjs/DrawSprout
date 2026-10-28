@@ -10,27 +10,33 @@ import { BIRD_CATEGORY } from './lessons/bird';
 import { BUTTERFLY_CATEGORY } from './lessons/butterfly';
 import { CAT_CATEGORY } from './lessons/cat';
 import { CHARACTER_CATEGORY } from './lessons/character';
+import { CHICKEN_CATEGORY } from './lessons/chicken';
+import { COW_CATEGORY } from './lessons/cow';
 import { CUP_CATEGORY } from './lessons/cup';
+import { DINOSAUR_CATEGORY } from './lessons/dinosaur';
 import { DOG_CATEGORY } from './lessons/dog';
+import { DUCK_CATEGORY } from './lessons/duck';
+import { ELEPHANT_CATEGORY } from './lessons/elephant';
 import { FISH_CATEGORY } from './lessons/fish';
 import { FLOWER_CATEGORY } from './lessons/flower';
+import { GIRAFFE_CATEGORY } from './lessons/giraffe';
+import { HORSE_CATEGORY } from './lessons/horse';
+import { LION_CATEGORY } from './lessons/lion';
+import { PANDA_CATEGORY } from './lessons/panda';
 import { HOUSE_CATEGORY } from './lessons/house';
 import { PERSON_STANDING_CATEGORY } from './lessons/person-standing';
 import { RABBIT_CATEGORY } from './lessons/rabbit';
 import { ROCKET_CATEGORY } from './lessons/rocket';
 import { TOY_CAR_CATEGORY } from './lessons/toy-car';
 import { TREE_CATEGORY } from './lessons/tree';
+import { TEDDY_BEAR_CATEGORY } from './lessons/teddy-bear';
 import { TURTLE_CATEGORY } from './lessons/turtle';
 import { isDone, type CategoryEntry, type CategoryLesson, type PlannedCategory } from './types';
 
 const PLANNED: readonly PlannedCategory[] = [
-  planned('dinosaur', 'Dinosaurus', 'a dinosaur'),
   planned('robot', 'Robot', 'a robot'),
   planned('sun', 'Matahari', 'a sun'),
   planned('boat', 'Perahu', 'a boat'),
-  planned('elephant', 'Gajah', 'an elephant'),
-  planned('horse', 'Kuda', 'a horse'),
-  planned('lion', 'Singa', 'a lion'),
   planned('penguin', 'Pinguin', 'a penguin'),
   planned('frog', 'Katak', 'a frog'),
   planned('snail', 'Siput', 'a snail'),
@@ -46,7 +52,6 @@ const PLANNED: readonly PlannedCategory[] = [
   planned('crab', 'Kepiting', 'a crab'),
   planned('whale', 'Paus', 'a whale'),
   planned('octopus', 'Gurita', 'an octopus'),
-  planned('duck', 'Bebek', 'a duck'),
   planned('pig', 'Babi', 'a pig'),
   planned('bear', 'Beruang', 'a bear'),
 ];
@@ -68,6 +73,16 @@ export const CATEGORY_LESSONS: readonly CategoryLesson[] = [
   APPLE_CATEGORY,
   PERSON_STANDING_CATEGORY,
   CHARACTER_CATEGORY,
+  ELEPHANT_CATEGORY,
+  LION_CATEGORY,
+  GIRAFFE_CATEGORY,
+  PANDA_CATEGORY,
+  TEDDY_BEAR_CATEGORY,
+  CHICKEN_CATEGORY,
+  DUCK_CATEGORY,
+  HORSE_CATEGORY,
+  COW_CATEGORY,
+  DINOSAUR_CATEGORY,
 ];
 
 export const CATEGORY_CATALOGUE: readonly CategoryEntry[] = [

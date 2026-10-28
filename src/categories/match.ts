@@ -50,6 +50,15 @@ const CATEGORY_ALIASES: Readonly<Record<string, string>> = {
   doll: 'character',
   'action figure': 'character',
   superhero: 'character',
+  'teddy bear': 'teddy-bear',
+  teddy: 'teddy-bear',
+  'stuffed bear': 'teddy-bear',
+  hen: 'chicken',
+  rooster: 'chicken',
+  calf: 'cow',
+  bull: 'cow',
+  't-rex': 'dinosaur',
+  trex: 'dinosaur',
 };
 
 const NAMED_COLOURS: Readonly<Record<string, string>> = {

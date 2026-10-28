@@ -43,7 +43,7 @@ describe('photo-match endpoint', () => {
   it('returns the friendly list when the category is not drawn yet', async () => {
     const response = await handlePhotoMatch(post(), {
       classify: () => Promise.resolve(classify({
-        category: 'dinosaur',
+        category: 'penguin',
         confidence: 0.95,
         facing: 'right',
         pose: '',
@@ -54,7 +54,7 @@ describe('photo-match endpoint', () => {
     expect(payload.matched).toBe(false);
     expect(payload.message).toMatch(/Belum bisa digambar/);
     expect(payload.suggestions.map((item) => item.category)).toContain('cat');
-    expect(payload.suggestions.map((item) => item.category)).not.toContain('dinosaur');
+    expect(payload.suggestions.map((item) => item.category)).not.toContain('penguin');
   });
 
   it('caches an idempotency key and rate-limits the sixth extra call', async () => {

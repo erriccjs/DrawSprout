@@ -1,4 +1,5 @@
 import type { LessonEnglish } from './lessons-bundled';
+import { ANIMAL_LESSON_EN } from './lessons-animals';
 
 export const CATEGORY_LESSON_EN: Readonly<Record<string, LessonEnglish>> = {
   cat: {
@@ -302,6 +303,7 @@ export const CATEGORY_LESSON_EN: Readonly<Record<string, LessonEnglish>> = {
     },
     regions: {},
   },
+  ...ANIMAL_LESSON_EN,
 };
 
 /** Names the photo matcher shows, including lessons that are not drawn yet. */
@@ -347,4 +349,9 @@ export const CATEGORY_EN: Readonly<Record<string, string>> = {
   duck: 'Duck',
   pig: 'Pig',
   bear: 'Bear',
+  giraffe: 'Giraffe',
+  panda: 'Panda',
+  'teddy-bear': 'Teddy Bear',
+  chicken: 'Chicken',
+  cow: 'Cow',
 };
