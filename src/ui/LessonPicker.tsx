@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { lessonsForPicker } from '../categories/library';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { useI18n } from '../i18n/context';
@@ -11,6 +11,7 @@ import type { PhotoLessonRecord } from '../persistence/photo-lesson-store';
 interface LessonPickerProps {
   readonly onSelect: (lessonId: string) => void;
   readonly onPhoto: () => void;
+  readonly onTrace: (file: File) => void;
   readonly notice: string | null;
   /** True only after the worker has stored and checked the whole shell. */
   readonly offlineReady: boolean;
@@ -28,6 +29,7 @@ interface LessonPickerProps {
 export function LessonPicker({
   onSelect,
   onPhoto,
+  onTrace,
   notice,
   offlineReady,
   updatePhase,
@@ -38,6 +40,7 @@ export function LessonPicker({
   onCreatePhoto,
   onDeletePhoto,
 }: LessonPickerProps) {
+  const traceInput = useRef<HTMLInputElement>(null);
   const { t, locale } = useI18n();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -47,9 +50,26 @@ export function LessonPicker({
       <LanguageSwitch />
       <h1 id="lesson-picker-title">{t('pickerTitle')}</h1>
       <p>{t('pickerLead')}</p>
-      <button type="button" className="button button--primary lesson-picker__photo" onClick={onPhoto}>
-        {t('drawFromPhoto')}
-      </button>
+      <div className="lesson-picker__photo">
+        <button type="button" className="button button--primary" onClick={onPhoto}>
+          {t('drawFromPhoto')}
+        </button>
+        <button type="button" className="button" onClick={() => traceInput.current?.click()}>
+          {t('tracePhoto')}
+        </button>
+        <input
+          ref={traceInput}
+          className="sr-only"
+          type="file"
+          accept="image/*"
+          aria-label={t('traceChoose')}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) onTrace(file);
+          }}
+        />
+      </div>
       {notice && <p className="banner" role="status">{say(locale, notice)}</p>}
       {offlineReady && (
         <p className="lesson-picker__offline">{t('offlineReady')}</p>

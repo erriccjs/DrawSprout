@@ -291,8 +291,16 @@ export const CATEGORY_LESSON_EN: Readonly<Record<string, LessonEnglish>> = {
     regions: {
       shirt: 'Shirt', face: 'Face', neck: 'Neck', hair: 'Hair', 'lock-left': 'Left hair', 'lock-right': 'Right hair',
       'ear-left': 'Left ear', 'ear-right': 'Right ear', 'eye-left': 'Left eye', 'eye-right': 'Right eye',
-      'iris-left': 'Left iris', 'iris-right': 'Right iris', 'shine-left': 'Left sparkle', 'shine-right': 'Right sparkle',
+      'iris-left': 'Left iris', 'iris-right': 'Right iris',       'shine-left': 'Left sparkle', 'shine-right': 'Right sparkle',
     },
+  },
+  'photo-trace': {
+    title: 'Trace a photo',
+    subtitle: 'A faint photo, then your lines',
+    steps: {
+      trace: { instruction: 'Trace the lines in the photo.', hint: 'The photo stays still. Your lines are what get saved.' },
+    },
+    regions: {},
   },
 };
 

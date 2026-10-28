@@ -65,6 +65,11 @@ import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 import { useLayoutTier } from './useLayoutTier';
 import { newId } from './ids';
 import { useAutosave, type SaveStatus } from './useAutosave';
+import { TRACE_LESSON } from '../trace/lesson';
+import { movePhoto } from '../trace/placement';
+import { TraceControls } from '../trace/TraceControls';
+import { TraceLayer } from '../trace/TraceLayer';
+import type { TraceSession } from '../trace/types';
 
 interface DrawingPadProps {
   readonly lesson: LessonPackage;
@@ -81,6 +86,9 @@ interface DrawingPadProps {
   readonly onChoosePicture: (saved: Promise<boolean>, state: SessionState) => void;
   /** The phone "best on a tablet" note is covering the top of this screen. */
   readonly tabletNoticeOpen?: boolean;
+  /** A photo under the paper. Absent for an ordinary lesson. */
+  readonly trace?: TraceSession;
+  readonly onTraceChange?: (patch: Partial<TraceSession>) => void;
 }
 
 /** What the pointer began drawing, frozen at pointer-down (FR-03). */
@@ -90,10 +98,22 @@ interface PendingStroke {
   readonly tool: Stroke['tool'];
 }
 
-export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onControlChange, onChoosePicture, tabletNoticeOpen = false }: DrawingPadProps) {
+export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onControlChange, onChoosePicture, tabletNoticeOpen = false, trace, onTraceChange }: DrawingPadProps) {
   const layout = useLayoutTier();
   const { t, locale } = useI18n();
   const copy = useMemo(() => presentLesson(lesson, locale), [lesson, locale]);
+  const traceUnderlay = useMemo(() => (
+    trace?.includeInExport
+      ? {
+          image: trace.image,
+          x: trace.placement.x,
+          y: trace.placement.y,
+          width: trace.placement.width,
+          height: trace.placement.height,
+          opacity: trace.visible ? trace.opacity : 0,
+        }
+      : undefined
+  ), [trace]);
   const [state, setState] = useState(initialState);
   const stateRef = useRef(state);
   const preferencesDirtyRef = useRef(false);
@@ -345,6 +365,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
     undo: () => dispatch({ type: 'undo' }),
     redo: () => dispatch({ type: 'redo' }),
     pinch: (gesture) => {
+      if (trace?.locked) return;
       const fitted = viewport;
       if (!fitted || fitted.cssWidth <= 0 || fitted.cssHeight <= 0) return;
       if (pinchOriginRef.current === null) pinchOriginRef.current = viewRef.current;
@@ -489,6 +510,11 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         lesson={lesson}
         state={state}
         clipPaths={clipPaths}
+        {...(traceUnderlay ? { underlay: traceUnderlay } : {})}
+        {...(trace && onTraceChange ? {
+          includePhoto: trace.includeInExport,
+          onIncludePhoto: (include: boolean) => onTraceChange({ includeInExport: include }),
+        } : {})}
         onKeepDrawing={() => {
           if (restartingRef.current) return;
           setRestartError(null);
@@ -535,6 +561,20 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
               : undefined
           }
         >
+          {trace && viewport && (
+            <TraceLayer
+              image={trace.image}
+              placement={trace.placement}
+              opacity={trace.opacity}
+              visible={trace.visible}
+              locked={trace.locked}
+              viewport={viewport}
+              spaceWidth={lesson.coordinateSpace.width}
+              onMove={(dx, dy) => onTraceChange?.({
+                placement: movePhoto(trace.placement, dx, dy, lesson.coordinateSpace.width, lesson.coordinateSpace.height),
+              })}
+            />
+          )}
           <canvas
             ref={setCanvas}
             className="stage__canvas"
@@ -602,7 +642,15 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           dispatch={dispatch}
         />
 
-        <StepReference lesson={copy} step={shownStep} />
+        {lesson.id !== TRACE_LESSON.id && <StepReference lesson={copy} step={shownStep} />}
+        {trace && onTraceChange && (
+          <TraceControls
+            trace={trace}
+            spaceWidth={lesson.coordinateSpace.width}
+            spaceHeight={lesson.coordinateSpace.height}
+            onChange={onTraceChange}
+          />
+        )}
         <div className="step-card">
           <StepPanel lesson={copy} state={state} step={shownStep} startCollapsed={layout !== 'tablet'} />
         </div>

@@ -3,6 +3,10 @@ import type { ArtworkSurface } from './renderer/artwork-surface';
 import { getPlayableLesson } from './categories/library';
 import type { LessonPackage } from './lesson-data/schema';
 import { readPhotoBeta } from './photo/beta';
+import { fitPhoto } from './trace/placement';
+import { TRACE_LESSON } from './trace/lesson';
+import { TraceSetup } from './trace/TraceSetup';
+import type { TraceSession } from './trace/types';
 import type { PhotoLessonRecord } from './persistence/photo-lesson-store';
 import { IndexedDbPhotoLessonStore } from './persistence/photo-lesson-store';
 import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
@@ -69,6 +73,8 @@ export function App() {
   const photoLessonsRef = useRef<readonly PhotoLessonRecord[]>([]);
   const [photoLessons, setPhotoLessons] = useState<readonly PhotoLessonRecord[]>([]);
   const [photoFlow, setPhotoFlow] = useState(false);
+  const [traceDraft, setTraceDraft] = useState<{ image: HTMLImageElement; url: string; placement: TraceSession['placement'] } | null>(null);
+  const [traceLive, setTraceLive] = useState<TraceSession | null>(null);
   const showTabletNotice = layout !== 'tablet' && !tabletNoticeDismissed;
 
   const dismissTabletHint = () => {
@@ -123,9 +129,39 @@ export function App() {
   }
 
   const resolveLesson = (lessonId: string): LessonPackage => {
+    if (lessonId === TRACE_LESSON.id) return TRACE_LESSON;
     const photo = photoLessonsRef.current.find((row) => row.lesson.id === lessonId);
     if (photo) return photo.lesson;
     return getPlayableLesson(lessonId);
+  };
+
+  const releaseTrace = () => {
+    setTraceLive((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+    setTraceDraft((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+  };
+
+  const chooseTrace = (file: File) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const space = TRACE_LESSON.coordinateSpace;
+      setTraceDraft({
+        image,
+        url,
+        placement: fitPhoto(space.width, space.height, image.naturalWidth || image.width, image.naturalHeight || image.height),
+      });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      setExitNotice('Foto tidak dapat dibaca. Pilih gambar lain.');
+    };
+    image.src = url;
   };
 
   const selectLesson = (lessonId: string) => {
@@ -311,7 +347,10 @@ export function App() {
             }
           }}
           tabletNoticeOpen={showTabletNotice}
+          {...(traceLive ? { trace: traceLive } : {})}
+          onTraceChange={(patch) => setTraceLive((current) => current ? { ...current, ...patch } : current)}
           onChoosePicture={(saved, state) => {
+            releaseTrace();
             const handoff = { state, saved };
             handoffRef.current = openLesson.restorePending && (!touchedRef.current || state === openLesson.initialState) ? null : handoff;
             selectionRef.current += 1;
@@ -333,6 +372,29 @@ export function App() {
               );
             });
           }}
+        />
+      ) : traceDraft ? (
+        <TraceSetup
+          image={traceDraft.image}
+          placement={traceDraft.placement}
+          spaceWidth={TRACE_LESSON.coordinateSpace.width}
+          spaceHeight={TRACE_LESSON.coordinateSpace.height}
+          onPlacement={(placement) => setTraceDraft((current) => current ? { ...current, placement } : current)}
+          onStart={() => {
+            const draft = traceDraft;
+            setTraceLive({
+              image: draft.image,
+              url: draft.url,
+              placement: draft.placement,
+              opacity: 0.35,
+              visible: true,
+              locked: true,
+              includeInExport: false,
+            });
+            setTraceDraft(null);
+            startLesson(TRACE_LESSON, false);
+          }}
+          onCancel={releaseTrace}
         />
       ) : photoOpen ? (
         <PhotoMatch
@@ -359,6 +421,7 @@ export function App() {
           <LessonPicker
             onSelect={selectLesson}
             onPhoto={() => setPhotoOpen(true)}
+            onTrace={chooseTrace}
             notice={exitNotice}
             offlineReady={offlineReady}
             updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}
@@ -379,7 +442,7 @@ export function App() {
             store={bootstrap.store}
             actionsDisabled={updateGate.showPrompt && applyRequested}
             onOpen={openArtwork}
-            extraLessons={photoLessons.map((row) => row.lesson)}
+            extraLessons={[TRACE_LESSON, ...photoLessons.map((row) => row.lesson)]}
           />
         </>
       )}

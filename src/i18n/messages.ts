@@ -14,6 +14,17 @@ export interface Messages {
   readonly pickerTitle: string;
   readonly pickerLead: string;
   readonly drawFromPhoto: string;
+  readonly tracePhoto: string;
+  readonly tracePlace: string;
+  readonly traceChoose: string;
+  readonly traceStart: string;
+  readonly traceOpacity: string;
+  readonly traceShow: string;
+  readonly traceHide: string;
+  readonly traceLock: string;
+  readonly traceUnlock: string;
+  readonly traceScale: string;
+  readonly traceInclude: string;
   readonly offlineReady: string;
   readonly updateLoading: string;
   readonly updateReady: string;
@@ -186,6 +197,17 @@ const id: Messages = {
   pickerTitle: 'Mau gambar apa hari ini?',
   pickerLead: 'Pilih gambar yang kamu suka, lalu ikuti langkahnya.',
   drawFromPhoto: 'Gambar dari foto',
+  tracePhoto: 'Jiplak foto',
+  tracePlace: 'Geser fotonya, atur besarnya, lalu mulai.',
+  traceChoose: 'Pilih atau ambil foto',
+  traceStart: 'Mulai jiplak',
+  traceOpacity: 'Ketebalan foto',
+  traceShow: 'Tampilkan foto',
+  traceHide: 'Sembunyikan foto',
+  traceLock: 'Kunci foto',
+  traceUnlock: 'Geser foto',
+  traceScale: 'Ukuran foto',
+  traceInclude: 'Simpan bersama foto',
   offlineReady: 'Bisa dibuka tanpa internet.',
   updateLoading: 'Memuat versi baru…',
   updateReady: 'Ada versi baru. Gambar yang sudah tersimpan tetap ada.',
@@ -358,6 +380,17 @@ const en: Messages = {
   pickerTitle: 'What shall we draw today?',
   pickerLead: 'Pick a picture you like, then follow the steps.',
   drawFromPhoto: 'Draw from a photo',
+  tracePhoto: 'Trace a photo',
+  tracePlace: 'Move the photo, change its size, then start.',
+  traceChoose: 'Choose or take a photo',
+  traceStart: 'Start tracing',
+  traceOpacity: 'How strong the photo is',
+  traceShow: 'Show the photo',
+  traceHide: 'Hide the photo',
+  traceLock: 'Lock the photo',
+  traceUnlock: 'Move the photo',
+  traceScale: 'Photo size',
+  traceInclude: 'Save with the photo',
   offlineReady: 'Works without the internet.',
   updateLoading: 'Loading the new version…',
   updateReady: 'A new version is ready. Your saved pictures stay here.',
