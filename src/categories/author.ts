@@ -71,11 +71,13 @@ export function packageLesson(input: {
   readonly subtitle: string;
   readonly steps: readonly LessonStep[];
   readonly colorRegions: readonly ColorRegion[];
+  /** Bump when geometry changes so an in-progress drawing does not resume onto new lines. */
+  readonly contentVersion?: string;
 }): LessonPackage {
   return {
     id: input.id,
     schemaVersion: LESSON_SCHEMA_VERSION,
-    contentVersion: '1.0.0',
+    contentVersion: input.contentVersion ?? '1.0.0',
     title: input.title,
     subtitle: input.subtitle,
     coordinateSpace: { width: 1000, height: 750 },
