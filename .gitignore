@@ -10,3 +10,5 @@ coverage/
 .wrangler/
 .dev.vars
 photo-eval-out/
+# Model drafts saved by the authoring CLI. Samples live in src/authoring.
+drafts/
