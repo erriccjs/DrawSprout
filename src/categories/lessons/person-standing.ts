@@ -1,17 +1,20 @@
 /**
- * A front-facing standing person. Step 1 is the head circle. The triangle,
- * the hip, and the stick limbs are dashed construction: they show on their
- * own steps and again while the contour is traced, then they drop out.
- * The finished ink is only the contour, the clothes, and the face, so no
- * guide is left inside a flat colour.
+ * A front-facing standing person, about seven and a half heads tall.
+ * Step 1 is one circle. Each later drawing step adds one part: neck, chest,
+ * hips, legs, arms, then the real body line, trousers, shoes, face, and hair.
+ * Chest, hips, legs, and arms are dashed helpers. They show on their own
+ * step and again while the child traces the part they belong to, then they
+ * drop out. The last steps are flat colour. The finished ink is only the
+ * contour, the clothes, and the face, so no guide is left inside a fill.
  *
- * The cloak is the cloth on the figure's left shoulder (the right side of
+ * The coat is the cloth on the figure's left shoulder (the right side of
  * the page). There is no key, halo, or costume mark.
  */
 
 import { circle, ellipse } from '../shapes';
 import { colorStep, detail, guide, outline, packageLesson, region } from '../author';
 import type { CategoryLesson } from '../types';
+import type { GuidePath } from '../../lesson-data/schema';
 
 const SKIN = '#f0c2a0';
 const HAIR = '#3a2e28';
@@ -20,70 +23,65 @@ const BOTTOM = '#2c3d6e';
 const SHOES = '#6b4428';
 const CLOAK = '#d24b45';
 
-const HEAD = circle(500, 118, 64);
+const HEAD = circle(500, 104, 40);
 
-const TORSO = 'M 408 198 L 592 198 L 500 352 Z';
-const HIP = 'M 458 328 L 542 328 L 500 392 Z';
+const NECK_LEFT = 'M 484 140 L 470 198';
+const NECK_RIGHT = 'M 516 140 L 530 198';
 
-const LEG_LEFT = 'M 472 378 L 442 510 L 418 628';
-const LEG_RIGHT = 'M 528 378 L 558 510 L 582 628';
-const KNEE_LEFT = ellipse(442, 510, 18, 14);
-const KNEE_RIGHT = ellipse(558, 510, 18, 14);
-const HIP_LEFT = ellipse(472, 378, 16, 12);
-const HIP_RIGHT = ellipse(528, 378, 16, 12);
-const FOOT_LEFT = 'M 418 628 L 368 656 L 458 656';
-const FOOT_RIGHT = 'M 582 628 L 542 656 L 632 656';
+const TORSO = 'M 420 204 L 580 204 L 552 312 L 448 312 Z';
+const HIP = 'M 448 300 L 552 300 L 568 412 L 432 412 Z';
 
-const ARM_LEFT = 'M 408 204 L 342 300 L 298 408';
-const ARM_RIGHT = 'M 592 204 L 658 300 L 702 408';
-const ELBOW_LEFT = ellipse(342, 300, 16, 13);
-const ELBOW_RIGHT = ellipse(658, 300, 16, 13);
-const SHOULDER_LEFT = ellipse(408, 200, 16, 12);
-const SHOULDER_RIGHT = ellipse(592, 200, 16, 12);
-const HAND_GUIDE_LEFT = circle(290, 440, 22);
-const HAND_GUIDE_RIGHT = circle(710, 440, 22);
+const LEG_LEFT = 'M 468 404 L 440 524 L 424 634';
+const LEG_RIGHT = 'M 532 404 L 560 524 L 576 634';
+const KNEE_LEFT = ellipse(440, 524, 15, 11);
+const KNEE_RIGHT = ellipse(560, 524, 15, 11);
+const FOOT_LEFT = 'M 424 634 L 368 678 L 456 678';
+const FOOT_RIGHT = 'M 576 634 L 544 678 L 632 678';
 
-const CONSTRUCTION = [
+const ARM_LEFT = 'M 420 210 L 352 318 L 316 426';
+const ARM_RIGHT = 'M 580 210 L 648 318 L 684 426';
+const ELBOW_LEFT = ellipse(352, 318, 13, 10);
+const ELBOW_RIGHT = ellipse(648, 318, 13, 10);
+const HAND_GUIDE_LEFT = circle(308, 448, 22);
+const HAND_GUIDE_RIGHT = circle(692, 448, 22);
+
+const BODY_GUIDES: readonly GuidePath[] = [
   guide('torso', TORSO, 'construction'),
   guide('hip', HIP, 'construction'),
   guide('leg-left', LEG_LEFT, 'construction'),
   guide('leg-right', LEG_RIGHT, 'construction'),
   guide('knee-left', KNEE_LEFT, 'construction'),
   guide('knee-right', KNEE_RIGHT, 'construction'),
-  guide('hip-joint-left', HIP_LEFT, 'construction'),
-  guide('hip-joint-right', HIP_RIGHT, 'construction'),
   guide('foot-left', FOOT_LEFT, 'construction'),
   guide('foot-right', FOOT_RIGHT, 'construction'),
   guide('arm-left', ARM_LEFT, 'construction'),
   guide('arm-right', ARM_RIGHT, 'construction'),
   guide('elbow-left', ELBOW_LEFT, 'construction'),
   guide('elbow-right', ELBOW_RIGHT, 'construction'),
-  guide('shoulder-left', SHOULDER_LEFT, 'construction'),
-  guide('shoulder-right', SHOULDER_RIGHT, 'construction'),
   guide('hand-guide-left', HAND_GUIDE_LEFT, 'construction'),
   guide('hand-guide-right', HAND_GUIDE_RIGHT, 'construction'),
 ];
 
-const NECK_LEFT = 'M 474 172 L 458 214';
-const NECK_RIGHT = 'M 526 172 L 542 214';
-const TUNIC = 'M 462 206 L 398 196 C 348 232 308 312 290 388 L 330 414 C 362 332 402 272 428 250 L 396 512 L 604 512 L 572 250 C 598 272 638 332 670 414 L 710 388 C 692 312 652 232 602 196 L 538 206 C 522 228 478 228 462 206 Z';
-const HAND_LEFT = 'M 268 400 C 248 448 270 482 308 484 C 346 486 366 448 344 402 C 322 416 292 416 268 400 Z';
-const HAND_RIGHT = 'M 732 400 C 752 448 730 482 692 484 C 654 486 634 448 656 402 C 678 416 708 416 732 400 Z';
+const LEG_GUIDES = BODY_GUIDES.filter((path) => /^(leg|knee|foot)-/.test(path.id));
 
-const TROUSER_LEFT_OUTER = 'M 404 512 L 386 624';
-const TROUSER_LEFT_INNER = 'M 478 536 L 466 626';
-const TROUSER_RIGHT_INNER = 'M 522 536 L 534 626';
-const TROUSER_RIGHT_OUTER = 'M 596 512 L 614 624';
-const TROUSER_CROTCH = 'M 478 536 L 522 536';
-const SHOE_LEFT = 'M 352 618 L 344 678 L 484 684 L 470 626 Z';
-const SHOE_RIGHT = 'M 530 626 L 516 684 L 656 678 L 648 618 Z';
-const CLOAK_EDGE = 'M 508 214 C 528 318 492 420 516 512';
+const SHIRT = 'M 482 190 C 452 184 424 194 420 206 L 348 322 L 318 424 L 382 430 L 418 328 L 456 250 L 428 416 L 572 416 L 544 250 L 582 328 L 618 430 L 682 424 L 652 322 L 580 206 C 576 194 548 184 518 190 Q 500 208 482 190 Z';
+const HAND_LEFT = 'M 292 418 C 274 444 280 482 314 484 C 346 486 360 452 340 422 C 324 436 304 436 292 418 Z';
+const HAND_RIGHT = 'M 708 418 C 726 444 720 482 686 484 C 654 486 640 452 660 422 C 676 436 696 436 708 418 Z';
+const CLOAK_EDGE = 'M 508 200 C 518 286 494 352 514 416';
 
-const BANGS = 'M 440 96 C 470 126 530 126 560 96';
+const TROUSER_LEFT_OUTER = 'M 430 414 L 398 648';
+const TROUSER_LEFT_INNER = 'M 484 446 L 466 650';
+const TROUSER_RIGHT_INNER = 'M 516 446 L 534 650';
+const TROUSER_RIGHT_OUTER = 'M 570 414 L 602 648';
+const TROUSER_CROTCH = 'M 484 446 Q 500 462 516 446';
+const SHOE_LEFT = 'M 358 632 L 348 698 L 486 704 L 470 642 Z';
+const SHOE_RIGHT = 'M 530 642 L 514 704 L 652 698 L 642 632 Z';
+
+const BANGS = 'M 468 84 C 486 104 514 104 532 84';
 
 const FACE_CROSS = [
-  guide('face-cross-v', 'M 500 54 L 500 182', 'construction'),
-  guide('face-cross-h', 'M 440 132 L 560 132', 'construction'),
+  guide('face-cross-v', 'M 500 64 L 500 144', 'construction'),
+  guide('face-cross-h', 'M 464 108 L 536 108', 'construction'),
 ];
 
 export const PERSON_STANDING_CATEGORY: CategoryLesson = {
@@ -103,77 +101,94 @@ export const PERSON_STANDING_CATEGORY: CategoryLesson = {
   lesson: packageLesson({
     id: 'person-standing',
     title: 'Orang Berdiri',
-    subtitle: 'Kepala bulat, badan, lalu baju',
+    subtitle: 'Kepala, badan yang tinggi, lalu baju',
+    contentVersion: '1.1.0',
     colorRegions: [
-      region('trousers', 'Celana', 'M 388 478 L 368 650 L 478 658 L 492 548 L 508 548 L 522 658 L 632 650 L 612 478 Z', BOTTOM),
-      region('robe', 'Baju', 'M 530 188 L 462 206 L 398 196 C 348 232 308 312 290 388 L 330 414 C 362 332 402 272 428 250 L 396 528 L 548 528 L 548 250 Z', ROBE),
-      region('cloak', 'Mantel', 'M 496 206 C 520 310 484 412 510 528 L 604 528 L 572 250 C 598 272 638 332 670 414 L 710 388 C 692 312 652 232 602 196 L 538 206 C 520 230 500 230 496 206 Z', CLOAK),
+      region('trousers', 'Celana', 'M 420 402 L 386 662 L 492 676 L 500 470 L 508 676 L 614 662 L 580 402 Z', BOTTOM),
+      region('robe', 'Baju', 'M 500 198 L 482 190 C 452 184 424 194 420 206 L 348 322 L 318 424 L 382 430 L 418 328 L 456 250 L 428 416 L 500 416 Z', ROBE),
+      region('cloak', 'Mantel', 'M 500 198 L 518 190 C 548 184 576 194 580 206 L 652 322 L 682 424 L 618 430 L 582 328 L 544 250 L 572 416 L 500 416 Z', CLOAK),
       region('shoe-left', 'Sepatu kiri', SHOE_LEFT, SHOES),
       region('shoe-right', 'Sepatu kanan', SHOE_RIGHT, SHOES),
-      region('neck', 'Leher', 'M 470 158 L 450 228 L 550 228 L 530 158 Z', SKIN),
+      region('neck', 'Leher', 'M 476 136 L 460 206 L 540 206 L 524 136 Z', SKIN),
       region('face', 'Wajah', `${HEAD} Z`, SKIN),
       region('hand-left', 'Tangan kiri', HAND_LEFT, SKIN),
       region('hand-right', 'Tangan kanan', HAND_RIGHT, SKIN),
-      region('hair', 'Rambut', 'M 440 96 C 470 126 530 126 560 96 A 64 64 0 0 0 440 96 Z', HAIR),
+      region('hair', 'Rambut', 'M 468 84 C 486 104 514 104 532 84 A 40 40 0 0 0 468 84 Z', HAIR),
     ],
     steps: [
       outline('head', 'Gambar lingkaran untuk kepala.', [
         guide('head', HEAD),
       ], 'Mulai dari atas, lalu putar sampai kembali ke titik awal.'),
-      outline('torso', 'Gambar segitiga badan dan segitiga pinggul.', [
+      outline('neck', 'Gambar leher.', [
+        guide('neck-left', NECK_LEFT),
+        guide('neck-right', NECK_RIGHT),
+      ], 'Dua garis pendek di bawah kepala.'),
+      outline('torso', 'Gambar bentuk dada.', [
+        guide('torso', TORSO, 'construction'),
+      ], 'Bahu lebar, lalu menyempit ke pinggang. Garis ini penolong.'),
+      outline('hips', 'Gambar pinggul.', [
         guide('torso', TORSO, 'construction'),
         guide('hip', HIP, 'construction'),
-      ], 'Segitiga besar menghadap ke bawah, lalu segitiga kecil untuk pinggul.'),
-      outline('legs', 'Gambar dua kaki, lutut, dan telapak.', [
+      ], 'Bentuk di bawah pinggang. Garis ini penolong.'),
+      outline('legs', 'Gambar dua kaki sampai telapak.', [
+        guide('torso', TORSO, 'construction'),
+        guide('hip', HIP, 'construction'),
         guide('leg-left', LEG_LEFT, 'construction'),
         guide('leg-right', LEG_RIGHT, 'construction'),
         guide('knee-left', KNEE_LEFT, 'construction'),
         guide('knee-right', KNEE_RIGHT, 'construction'),
-        guide('hip-joint-left', HIP_LEFT, 'construction'),
-        guide('hip-joint-right', HIP_RIGHT, 'construction'),
         guide('foot-left', FOOT_LEFT, 'construction'),
         guide('foot-right', FOOT_RIGHT, 'construction'),
-      ], 'Garis dari pinggul, lonjong di lutut, lalu telapak.'),
-      outline('arms', 'Gambar dua lengan dan tangan.', [
+      ], 'Dari pinggul ke lutut, lalu ke telapak. Garis ini penolong.'),
+      outline('arms', 'Gambar dua lengan sampai tangan.', [
+        guide('torso', TORSO, 'construction'),
+        guide('hip', HIP, 'construction'),
+        guide('leg-left', LEG_LEFT, 'construction'),
+        guide('leg-right', LEG_RIGHT, 'construction'),
+        guide('knee-left', KNEE_LEFT, 'construction'),
+        guide('knee-right', KNEE_RIGHT, 'construction'),
+        guide('foot-left', FOOT_LEFT, 'construction'),
+        guide('foot-right', FOOT_RIGHT, 'construction'),
         guide('arm-left', ARM_LEFT, 'construction'),
         guide('arm-right', ARM_RIGHT, 'construction'),
         guide('elbow-left', ELBOW_LEFT, 'construction'),
         guide('elbow-right', ELBOW_RIGHT, 'construction'),
-        guide('shoulder-left', SHOULDER_LEFT, 'construction'),
-        guide('shoulder-right', SHOULDER_RIGHT, 'construction'),
         guide('hand-guide-left', HAND_GUIDE_LEFT, 'construction'),
         guide('hand-guide-right', HAND_GUIDE_RIGHT, 'construction'),
-      ], 'Dari bahu ke siku, lalu ke tangan yang bulat.'),
+      ], 'Dari bahu ke siku, lalu ke tangan yang bulat. Garis ini penolong.'),
       outline('contour', 'Gambar garis badan di atas penolong.', [
-        ...CONSTRUCTION,
-        guide('neck-left', NECK_LEFT),
-        guide('neck-right', NECK_RIGHT),
-        guide('tunic', TUNIC),
+        ...BODY_GUIDES,
+        guide('shirt', SHIRT),
         guide('hand-left', HAND_LEFT),
         guide('hand-right', HAND_RIGHT),
-      ], 'Leher, baju, lengan, dan tangan. Garis putus-putus tidak ikut disimpan.'),
-      outline('clothes', 'Gambar celana, sepatu, dan tepi mantel.', [
+        guide('cloak-edge', CLOAK_EDGE),
+      ], 'Baju, lengan, dan tangan. Garis putus-putus tidak ikut disimpan.'),
+      outline('trousers', 'Gambar celana.', [
+        ...LEG_GUIDES,
         guide('trouser-left-outer', TROUSER_LEFT_OUTER),
         guide('trouser-left-inner', TROUSER_LEFT_INNER),
         guide('trouser-crotch', TROUSER_CROTCH),
         guide('trouser-right-inner', TROUSER_RIGHT_INNER),
         guide('trouser-right-outer', TROUSER_RIGHT_OUTER),
+      ], 'Dua kaki di bawah baju.'),
+      outline('shoes', 'Gambar sepatu.', [
+        guide('foot-left', FOOT_LEFT, 'construction'),
+        guide('foot-right', FOOT_RIGHT, 'construction'),
         guide('shoe-left', SHOE_LEFT),
         guide('shoe-right', SHOE_RIGHT),
-        guide('cloak-edge', CLOAK_EDGE),
-      ], 'Celana di bawah baju, sepatu di ujung kaki, satu garis mantel di depan.'),
+      ], 'Sepatu menutup ujung kaki.'),
       detail('face', 'Gambar mata, hidung, mulut, dan telinga.', [
         ...FACE_CROSS,
-        guide('brow-left', 'M 464 116 Q 476 108 490 116'),
-        guide('brow-right', 'M 510 116 Q 524 108 536 116'),
-        guide('eye-left', ellipse(476, 132, 9, 6)),
-        guide('eye-right', ellipse(524, 132, 9, 6)),
-        guide('pupil-left', circle(478, 133, 3)),
-        guide('pupil-right', circle(526, 133, 3)),
-        guide('nose', 'M 500 140 L 494 156 L 508 158'),
-        guide('mouth', 'M 486 168 Q 500 178 514 168'),
-        guide('ear-left', 'M 438 118 C 422 122 420 150 440 156'),
-        guide('ear-right', 'M 562 118 C 578 122 580 150 560 156'),
+        guide('brow-left', 'M 472 96 Q 484 90 496 96'),
+        guide('brow-right', 'M 504 96 Q 516 90 528 96'),
+        guide('eye-left', ellipse(484, 108, 7, 5)),
+        guide('eye-right', ellipse(516, 108, 7, 5)),
+        guide('pupil-left', circle(486, 109, 2)),
+        guide('pupil-right', circle(514, 109, 2)),
+        guide('nose', 'M 500 114 L 494 128 L 506 130'),
+        guide('mouth', 'M 488 136 Q 500 144 512 136'),
+        guide('ear-left', 'M 462 96 C 448 100 446 124 462 130'),
+        guide('ear-right', 'M 538 96 C 552 100 554 124 538 130'),
       ], 'Garis silang hanya penolong. Mata duduk di garis mendatar.'),
       detail('hair', 'Gambar rambut di atas kepala.', [
         guide('bangs', BANGS),
