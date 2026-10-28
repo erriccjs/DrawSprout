@@ -1,5 +1,6 @@
 /**
- * Chicken in side view, facing right. The comb is its own step.
+ * Chicken in side view, facing right. The comb sits on the head,
+ * the wattle hangs under the beak, and each foot has three toes.
  */
 
 import { circle, ellipse } from '../shapes';
@@ -10,16 +11,17 @@ const FEATHER = '#f4efe4';
 const RED = '#d64545';
 const YELLOW = '#f0c43a';
 
-const BODY = ellipse(450, 470, 155, 110);
-const HEAD = circle(620, 400, 50);
-const COMB = 'M 590 365 C 605 315 630 312 640 360 C 655 315 680 322 668 375';
-const BEAK = 'M 665 400 L 730 415 L 665 432 Z';
-const WATTLE = ellipse(650, 450, 12, 18);
-const WING = ellipse(470, 475, 72, 48);
-const TAIL = 'M 310 420 C 220 350 190 450 275 500';
-const LEG = 'M 470 565 L 455 680 M 455 680 L 420 690 M 455 680 L 490 695';
-const EYE = circle(635, 390, 7);
-const PUPIL = circle(638, 391, 3);
+const BODY = ellipse(450, 480, 155, 108);
+const HEAD = circle(630, 400, 48);
+const COMB = 'M 595 365 C 588 318 622 305 628 358 C 634 300 668 302 662 360 C 674 312 708 328 690 372 C 665 368 625 375 595 365 Z';
+const WATTLE = 'M 648 438 C 628 458 626 492 650 500 C 674 492 670 458 655 440 Z';
+const BEAK = 'M 672 395 L 742 412 L 670 430 Z';
+const WING = ellipse(465, 485, 70, 46);
+const TAIL = 'M 310 430 C 215 355 185 460 280 510';
+const LEG_BACK = 'M 400 555 L 378 655 L 348 668 L 378 662 L 362 688 L 388 664 L 400 692 L 408 662 L 438 672 L 418 650 L 428 555 Z';
+const LEG_FRONT = 'M 500 560 L 488 658 L 458 672 L 488 666 L 472 692 L 498 668 L 512 696 L 518 666 L 548 676 L 528 652 L 532 558 Z';
+const EYE = circle(645, 388, 7);
+const PUPIL = circle(648, 389, 3);
 
 const FEATHER_REGIONS = [
   region('body', 'Badan', `${BODY} Z`, FEATHER),
@@ -37,6 +39,7 @@ export const CHICKEN_CATEGORY: CategoryLesson = {
     { id: 'feathers', label: 'bulu', regionIds: FEATHER_REGIONS.map((item) => item.id) },
     { id: 'comb', label: 'jengger', regionIds: ['comb', 'wattle'] },
     { id: 'beak', label: 'paruh', regionIds: ['beak'] },
+    { id: 'legs', label: 'kaki', regionIds: ['leg-back', 'leg-front'] },
   ],
   lesson: packageLesson({
     id: 'chicken',
@@ -44,9 +47,11 @@ export const CHICKEN_CATEGORY: CategoryLesson = {
     subtitle: 'Badan, kepala, lalu jengger',
     colorRegions: [
       ...FEATHER_REGIONS,
-      region('comb', 'Jengger', 'M 588 370 C 602 318 632 314 642 365 C 658 318 684 326 670 378 L 598 382 Z', RED),
-      region('wattle', 'Gelambir', `${WATTLE} Z`, RED),
+      region('comb', 'Jengger', COMB, RED),
+      region('wattle', 'Gelambir', WATTLE, RED),
       region('beak', 'Paruh', BEAK, YELLOW),
+      region('leg-back', 'Kaki belakang', LEG_BACK, YELLOW),
+      region('leg-front', 'Kaki depan', LEG_FRONT, YELLOW),
     ],
     steps: [
       outline('body', 'Gambar badan ayam.', [
@@ -54,10 +59,13 @@ export const CHICKEN_CATEGORY: CategoryLesson = {
       ], 'Badan lonjong, agak gemuk.'),
       outline('head', 'Gambar kepala.', [
         guide('head', HEAD),
-      ], 'Kepala bulat di depan badan.'),
+      ], 'Kepala bulat, menempel di depan badan.'),
       outline('comb', 'Gambar jengger.', [
         guide('comb', COMB),
-      ], 'Jengger berlekuk di atas kepala.'),
+      ], 'Tiga lengkung di atas kepala.'),
+      outline('wattle', 'Gambar gelambir.', [
+        guide('wattle', WATTLE),
+      ], 'Gelambir menggantung di bawah paruh.'),
       outline('beak', 'Gambar paruh.', [
         guide('beak', BEAK),
       ], 'Paruh lancip menghadap ke kanan.'),
@@ -67,17 +75,18 @@ export const CHICKEN_CATEGORY: CategoryLesson = {
       outline('tail', 'Gambar ekor.', [
         guide('tail', TAIL),
       ], 'Ekor naik di belakang.'),
-      outline('legs', 'Gambar kaki.', [
-        guide('leg', LEG),
-      ], 'Kaki turun, lalu dua jari.'),
-      detail('face', 'Gambar mata dan gelambir.', [
+      outline('legs', 'Gambar dua kaki.', [
+        guide('leg-back', LEG_BACK),
+        guide('leg-front', LEG_FRONT),
+      ], 'Setiap kaki punya tiga jari.'),
+      detail('face', 'Gambar mata.', [
         guide('eye', EYE),
         guide('pupil', PUPIL),
-        guide('wattle', WATTLE),
-      ], 'Mata di kepala, gelambir di bawah paruh.'),
+      ], 'Mata di kepala.'),
       colorStep('color-feathers', 'Warnai bulu.', FEATHER_REGIONS.map((item) => item.id), FEATHER, 'Badan, kepala, dan sayap.', 48),
       colorStep('color-comb', 'Warnai jengger.', ['comb', 'wattle'], RED, 'Jengger dan gelambir.', 18),
       colorStep('color-beak', 'Warnai paruh.', ['beak'], YELLOW, 'Paruh yang lancip.', 14),
+      colorStep('color-legs', 'Warnai kaki.', ['leg-back', 'leg-front'], YELLOW, 'Dua kaki sampai ke jari.', 16),
     ],
   }),
 };
