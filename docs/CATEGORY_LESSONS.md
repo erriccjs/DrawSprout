@@ -58,7 +58,7 @@ the app then shows the friendly list instead of inventing a drawing.
 | toy-car | Mobil Mainan | done |
 | fish | Ikan | done |
 | house | Rumah | done |
-| dinosaur | Dinosaurus | planned |
+| dinosaur | Dinosaurus | done |
 | robot | Robot | planned |
 | person-standing | Orang Berdiri | done |
 | character | Tokoh | done |
@@ -71,9 +71,9 @@ the app then shows the friendly list instead of inventing a drawing.
 | rocket | Roket | done |
 | boat | Perahu | planned |
 | apple | Apel | done |
-| elephant | Gajah | planned |
-| horse | Kuda | planned |
-| lion | Singa | planned |
+| elephant | Gajah | done |
+| horse | Kuda | done |
+| lion | Singa | done |
 | penguin | Pinguin | planned |
 | frog | Katak | planned |
 | snail | Siput | planned |
@@ -89,7 +89,12 @@ the app then shows the friendly list instead of inventing a drawing.
 | crab | Kepiting | planned |
 | whale | Paus | planned |
 | octopus | Gurita | planned |
-| duck | Bebek | planned |
+| duck | Bebek | done |
+| giraffe | Jerapah | done |
+| panda | Beruang Panda | done |
+| teddy-bear | Boneka Beruang | done |
+| chicken | Ayam | done |
+| cow | Sapi | done |
 | pig | Babi | planned |
 | bear | Beruang | planned |
 

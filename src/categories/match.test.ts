@@ -91,12 +91,19 @@ describe('photo match parsing', () => {
     expect(prompt).toContain('person-standing');
     expect(prompt).toContain('character');
     expect(prompt.split('\n').some((line) => line.startsWith('person:'))).toBe(false);
+    expect(prompt).toContain('elephant');
+    expect(prompt).toContain('teddy-bear');
+    for (const category of ['teddy bear', 'teddy', 'stuffed bear']) {
+      expect(interpretMatch({ category, confidence: 0.8, facing: 'front', pose: '', colours: [] }).category).toBe('teddy-bear');
+    }
+    expect(interpretMatch({ category: 'hen', confidence: 0.8, facing: 'right', pose: '', colours: [] }).category).toBe('chicken');
+    expect(interpretMatch({ category: 'calf', confidence: 0.8, facing: 'right', pose: '', colours: [] }).category).toBe('cow');
   });
 
   it('refuses a low score, an unknown subject, and a lesson that is only planned', () => {
     for (const raw of [
       { category: 'cat', confidence: MATCH_CONFIDENCE - 0.01, facing: 'front', pose: '', colours: [] },
-      { category: 'dinosaur', confidence: 0.99, facing: 'left', pose: 'standing', colours: [] },
+      { category: 'penguin', confidence: 0.99, facing: 'left', pose: 'standing', colours: [] },
       { category: 'teapot', confidence: 80, facing: 'nope', pose: '', colours: [] },
       null,
     ]) {
