@@ -11,6 +11,7 @@ import { packageLesson } from '../categories/author';
 import { ellipse } from '../categories/shapes';
 import type { GuidePath, LessonPackage, LessonStep } from '../lesson-data/schema';
 import type { RgbaImage } from '../photo/png';
+import { traceInk } from '../photo/trace';
 
 const SPACE_W = 1000;
 const SPACE_H = 750;
@@ -23,7 +24,10 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   const count = ink.reduce((sum, bit) => sum + bit, 0);
   if (count < 40) throw new Error('Doodle-nya terlalu kosong.');
   const bounds = boundsOf(ink, width, height);
-  const hull = convexHull(sampleInk(ink, width, bounds));
+  // The outline has to follow the subject. A convex hull turns every gap --
+  // between two legs, under an arm, around an ear -- into one filled blob, so
+  // the child is asked to draw a shadow instead of the thing in the photo.
+  const hull = tracedOutline(doodle, width, height) ?? convexHull(sampleInk(ink, width, bounds));
   if (hull.length < 3) throw new Error('Doodle-nya terlalu kosong.');
 
   const parts = groupStrokes(ink, width, height, bounds);
@@ -57,7 +61,11 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   const regions = colours.map((colour, index) => ({
     id: `colour-${index + 1}`,
     label: 'Warna',
-    d: index === 0 ? shape : `${ellipse(colour.x, colour.y, colour.rx, colour.ry)} Z`,
+    // Filling the whole silhouette with a near-black is what makes the page
+    // read as a shadow. A dark dominant colour gets a patch, not the body.
+    d: index === 0 && !isShadowHex(colour.hex)
+      ? shape
+      : `${ellipse(colour.x, colour.y, colour.rx, colour.ry)} Z`,
     suggestedColor: colour.hex,
   }));
   regions.forEach((region, index) => {
@@ -167,6 +175,50 @@ function sampleInk(ink: Uint8Array, width: number, bounds: Bounds): Array<[numbe
     }
   }
   return points;
+}
+
+/**
+ * Outer contour of the drawing, in the downscaled mask's grid.
+ *
+ * `traceInk` runs marching squares on the full-resolution doodle, so a notch
+ * between two legs stays a notch. Returns null when the drawing is too thin or
+ * too broken for a closed loop, and the caller falls back to the hull.
+ */
+function tracedOutline(
+  doodle: RgbaImage,
+  width: number,
+  height: number,
+): Array<[number, number]> | null {
+  let contours;
+  try {
+    contours = traceInk(doodle);
+  } catch {
+    return null;
+  }
+  const silhouette = contours.find((contour) => contour.silhouette === true)
+    ?? contours.filter((contour) => contour.closed)
+      .sort((left, right) => right.points.length - left.points.length)[0];
+  if (!silhouette || silhouette.points.length < 3) return null;
+  const sx = width / Math.max(1, doodle.width);
+  const sy = height / Math.max(1, doodle.height);
+  const mapped: Array<[number, number]> = [];
+  for (const point of silhouette.points) {
+    const x = Math.min(width - 1, Math.max(0, Math.round(point.x * sx)));
+    const y = Math.min(height - 1, Math.max(0, Math.round(point.y * sy)));
+    const last = mapped[mapped.length - 1];
+    if (last && last[0] === x && last[1] === y) continue;
+    mapped.push([x, y]);
+  }
+  return mapped.length >= 3 ? mapped : null;
+}
+
+/** A fill this dark on the whole body is a silhouette, not a colour. */
+function isShadowHex(value: string): boolean {
+  const r = Number.parseInt(value.slice(1, 3), 16);
+  const g = Number.parseInt(value.slice(3, 5), 16);
+  const b = Number.parseInt(value.slice(5, 7), 16);
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return false;
+  return (r * 30 + g * 59 + b * 11) / 100 < 80;
 }
 
 function convexHull(points: Array<[number, number]>): Array<[number, number]> {

@@ -34,6 +34,48 @@ describe('doodle step builder', () => {
     expect(red).toBe(true);
   });
 
+  it('follows the gap between two legs instead of drawing the convex shadow', () => {
+    // A "U": a body with a notch between two legs. The convex hull of this is
+    // a plain rectangle -- the shadow the child was asked to draw before.
+    const doodle = blank(120, 120);
+    strokeLine(doodle, 20, 15, 20, 100);
+    strokeLine(doodle, 20, 100, 45, 100);
+    strokeLine(doodle, 45, 100, 45, 55);
+    strokeLine(doodle, 45, 55, 75, 55);
+    strokeLine(doodle, 75, 55, 75, 100);
+    strokeLine(doodle, 75, 100, 100, 100);
+    strokeLine(doodle, 100, 100, 100, 15);
+    strokeLine(doodle, 100, 15, 20, 15);
+    const photo = blank(120, 120);
+    fillColour(photo, 0, 0, 120, 120, [200, 60, 60]);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    const shape = lesson.steps[0]?.guidePaths[0]?.d ?? '';
+    const points = [...shape.matchAll(/[ML] (\d+) (\d+)/g)]
+      .map(([, x, y]) => ({ x: Number(x), y: Number(y) }));
+    expect(points.length).toBeGreaterThan(5);
+    const bottom = Math.max(...points.map((point) => point.y));
+    const middle = points.filter((point) => point.x > 300 && point.x < 700);
+    // The notch reaches well above the feet, so the outline is not a box.
+    expect(Math.min(...middle.map((point) => point.y))).toBeLessThan(bottom * 0.75);
+  });
+
+  it('does not ask the child to fill the whole body with a near-black', () => {
+    const doodle = blank(80, 80);
+    ring(doodle, 40, 40, 24, 2);
+    const photo = blank(80, 80);
+    fillColour(photo, 0, 0, 80, 80, [28, 28, 32]);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    const outline = lesson.steps[0]?.guidePaths[0]?.d ?? '';
+    for (const region of lesson.colorRegions) {
+      const luma = Number.parseInt(region.suggestedColor.slice(1, 3), 16) * 0.3
+        + Number.parseInt(region.suggestedColor.slice(3, 5), 16) * 0.59
+        + Number.parseInt(region.suggestedColor.slice(5, 7), 16) * 0.11;
+      if (luma < 80) expect(region.d).not.toBe(outline);
+    }
+  });
+
   it('refuses a blank page', () => {
     expect(() => buildDoodleLesson(blank(40, 40), blank(40, 40))).toThrow(/kosong/);
   });
@@ -80,5 +122,14 @@ function ring(image: RgbaImage, cx: number, cy: number, radius: number, thicknes
         image.data[offset + 3] = 255;
       }
     }
+  }
+}
+
+function strokeLine(image: RgbaImage, x1: number, y1: number, x2: number, y2: number): void {
+  const steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+  for (let i = 0; i <= steps; i += 1) {
+    const x = Math.round(x1 + ((x2 - x1) * i) / steps);
+    const y = Math.round(y1 + ((y2 - y1) * i) / steps);
+    fillRect(image, x - 1, y - 1, 3, 3);
   }
 }
