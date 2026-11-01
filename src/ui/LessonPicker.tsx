@@ -10,7 +10,6 @@ import type { PhotoLessonRecord } from '../persistence/photo-lesson-store';
 
 interface LessonPickerProps {
   readonly onSelect: (lessonId: string) => void;
-  readonly onPhoto: () => void;
   readonly onTrace: (file: File) => void;
   readonly onDoodle: () => void;
   readonly notice: string | null;
@@ -29,7 +28,6 @@ interface LessonPickerProps {
 
 export function LessonPicker({
   onSelect,
-  onPhoto,
   onTrace,
   onDoodle,
   notice,
@@ -53,14 +51,11 @@ export function LessonPicker({
       <h1 id="lesson-picker-title">{t('pickerTitle')}</h1>
       <p>{t('pickerLead')}</p>
       <div className="lesson-picker__photo">
-        <button type="button" className="button button--primary" onClick={onPhoto}>
-          {t('drawFromPhoto')}
+        <button type="button" className="button button--primary" onClick={onDoodle}>
+          {t('doodlePhoto')}
         </button>
         <button type="button" className="button" onClick={() => traceInput.current?.click()}>
           {t('tracePhoto')}
-        </button>
-        <button type="button" className="button" onClick={onDoodle}>
-          {t('doodlePhoto')}
         </button>
         <input
           ref={traceInput}

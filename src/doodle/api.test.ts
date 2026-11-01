@@ -48,8 +48,8 @@ describe('POST /api/doodle', () => {
       apiKey: 'secret-key',
       draw: () => Promise.reject(new DoodleUpstreamError('rate', 429)),
     });
-    expect(limited.status).toBe(429);
-    expect(await limited.json()).toMatchObject({ code: 'rate' });
+    expect(limited.status).toBe(503);
+    expect(await limited.json()).toMatchObject({ code: 'busy' });
   });
 });
 

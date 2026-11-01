@@ -22,6 +22,8 @@ const messages = {
   type: 'Pilih foto JPG atau PNG ya.',
   too_large: 'Fotonya terlalu besar. Coba foto yang lebih kecil.',
   rate_limited: 'Terlalu banyak permintaan. Coba lagi nanti.',
+  unavailable: 'Server doodle belum siap. Coba lagi nanti.',
+  busy: 'Server gambar sedang sibuk. Coba lagi nanti.',
   failed: 'Gambar belum bisa dibuat. Coba lagi, atau pilih foto lain.',
 } as const;
 
@@ -57,7 +59,11 @@ export async function handleDoodleRequest(request: Request, deps: DoodleApiDeps)
   if (cached) return json(JSON.parse(cached) as unknown, 200);
 
   const gate = rateGateFrom(deps);
-  if (!await gate.allow(clientKey(request), (deps.now ?? Date.now)())) {
+  const verdict = await gate.allow(clientKey(request), (deps.now ?? Date.now)());
+  if (!verdict.allowed) {
+    if (verdict.reason === 'unavailable') {
+      return json({ error: messages.unavailable, code: 'unavailable' }, 503);
+    }
     return json({ error: messages.rate_limited, code: 'rate' }, 429);
   }
   if (!deps.apiKey) return json({ error: messages.missing_key, code: 'missing_key' }, 500);
@@ -75,7 +81,7 @@ export async function handleDoodleRequest(request: Request, deps: DoodleApiDeps)
     return json(body, 200);
   } catch (error) {
     if (error instanceof DoodleUpstreamError && error.status === 429) {
-      return json({ error: messages.rate_limited, code: 'rate' }, 429);
+      return json({ error: messages.busy, code: 'busy' }, 503);
     }
     return json({ error: messages.failed, code: 'failed' }, 502);
   }

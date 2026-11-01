@@ -16,6 +16,7 @@ import { openAiClients } from '../photo/openai';
 import { imageProvider, replicateApiKey } from '../photo/provider';
 import { replicateEditor } from '../photo/replicate';
 import { handleDoodleRequest, DOODLE_API_PATH } from '../doodle/api';
+import { DOODLE_RATE_LIMIT } from './shared/limit';
 import { durableRateGate, PaidRateLimit } from './rate-limit';
 import { json } from './shared/http';
 
@@ -87,7 +88,7 @@ export default {
       const started = Date.now();
       const apiKey = replicateApiKey(env);
       const response = await handleDoodleRequest(request, {
-        rateGate: durableRateGate(env.PAID_RATE_LIMIT),
+        rateGate: durableRateGate(env.PAID_RATE_LIMIT, { scope: 'doodle', limit: DOODLE_RATE_LIMIT }),
         cache: doodleCache,
         ...(apiKey ? { apiKey } : {}),
       });

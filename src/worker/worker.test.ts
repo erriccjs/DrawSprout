@@ -23,7 +23,8 @@ describe('worker routing', () => {
     expect(config).toContain('"main": "src/worker/index.ts"');
     expect(config).toContain('"run_worker_first": ["/api/*"]');
     expect(config).toContain('"not_found_handling": "single-page-application"');
-    expect(config).toContain('"previews": {}');
+    expect(config).toContain('"previews": {');
+    expect(config).toContain('"name": "PAID_RATE_LIMIT"');
     expect(config).toContain('"class_name": "PaidRateLimit"');
     expect(config).toContain('"tag": "v1-paid-rate-limit"');
     expect(config).not.toContain('@cloudflare/vite-plugin');
@@ -176,7 +177,10 @@ describe('worker routing', () => {
         get: () => ({ allow: () => Promise.reject(new Error('limiter down')) }),
       },
     });
-    expect(response.status).toBe(429);
+    expect(response.status).toBe(503);
+    const body = await response.json() as { code: string; error: string };
+    expect(body.code).toBe('unavailable');
+    expect(body.error).not.toContain('Terlalu banyak');
     expect(calls).toEqual([]);
   });
 });

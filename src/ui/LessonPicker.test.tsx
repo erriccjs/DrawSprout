@@ -19,7 +19,6 @@ function renderPicker(onSelect: (lessonId: string) => void = () => {}) {
   render(
     <LessonPicker
       onSelect={onSelect}
-      onPhoto={() => {}}
       onTrace={() => {}}
       onDoodle={() => {}}
       notice={null}
@@ -37,7 +36,7 @@ describe('lesson picker', () => {
     renderPicker(onSelect);
     const choices = document.querySelectorAll('.lesson-picker__choice');
     expect(choices).toHaveLength(lessonsForPicker().length);
-    expect(screen.getByRole('button', { name: 'Gambar dari foto' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Gambar dari foto' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Jiplak foto' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Doodle dari foto' })).toBeTruthy();
     const traceInput = screen.getByLabelText('Pilih atau ambil foto');
@@ -45,7 +44,7 @@ describe('lesson picker', () => {
     expect(traceInput.hasAttribute('capture')).toBe(false);
     expect(screen.getByRole('button', { name: 'English' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Indonesia' })).toBeTruthy();
-    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 5);
+    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 4);
 
     const names = [...document.querySelectorAll('.lesson-picker__name')].map((node) => node.textContent);
     expect(new Set(names).size).toBe(names.length);

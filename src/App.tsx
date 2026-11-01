@@ -25,7 +25,6 @@ import { requestDocumentFullscreen } from './ui/fullscreen';
 import { RESUME_NOTICE } from './ui/resume-notice';
 import { LessonPicker } from './ui/LessonPicker';
 import { PhotoFlow } from './ui/PhotoFlow';
-import { PhotoMatch } from './ui/PhotoMatch';
 import { TabletNotice } from './ui/TabletNotice';
 import { newId } from './ui/ids';
 import { dismissTabletNotice, isTabletNoticeDismissed } from './ui/tablet-notice';
@@ -70,7 +69,6 @@ export function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [saveInFlight, setSaveInFlight] = useState(false);
   const [tabletNoticeDismissed, setTabletNoticeDismissed] = useState(isTabletNoticeDismissed);
-  const [photoOpen, setPhotoOpen] = useState(false);
   const [photoBeta] = useState(() => readPhotoBeta());
   const photoStoreRef = useRef<IndexedDbPhotoLessonStore | null>(null);
   const photoLessonsRef = useRef<readonly PhotoLessonRecord[]>([]);
@@ -206,7 +204,6 @@ export function App() {
     // that line (D-57). A photo match calls this from the button that accepts
     // the lesson, which is still that gesture.
     requestDocumentFullscreen();
-    setPhotoOpen(false);
     setPhotoFlow(false);
     setUpdateDismissed(false);
     const selection = ++selectionRef.current;
@@ -452,11 +449,6 @@ export function App() {
           }}
           onCancel={releaseTrace}
         />
-      ) : photoOpen ? (
-        <PhotoMatch
-          onCancel={() => setPhotoOpen(false)}
-          onOpenLesson={startLesson}
-        />
       ) : doodleOpen ? (
         <DoodleFlow
           onCancel={() => setDoodleOpen(false)}
@@ -505,7 +497,6 @@ export function App() {
         <>
           <LessonPicker
             onSelect={selectLesson}
-            onPhoto={() => setPhotoOpen(true)}
             onTrace={chooseTrace}
             onDoodle={() => setDoodleOpen(true)}
             notice={exitNotice}
