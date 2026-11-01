@@ -1366,3 +1366,36 @@ The fourteen hand-authored lessons were only reachable through `/api/photo-match
 ### D-83 — Photo match calls Replicate
 
 The owner's OpenAI credit ran out. `POST /api/photo-match` now calls Replicate's official model `openai/gpt-4.1-mini` by default. The photo is an `image_input` data URI. The Worker secret is `REPLICATE_API_KEY`. `Prefer: wait` holds the create call, then the Worker polls until the prediction finishes or the request times out. `MATCH_PROVIDER=openai` keeps the previous chat-completions call. The JSON shape, the 0.55 bar, and the friendly list are unchanged. Replicate's listed price is $0.40 per 1M input tokens and $1.60 per 1M output tokens. Logs stay status and duration only.
+
+### D-84 — The doodle route edits the photo instead of redrawing it
+
+*Doodle dari foto* (`POST /api/doodle`) sent the whole picture to
+`black-forest-labs/flux-2-klein-4b`, a 4B text-to-image model. On any photo
+with more than one subject it chose a subject for itself, and it drew that
+subject again from scratch rather than following the one in the photo.
+
+**Choice.** The default is `black-forest-labs/flux-kontext-pro`, the editor
+the photo pipeline already uses (D-69). It restyles the photo, so the pose and
+the framing survive. `DOODLE_MODEL` overrides it with any `owner/name` id, and
+the model is part of the response cache key so a switch cannot serve the
+previous model's drawing. The prompt is positive only, because a negative list
+backfires on kontext (D-70). Listed price is $0.04 per output image, against
+about $0.0015 a run for klein-4b.
+
+**The frame is the parent's.** The flow now shows the `CropBox` the photo
+lesson uses before anything leaves the device, so the parent says which
+subject. The crop is also the frame the colour step samples.
+
+**One frame, both images.** The request asked for `1:1`, `4:3` or `3:4`,
+quantised from the photo's shape. The drawing therefore came back re-framed,
+and the colour step, which reads the photo at the drawing's own coordinates,
+sampled beside the subject. The request now asks for `match_input_image`, and
+`photoSampler` absorbs any rounding that is left by scaling the longer
+relative axis about the centre.
+
+**The outline is traced, not hulled.** Step 1 was the convex hull of the ink,
+which closed every cavity — between two legs, under an arm — so the child was
+asked to draw a silhouette. It is now `traceInk`, the marching-squares tracer
+the photo pipeline uses; the hull remains only as a fallback for a drawing too
+broken to close a loop. A dominant colour darker than luma 80 no longer fills
+the whole body, because that reads as a shadow too.

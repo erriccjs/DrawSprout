@@ -239,6 +239,17 @@ Worker vars, not secrets: `IMAGE_PROVIDER` (`openai` by default, or
 send `quality=medium` on OpenAI. *Lebih sederhana* stays on `gpt-image-1.5` at
 `quality=low` and ignores `OPENAI_IMAGE_MODEL` (D-67). Set
 `OPENAI_IMAGE_MODEL=gpt-image-1-mini` only for a default or faithful job.
+
+`POST /api/doodle` is the separate *Doodle dari foto* path. It turns one photo
+into a line drawing and builds the steps in the browser; it does not use
+OpenAI. `DOODLE_MODEL` (default `black-forest-labs/flux-kontext-pro`) chooses
+the model, and any `owner/name` id is accepted so two can be compared without a
+deploy. The photo goes under `input_image` for the kontext editors,
+`input_images` for the rest of the flux-2 line, and `images` for
+flux-2-klein. The request asks for `match_input_image`, because the colour
+step reads the photo at the drawing's own coordinates (D-84). Replicate's
+listed price is $0.04 per output image for flux-kontext-pro, against about
+$0.0015 a run for flux-2-klein-4b.
 A photo makes a faithful simplified line drawing, then a flat colouring of
 that drawing at `quality=low`, then up to eight low-quality erases that remove
 one planned part at a time (D-74, D-75, D-76, D-77, D-78, D-79, D-80). The line

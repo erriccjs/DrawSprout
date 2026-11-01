@@ -30,6 +30,7 @@ type WorkerEnv = Env & {
   readonly REPLICATE_API_KEY?: string;
   readonly REPLICATE_API_TOKEN?: string;
   readonly REPLICATE_IMAGE_MODEL?: string;
+  readonly DOODLE_MODEL?: string;
   readonly MATCH_PROVIDER?: string;
   readonly MATCH_REPLICATE_MODEL?: string;
 };
@@ -91,6 +92,7 @@ export default {
         rateGate: durableRateGate(env.PAID_RATE_LIMIT, { scope: 'doodle', limit: DOODLE_RATE_LIMIT }),
         cache: doodleCache,
         ...(apiKey ? { apiKey } : {}),
+        ...(env.DOODLE_MODEL ? { model: env.DOODLE_MODEL } : {}),
       });
       console.log(JSON.stringify({ route: 'doodle', status: response.status, ms: Date.now() - started }));
       return response;

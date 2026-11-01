@@ -9,7 +9,7 @@ import { scopedCacheKey } from '../worker/shared/cache-key';
 import { clientKey, json, sameOrigin } from '../worker/shared/http';
 import { rateGateFrom, type RateGate } from '../worker/shared/limit';
 import { jpegSize } from './jpeg';
-import { doodleWithReplicate, DoodleUpstreamError } from './replicate';
+import { doodleModelFor, doodleWithReplicate, DoodleUpstreamError } from './replicate';
 
 export const DOODLE_API_PATH = '/api/doodle';
 
@@ -29,6 +29,7 @@ const messages = {
 
 export interface DoodleApiDeps {
   readonly apiKey?: string;
+  readonly model?: string;
   readonly now?: () => number;
   readonly rateGate?: RateGate;
   readonly rateBuckets?: Map<string, number[]>;
@@ -54,7 +55,14 @@ export async function handleDoodleRequest(request: Request, deps: DoodleApiDeps)
   }
 
   const cache = deps.cache ?? new Map<string, string>();
-  const cacheKey = await scopedCacheKey(clientKey(request), 'doodle', jpeg, 'image/jpeg');
+  // The model is part of the key: switching it must not serve a drawing the
+  // previous one made.
+  const cacheKey = await scopedCacheKey(
+    clientKey(request),
+    'doodle',
+    jpeg,
+    `image/jpeg\n${doodleModelFor(deps.model)}`,
+  );
   const cached = cache.get(cacheKey);
   if (cached) return json(JSON.parse(cached) as unknown, 200);
 
@@ -72,8 +80,7 @@ export async function handleDoodleRequest(request: Request, deps: DoodleApiDeps)
     const png = await (deps.draw ?? doodleWithReplicate)({
       apiKey: deps.apiKey,
       jpeg,
-      width: size.width,
-      height: size.height,
+      ...(deps.model ? { model: deps.model } : {}),
       signal: AbortSignal.timeout(50_000),
     });
     const body = { png: bytesToBase64(png) };

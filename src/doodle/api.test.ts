@@ -51,6 +51,25 @@ describe('POST /api/doodle', () => {
     expect(limited.status).toBe(503);
     expect(await limited.json()).toMatchObject({ code: 'busy' });
   });
+
+  it('passes the configured model through and keys the cache on it', async () => {
+    const asked: Array<string | undefined> = [];
+    const draw = (input: { readonly model?: string }) => {
+      asked.push(input.model);
+      return Promise.resolve(Uint8Array.from([137, 80, 78, 71]));
+    };
+    const cache = new Map<string, string>();
+    const deps = { apiKey: 'key', cache, draw } as const;
+
+    await handleDoodleRequest(post(jpeg), { ...deps, model: 'owner/first' });
+    await handleDoodleRequest(post(jpeg), { ...deps, model: 'owner/first' });
+    expect(asked).toEqual(['owner/first']);
+
+    // Same photo, different model: the cached drawing must not be reused.
+    await handleDoodleRequest(post(jpeg), { ...deps, model: 'owner/second' });
+    expect(asked).toEqual(['owner/first', 'owner/second']);
+    expect(cache.size).toBe(2);
+  });
 });
 
 function post(bytes: Uint8Array, options?: { origin?: string; type?: string }): Request {

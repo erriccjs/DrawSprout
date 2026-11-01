@@ -11,6 +11,7 @@ import { packageLesson } from '../categories/author';
 import { ellipse } from '../categories/shapes';
 import type { GuidePath, LessonPackage, LessonStep } from '../lesson-data/schema';
 import type { RgbaImage } from '../photo/png';
+import { traceInk } from '../photo/trace';
 
 const SPACE_W = 1000;
 const SPACE_H = 750;
@@ -23,7 +24,10 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   const count = ink.reduce((sum, bit) => sum + bit, 0);
   if (count < 40) throw new Error('Doodle-nya terlalu kosong.');
   const bounds = boundsOf(ink, width, height);
-  const hull = convexHull(sampleInk(ink, width, bounds));
+  // The outline has to follow the subject. A convex hull turns every gap --
+  // between two legs, under an arm, around an ear -- into one filled blob, so
+  // the child is asked to draw a shadow instead of the thing in the photo.
+  const hull = tracedOutline(doodle, width, height) ?? convexHull(sampleInk(ink, width, bounds));
   if (hull.length < 3) throw new Error('Doodle-nya terlalu kosong.');
 
   const parts = groupStrokes(ink, width, height, bounds);
@@ -57,7 +61,11 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   const regions = colours.map((colour, index) => ({
     id: `colour-${index + 1}`,
     label: 'Warna',
-    d: index === 0 ? shape : `${ellipse(colour.x, colour.y, colour.rx, colour.ry)} Z`,
+    // Filling the whole silhouette with a near-black is what makes the page
+    // read as a shadow. A dark dominant colour gets a patch, not the body.
+    d: index === 0 && !isShadowHex(colour.hex)
+      ? shape
+      : `${ellipse(colour.x, colour.y, colour.rx, colour.ry)} Z`,
     suggestedColor: colour.hex,
   }));
   regions.forEach((region, index) => {
@@ -167,6 +175,50 @@ function sampleInk(ink: Uint8Array, width: number, bounds: Bounds): Array<[numbe
     }
   }
   return points;
+}
+
+/**
+ * Outer contour of the drawing, in the downscaled mask's grid.
+ *
+ * `traceInk` runs marching squares on the full-resolution doodle, so a notch
+ * between two legs stays a notch. Returns null when the drawing is too thin or
+ * too broken for a closed loop, and the caller falls back to the hull.
+ */
+function tracedOutline(
+  doodle: RgbaImage,
+  width: number,
+  height: number,
+): Array<[number, number]> | null {
+  let contours;
+  try {
+    contours = traceInk(doodle);
+  } catch {
+    return null;
+  }
+  const silhouette = contours.find((contour) => contour.silhouette === true)
+    ?? contours.filter((contour) => contour.closed)
+      .sort((left, right) => right.points.length - left.points.length)[0];
+  if (!silhouette || silhouette.points.length < 3) return null;
+  const sx = width / Math.max(1, doodle.width);
+  const sy = height / Math.max(1, doodle.height);
+  const mapped: Array<[number, number]> = [];
+  for (const point of silhouette.points) {
+    const x = Math.min(width - 1, Math.max(0, Math.round(point.x * sx)));
+    const y = Math.min(height - 1, Math.max(0, Math.round(point.y * sy)));
+    const last = mapped[mapped.length - 1];
+    if (last && last[0] === x && last[1] === y) continue;
+    mapped.push([x, y]);
+  }
+  return mapped.length >= 3 ? mapped : null;
+}
+
+/** A fill this dark on the whole body is a silhouette, not a colour. */
+function isShadowHex(value: string): boolean {
+  const r = Number.parseInt(value.slice(1, 3), 16);
+  const g = Number.parseInt(value.slice(3, 5), 16);
+  const b = Number.parseInt(value.slice(5, 7), 16);
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return false;
+  return (r * 30 + g * 59 + b * 11) / 100 < 80;
 }
 
 function convexHull(points: Array<[number, number]>): Array<[number, number]> {
@@ -453,11 +505,12 @@ function subjectColours(
 ): SubjectColour[] {
   const samples: Array<{ r: number; g: number; b: number; x: number; y: number }> = [];
   const step = Math.max(1, Math.floor(Math.max(width, height) / 80));
+  const sample = photoSampler(width, height, photo);
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
       if (ink[y * width + x] === 1) continue;
       if (!inside(x, y, hull)) continue;
-      const colour = pixel(photo, x / width, y / height);
+      const colour = sample(x, y);
       if (!colour || isPage(colour)) continue;
       samples.push({ ...colour, x, y });
     }
@@ -484,6 +537,32 @@ function subjectColours(
       ry: index === 0 ? 60 : 36,
     };
   });
+}
+
+/**
+ * Doodle coordinate to photo coordinate.
+ *
+ * The doodle is asked for the photo's own aspect ratio, but a generator
+ * rounds its canvas, so the two frames can still differ a little. Reading the
+ * photo at the doodle's raw coordinates then walks off the subject and picks
+ * the colour of whatever is beside it. The shared area is centred, so the
+ * longer relative axis is scaled about the middle instead of stretched.
+ */
+export function photoSampler(
+  width: number,
+  height: number,
+  photo: RgbaImage,
+): (x: number, y: number) => { r: number; g: number; b: number } | null {
+  const doodleRatio = width / Math.max(1, height);
+  const photoRatio = photo.width / Math.max(1, photo.height);
+  const wider = photoRatio > doodleRatio;
+  const sx = wider ? doodleRatio / photoRatio : 1;
+  const sy = wider ? 1 : photoRatio / doodleRatio;
+  return (x, y) => pixel(
+    photo,
+    0.5 + (x / width - 0.5) * sx,
+    0.5 + (y / height - 0.5) * sy,
+  );
 }
 
 function cornerColours(photo: RgbaImage): Array<{ r: number; g: number; b: number }> {
