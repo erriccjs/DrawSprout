@@ -30,12 +30,14 @@ interface FinishScreenProps {
   readonly underlay?: ExportUnderlay;
   readonly includePhoto?: boolean;
   readonly onIncludePhoto?: (include: boolean) => void;
+  /** Doodle tracing uses the doodle words on the save checkbox. */
+  readonly traceSource?: 'photo' | 'doodle';
 }
 
 /** Small enough to render instantly, large enough to look right on a tablet. */
 const PREVIEW_WIDTH_PX = 900;
 
-export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFreely, onChoosePicture, onStartFresh, restartError, underlay, includePhoto = false, onIncludePhoto }: FinishScreenProps) {
+export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFreely, onChoosePicture, onStartFresh, restartError, underlay, includePhoto = false, onIncludePhoto, traceSource }: FinishScreenProps) {
   const { t, locale } = useI18n();
   const shown = useMemo(() => presentLesson(lesson, locale), [lesson, locale]);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -115,7 +117,7 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
             checked={includePhoto}
             onChange={(event) => onIncludePhoto(event.target.checked)}
           />
-          {t('traceInclude')}
+          {t(traceSource === 'doodle' ? 'doodleTraceInclude' : 'traceInclude')}
         </label>
       )}
 

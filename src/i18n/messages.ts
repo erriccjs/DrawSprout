@@ -32,6 +32,13 @@ export interface Messages {
   readonly doodleTrace: string;
   readonly doodleBack: string;
   readonly doodleFailed: string;
+  readonly doodleTraceOpacity: string;
+  readonly doodleTraceShow: string;
+  readonly doodleTraceHide: string;
+  readonly doodleTraceLock: string;
+  readonly doodleTraceUnlock: string;
+  readonly doodleTraceScale: string;
+  readonly doodleTraceInclude: string;
   readonly offlineReady: string;
   readonly updateLoading: string;
   readonly updateReady: string;
@@ -222,6 +229,13 @@ const id: Messages = {
   doodleTrace: 'Jiplak doodlenya',
   doodleBack: 'Pilih gambar lain',
   doodleFailed: 'Doodle tidak jadi. Pilih gambar dari daftar.',
+  doodleTraceOpacity: 'Ketebalan doodle',
+  doodleTraceShow: 'Tampilkan doodle',
+  doodleTraceHide: 'Sembunyikan doodle',
+  doodleTraceLock: 'Kunci doodle',
+  doodleTraceUnlock: 'Geser doodle',
+  doodleTraceScale: 'Ukuran doodle',
+  doodleTraceInclude: 'Simpan bersama doodle',
   offlineReady: 'Bisa dibuka tanpa internet.',
   updateLoading: 'Memuat versi baru…',
   updateReady: 'Ada versi baru. Gambar yang sudah tersimpan tetap ada.',
@@ -412,6 +426,13 @@ const en: Messages = {
   doodleTrace: 'Trace the doodle',
   doodleBack: 'Pick another picture',
   doodleFailed: 'The doodle did not work. Pick a picture from the list.',
+  doodleTraceOpacity: 'How strong the doodle is',
+  doodleTraceShow: 'Show the doodle',
+  doodleTraceHide: 'Hide the doodle',
+  doodleTraceLock: 'Lock the doodle',
+  doodleTraceUnlock: 'Move the doodle',
+  doodleTraceScale: 'Doodle size',
+  doodleTraceInclude: 'Save with the doodle',
   offlineReady: 'Works without the internet.',
   updateLoading: 'Loading the new version…',
   updateReady: 'A new version is ready. Your saved pictures stay here.',

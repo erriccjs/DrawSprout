@@ -16,12 +16,13 @@ import { buildDoodleLesson } from './steps';
 interface ReadyDoodle {
   readonly lesson: LessonPackage;
   readonly previewUrl: string;
+  readonly png: Uint8Array;
 }
 
 interface DoodleFlowProps {
   readonly onCancel: () => void;
-  readonly onFollow: (lesson: LessonPackage) => void;
-  readonly onTrace: (lesson: LessonPackage, previewUrl: string) => void;
+  readonly onFollow: (lesson: LessonPackage, png: Uint8Array) => void;
+  readonly onTrace: (lesson: LessonPackage, previewUrl: string, png: Uint8Array) => void;
 }
 
 export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
@@ -55,7 +56,7 @@ export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
       const png = await encodePng(doodle);
       const copy = new Uint8Array(png.byteLength);
       copy.set(png);
-      setReady({ lesson, previewUrl: URL.createObjectURL(new Blob([copy], { type: 'image/png' })) });
+      setReady({ lesson, png: copy, previewUrl: URL.createObjectURL(new Blob([copy], { type: 'image/png' })) });
       setPhase('ready');
     } catch (cause) {
       if (left.current) return;
@@ -103,10 +104,10 @@ export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
             colorRegions={ready.lesson.colorRegions}
           />
           <div className="doodle-flow__actions">
-            <button type="button" className="button button--primary" onClick={() => onFollow(ready.lesson)}>
+            <button type="button" className="button button--primary" onClick={() => onFollow(ready.lesson, ready.png)}>
               {t('doodleFollow')}
             </button>
-            <button type="button" className="button" onClick={() => { handedOff.current = true; onTrace(ready.lesson, ready.previewUrl); }}>
+            <button type="button" className="button" onClick={() => { handedOff.current = true; onTrace(ready.lesson, ready.previewUrl, ready.png); }}>
               {t('doodleTrace')}
             </button>
           </div>

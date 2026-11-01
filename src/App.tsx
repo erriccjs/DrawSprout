@@ -8,6 +8,8 @@ import { fitPhoto } from './trace/placement';
 import { TRACE_LESSON } from './trace/lesson';
 import { TraceSetup } from './trace/TraceSetup';
 import type { TraceSession } from './trace/types';
+import type { DoodleLessonRecord } from './persistence/doodle-lesson-store';
+import { IndexedDbDoodleLessonStore } from './persistence/doodle-lesson-store';
 import type { PhotoLessonRecord } from './persistence/photo-lesson-store';
 import { IndexedDbPhotoLessonStore } from './persistence/photo-lesson-store';
 import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
@@ -77,7 +79,8 @@ export function App() {
   const [traceDraft, setTraceDraft] = useState<{ image: HTMLImageElement; url: string; placement: TraceSession['placement'] } | null>(null);
   const [traceLive, setTraceLive] = useState<TraceSession | null>(null);
   const [doodleOpen, setDoodleOpen] = useState(false);
-  const doodleLessonsRef = useRef<LessonPackage[]>([]);
+  const doodleStoreRef = useRef<IndexedDbDoodleLessonStore | null>(null);
+  const doodleRecordsRef = useRef<DoodleLessonRecord[]>([]);
   const [doodleLessons, setDoodleLessons] = useState<LessonPackage[]>([]);
   const showTabletNotice = layout !== 'tablet' && !tabletNoticeDismissed;
 
@@ -115,6 +118,22 @@ export function App() {
     };
   }, [photoBeta]);
 
+  useEffect(() => {
+    const store = new IndexedDbDoodleLessonStore();
+    doodleStoreRef.current = store;
+    let cancelled = false;
+    void store.list().then((rows) => {
+      if (cancelled) return;
+      doodleRecordsRef.current = [...rows];
+      setDoodleLessons(rows.map((row) => row.lesson));
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      store.close();
+      if (doodleStoreRef.current === store) doodleStoreRef.current = null;
+    };
+  }, []);
+
   if (bootstrap.status === 'loading') {
     return (
       <main className="shell shell--centered" data-layout={layout}>
@@ -132,10 +151,17 @@ export function App() {
     );
   }
 
+  const rememberDoodle = (lesson: LessonPackage, png: Uint8Array, traced: boolean) => {
+    const record: DoodleLessonRecord = { id: lesson.id, createdAt: Date.now(), lesson, png, traced };
+    doodleRecordsRef.current = [record, ...doodleRecordsRef.current.filter((row) => row.id !== lesson.id)];
+    setDoodleLessons(doodleRecordsRef.current.map((row) => row.lesson));
+    void doodleStoreRef.current?.put(record).catch(() => undefined);
+  };
+
   const resolveLesson = (lessonId: string): LessonPackage => {
     if (lessonId === TRACE_LESSON.id) return TRACE_LESSON;
-    const doodle = doodleLessonsRef.current.find((lesson) => lesson.id === lessonId);
-    if (doodle) return doodle;
+    const doodle = doodleRecordsRef.current.find((row) => row.lesson.id === lessonId);
+    if (doodle) return doodle.lesson;
     const photo = photoLessonsRef.current.find((row) => row.lesson.id === lessonId);
     if (photo) return photo.lesson;
     return getPlayableLesson(lessonId);
@@ -270,7 +296,7 @@ export function App() {
     handoffRef.current = null;
     setExitNotice(null);
 
-    void bootstrap.store.loadSession(sessionId).then((restored) => {
+    void bootstrap.store.loadSession(sessionId).then(async (restored) => {
       if (selectionRef.current !== selection) return;
       if (!restored) {
         setExitNotice('Karya itu tidak dapat dibuka.');
@@ -280,8 +306,32 @@ export function App() {
       try {
         lesson = resolveLesson(restored.checkpoint.lessonId);
       } catch {
-        setExitNotice('Pelajaran untuk karya ini sudah tidak ada.');
-        return;
+        const loaded = await doodleStoreRef.current?.list().catch(() => [] as readonly DoodleLessonRecord[]);
+        if (loaded && loaded.length > 0) {
+          doodleRecordsRef.current = [...loaded];
+          setDoodleLessons(loaded.map((row) => row.lesson));
+        }
+        try {
+          lesson = resolveLesson(restored.checkpoint.lessonId);
+        } catch {
+          setExitNotice('Pelajaran untuk karya ini sudah tidak ada.');
+          return;
+        }
+      }
+      if (selectionRef.current !== selection) return;
+      releaseTrace();
+      const doodle = doodleRecordsRef.current.find((row) => row.id === lesson.id && row.traced);
+      if (doodle) {
+        try {
+          const overlay = await doodleOverlay(doodle.lesson, doodle.png);
+          if (selectionRef.current !== selection) {
+            URL.revokeObjectURL(overlay.url);
+            return;
+          }
+          setTraceLive(overlay);
+        } catch {
+          /* The steps still open when the line drawing cannot be shown. */
+        }
       }
       if (restored.checkpoint.lessonContentVersion !== lesson.contentVersion) {
         setOpenLesson({
@@ -410,18 +460,16 @@ export function App() {
       ) : doodleOpen ? (
         <DoodleFlow
           onCancel={() => setDoodleOpen(false)}
-          onFollow={(lesson) => {
-            doodleLessonsRef.current = [lesson, ...doodleLessonsRef.current.filter((item) => item.id !== lesson.id)];
-            setDoodleLessons(doodleLessonsRef.current);
+          onFollow={(lesson, png) => {
+            rememberDoodle(lesson, png, false);
             setDoodleOpen(false);
             startLesson(lesson, false);
           }}
-          onTrace={(lesson, previewUrl) => {
+          onTrace={(lesson, previewUrl, png) => {
+            rememberDoodle(lesson, png, true);
             const image = new Image();
             image.onload = () => {
               const space = lesson.coordinateSpace;
-              doodleLessonsRef.current = [lesson, ...doodleLessonsRef.current.filter((item) => item.id !== lesson.id)];
-              setDoodleLessons(doodleLessonsRef.current);
               setTraceLive({
                 image,
                 url: previewUrl,
@@ -430,6 +478,7 @@ export function App() {
                 visible: true,
                 locked: true,
                 includeInExport: false,
+                source: 'doodle',
               });
               setDoodleOpen(false);
               startLesson(lesson, false);
@@ -492,6 +541,33 @@ function applyControls<T extends SessionPreferences>(state: T, controls: Control
 }
 
 /** Whether a checkpoint holds work a child would recognise as their own. */
+function doodleOverlay(lesson: LessonPackage, png: Uint8Array): Promise<TraceSession> {
+  const copy = new Uint8Array(png.byteLength);
+  copy.set(png);
+  const url = URL.createObjectURL(new Blob([copy], { type: 'image/png' }));
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const space = lesson.coordinateSpace;
+      resolve({
+        image,
+        url,
+        placement: fitPhoto(space.width, space.height, image.naturalWidth || image.width, image.naturalHeight || image.height),
+        opacity: 0.4,
+        visible: true,
+        locked: true,
+        includeInExport: false,
+        source: 'doodle',
+      });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Doodle tidak dapat dibuka.'));
+    };
+    image.src = url;
+  });
+}
+
 function hasProgress(checkpoint: SessionCheckpoint): boolean {
   return (
     checkpoint.committedStrokeIds.length > 0 ||

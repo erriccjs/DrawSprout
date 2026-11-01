@@ -514,6 +514,7 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         {...(trace && onTraceChange ? {
           includePhoto: trace.includeInExport,
           onIncludePhoto: (include: boolean) => onTraceChange({ includeInExport: include }),
+          ...(trace.source ? { traceSource: trace.source } : {}),
         } : {})}
         onKeepDrawing={() => {
           if (restartingRef.current) return;
