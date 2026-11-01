@@ -250,6 +250,17 @@ flux-2-klein. The request asks for `match_input_image`, because the colour
 step reads the photo at the drawing's own coordinates (D-84). Replicate's
 listed price is $0.04 per output image for flux-kontext-pro, against about
 $0.0015 a run for flux-2-klein-4b.
+
+The step builder can be judged apart from the model, with no key and no
+network:
+
+```
+npm run doodle-eval -- <line-art.png> [photo.png]
+```
+
+It prints the steps and writes `<line-art>-steps.svg` beside the input: the
+drawing on the left, and on the right every guide path coloured by step over
+the colour patches. Any line drawing works as input.
 A photo makes a faithful simplified line drawing, then a flat colouring of
 that drawing at `quality=low`, then up to eight low-quality erases that remove
 one planned part at a time (D-74, D-75, D-76, D-77, D-78, D-79, D-80). The line

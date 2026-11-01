@@ -1399,3 +1399,40 @@ asked to draw a silhouette. It is now `traceInk`, the marching-squares tracer
 the photo pipeline uses; the hull remains only as a fallback for a drawing too
 broken to close a loop. A dominant colour darker than luma 80 no longer fills
 the whole body, because that reads as a shadow too.
+
+### D-85 — The doodle's parts are traced, not walked along a skeleton
+
+D-84 fixed the outline. The steps inside it stayed wrong: a clean line drawing
+of a dog -- head, two ears, two eyes, nose, mouth, body, four legs, tail --
+produced two steps, the second holding four fragments of 10, 7, 5 and 3 points.
+
+The cause was in two places. `breakJunctions` almost never fired: on a
+Zhang-Suen skeleton a junction's eight-neighbour ring usually still shows two
+transitions, so 1010 thinned pixels lost 16 and came out as one component of
+883. `traceComponent` then walked that component greedily from its lowest
+index, took the first unvisited neighbour each step and stopped at the first
+dead end, turning 883 pixels into a 10-point path.
+
+**Choice.** The interior lines come from `traceInk`, the same tracer D-84 uses
+for the outline; on that drawing it returns the outline and eleven interior
+contours that land on the eyes, the nose, the mouth and the ear folds. A
+contour whose centroid falls outside the outline is dropped, so a speck of
+background that survived the ink mask is not handed to the child as a part.
+The skeleton walk and its helpers are deleted. Nearby contours still group
+into one part, at a twelfth of the subject's span rather than a fifth: a fifth
+merged a whole face into a single step.
+
+**Colour.** Three faults made the patches meaningless. The samples were
+filtered to saturation 0.18 and up, which discards a white plush, a white
+shirt or a grey cat and leaves one bright patch standing for the whole animal.
+`nearCorner` then discarded whatever matched the photo's corners, which is
+that same white subject in a bright room. And each patch was a fixed ellipse
+at a fixed place, unrelated to where its colour sits. Samples now come from
+inside the traced outline, so a colour matching the corners across more than a
+third of the subject is taken as the subject; each patch is placed and sized
+from its own cluster's spatial spread; and the body outline is only filled
+when the subject has exactly one colour and that colour is not near-black.
+
+**Seeing it.** `npm run doodle-eval -- <line-art.png> [photo.png]` runs the
+builder on a drawing and writes an SVG of every guide path and colour patch.
+No key and no network, so the builder can be judged apart from the model.

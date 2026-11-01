@@ -4,14 +4,18 @@ import type { RgbaImage } from '../photo/png';
 import { buildDoodleLesson, photoSampler } from './steps';
 
 describe('doodle step builder', () => {
-  it('starts with one simple shape, then the separate parts, and ignores the grassy background', () => {
-    const doodle = blank(80, 80);
-    ring(doodle, 40, 40, 24, 2);
-    fillRect(doodle, 36, 36, 6, 6);
-    fillRect(doodle, 4, 4, 16, 16);
-    const photo = blank(80, 80);
-    fillColour(photo, 0, 0, 80, 80, [40, 140, 50]);
-    fillColour(photo, 20, 20, 40, 40, [220, 40, 40]);
+  it('starts with one simple shape, then the parts on the subject, ignoring a speck of background', () => {
+    // A face: one head, two eyes, a nose -- plus a square of background in the
+    // corner that survived the ink mask and belongs to nothing.
+    const doodle = blank(240, 240);
+    ring(doodle, 120, 120, 80, 6);
+    ring(doodle, 92, 100, 14, 4);
+    ring(doodle, 148, 100, 14, 4);
+    ring(doodle, 120, 146, 18, 5);
+    fillRect(doodle, 6, 6, 22, 22);
+    const photo = blank(240, 240);
+    fillColour(photo, 0, 0, 240, 240, [40, 140, 50]);
+    fillColour(photo, 60, 60, 120, 120, [220, 40, 40]);
 
     const lesson = buildDoodleLesson(doodle, photo);
     expect(() => assertValidLessons([lesson])).not.toThrow();
@@ -21,6 +25,21 @@ describe('doodle step builder', () => {
     expect(lines[0]?.guidePaths[0]?.d).toMatch(/Z/);
     expect(lines.length).toBeGreaterThanOrEqual(3);
     expect(lines.length).toBeLessThanOrEqual(6);
+
+    // Every guide the child draws sits on the subject, so the corner square
+    // never became a part of its own.
+    const head = pointsOf(lines[0]?.guidePaths[0]?.d ?? '');
+    const headLeft = Math.min(...head.map((point) => point.x));
+    const headTop = Math.min(...head.map((point) => point.y));
+    for (const step of lines.slice(1)) {
+      for (const path of step.guidePaths) {
+        for (const point of pointsOf(path.d)) {
+          expect(point.x).toBeGreaterThanOrEqual(headLeft - 1);
+          expect(point.y).toBeGreaterThanOrEqual(headTop - 1);
+        }
+      }
+    }
+
     expect(lesson.steps.at(-1)?.phase).toBe('color');
     const colours = lesson.steps.filter((step) => step.phase === 'color').map((step) => step.toolPreset.color);
     expect(colours.length).toBeGreaterThan(0);
@@ -135,6 +154,53 @@ describe('doodle step builder', () => {
     expect(reddest).toBe(true);
   });
 
+  it('keeps a pale subject\'s own colour instead of letting one bright patch stand for it', () => {
+    // A white plush under a brown head, photographed in a bright shop: the
+    // body matches the room's corners, and dropping it left brown for the
+    // whole animal.
+    const doodle = blank(240, 240);
+    ring(doodle, 120, 120, 90, 6);
+    const photo = blank(240, 240);
+    fillColour(photo, 0, 0, 240, 240, [238, 236, 230]);
+    fillColour(photo, 40, 40, 160, 80, [150, 92, 44]);
+    fillColour(photo, 40, 120, 160, 80, [245, 243, 240]);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    const colours = lesson.steps
+      .filter((step) => step.phase === 'color')
+      .map((step) => step.toolPreset.color);
+    expect(colours.length).toBeGreaterThanOrEqual(2);
+    const luma = (hex: string) => Number.parseInt(hex.slice(1, 3), 16) * 0.3
+      + Number.parseInt(hex.slice(3, 5), 16) * 0.59
+      + Number.parseInt(hex.slice(5, 7), 16) * 0.11;
+    expect(colours.some((colour) => luma(colour) > 200)).toBe(true);
+    expect(colours.some((colour) => luma(colour) < 160)).toBe(true);
+  });
+
+  it('gives each colour its own patch once there is more than one', () => {
+    const doodle = blank(240, 240);
+    ring(doodle, 120, 120, 90, 6);
+    const photo = blank(240, 240);
+    fillColour(photo, 0, 0, 240, 240, [238, 236, 230]);
+    fillColour(photo, 40, 40, 160, 80, [40, 70, 210]);
+    fillColour(photo, 40, 120, 160, 80, [210, 60, 50]);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    const outline = lesson.steps[0]?.guidePaths[0]?.d ?? '';
+    expect(lesson.colorRegions.length).toBeGreaterThanOrEqual(2);
+    // No colour takes the whole body when the subject is not one colour.
+    for (const region of lesson.colorRegions) {
+      expect(region.d).not.toBe(outline);
+      expect(region.d).toMatch(/A /);
+    }
+    // The patches sit apart, each over its own half.
+    const centres = lesson.colorRegions.map((region) => {
+      const first = /M (-?\d+) (-?\d+)/.exec(region.d);
+      return { x: Number(first?.[1] ?? 0), y: Number(first?.[2] ?? 0) };
+    });
+    expect(Math.abs((centres[0]?.y ?? 0) - (centres[1]?.y ?? 0))).toBeGreaterThan(40);
+  });
+
   it('refuses a blank page', () => {
     expect(() => buildDoodleLesson(blank(40, 40), blank(40, 40))).toThrow(/kosong/);
   });
@@ -191,4 +257,8 @@ function strokeLine(image: RgbaImage, x1: number, y1: number, x2: number, y2: nu
     const y = Math.round(y1 + ((y2 - y1) * i) / steps);
     fillRect(image, x - 1, y - 1, 3, 3);
   }
+}
+
+function pointsOf(d: string): Array<{ x: number; y: number }> {
+  return [...d.matchAll(/[ML] (-?\d+) (-?\d+)/g)].map(([, x, y]) => ({ x: Number(x), y: Number(y) }));
 }
