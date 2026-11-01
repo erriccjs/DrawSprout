@@ -25,6 +25,13 @@ export interface Messages {
   readonly traceUnlock: string;
   readonly traceScale: string;
   readonly traceInclude: string;
+  readonly doodlePhoto: string;
+  readonly doodleLead: string;
+  readonly doodleWorking: string;
+  readonly doodleFollow: string;
+  readonly doodleTrace: string;
+  readonly doodleBack: string;
+  readonly doodleFailed: string;
   readonly offlineReady: string;
   readonly updateLoading: string;
   readonly updateReady: string;
@@ -208,6 +215,13 @@ const id: Messages = {
   traceUnlock: 'Geser foto',
   traceScale: 'Ukuran foto',
   traceInclude: 'Simpan bersama foto',
+  doodlePhoto: 'Doodle dari foto',
+  doodleLead: 'Foto jadi langkah gambar. Kalau tidak bisa, pilih gambar lain.',
+  doodleWorking: 'Membuat doodle…',
+  doodleFollow: 'Ikuti langkahnya',
+  doodleTrace: 'Jiplak doodlenya',
+  doodleBack: 'Pilih gambar lain',
+  doodleFailed: 'Doodle tidak jadi. Pilih gambar dari daftar.',
   offlineReady: 'Bisa dibuka tanpa internet.',
   updateLoading: 'Memuat versi baru…',
   updateReady: 'Ada versi baru. Gambar yang sudah tersimpan tetap ada.',
@@ -391,6 +405,13 @@ const en: Messages = {
   traceUnlock: 'Move the photo',
   traceScale: 'Photo size',
   traceInclude: 'Save with the photo',
+  doodlePhoto: 'Doodle from a photo',
+  doodleLead: 'The photo becomes drawing steps. If it cannot, pick another picture.',
+  doodleWorking: 'Making the doodle…',
+  doodleFollow: 'Follow the steps',
+  doodleTrace: 'Trace the doodle',
+  doodleBack: 'Pick another picture',
+  doodleFailed: 'The doodle did not work. Pick a picture from the list.',
   offlineReady: 'Works without the internet.',
   updateLoading: 'Loading the new version…',
   updateReady: 'A new version is ready. Your saved pictures stay here.',

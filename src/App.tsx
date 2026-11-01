@@ -3,6 +3,7 @@ import type { ArtworkSurface } from './renderer/artwork-surface';
 import { getPlayableLesson } from './categories/library';
 import type { LessonPackage } from './lesson-data/schema';
 import { readPhotoBeta } from './photo/beta';
+import { DoodleFlow } from './doodle/DoodleFlow';
 import { fitPhoto } from './trace/placement';
 import { TRACE_LESSON } from './trace/lesson';
 import { TraceSetup } from './trace/TraceSetup';
@@ -75,6 +76,9 @@ export function App() {
   const [photoFlow, setPhotoFlow] = useState(false);
   const [traceDraft, setTraceDraft] = useState<{ image: HTMLImageElement; url: string; placement: TraceSession['placement'] } | null>(null);
   const [traceLive, setTraceLive] = useState<TraceSession | null>(null);
+  const [doodleOpen, setDoodleOpen] = useState(false);
+  const doodleLessonsRef = useRef<LessonPackage[]>([]);
+  const [doodleLessons, setDoodleLessons] = useState<LessonPackage[]>([]);
   const showTabletNotice = layout !== 'tablet' && !tabletNoticeDismissed;
 
   const dismissTabletHint = () => {
@@ -130,6 +134,8 @@ export function App() {
 
   const resolveLesson = (lessonId: string): LessonPackage => {
     if (lessonId === TRACE_LESSON.id) return TRACE_LESSON;
+    const doodle = doodleLessonsRef.current.find((lesson) => lesson.id === lessonId);
+    if (doodle) return doodle;
     const photo = photoLessonsRef.current.find((row) => row.lesson.id === lessonId);
     if (photo) return photo.lesson;
     return getPlayableLesson(lessonId);
@@ -401,6 +407,36 @@ export function App() {
           onCancel={() => setPhotoOpen(false)}
           onOpenLesson={startLesson}
         />
+      ) : doodleOpen ? (
+        <DoodleFlow
+          onCancel={() => setDoodleOpen(false)}
+          onFollow={(lesson) => {
+            doodleLessonsRef.current = [lesson, ...doodleLessonsRef.current.filter((item) => item.id !== lesson.id)];
+            setDoodleLessons(doodleLessonsRef.current);
+            setDoodleOpen(false);
+            startLesson(lesson, false);
+          }}
+          onTrace={(lesson, previewUrl) => {
+            const image = new Image();
+            image.onload = () => {
+              const space = lesson.coordinateSpace;
+              doodleLessonsRef.current = [lesson, ...doodleLessonsRef.current.filter((item) => item.id !== lesson.id)];
+              setDoodleLessons(doodleLessonsRef.current);
+              setTraceLive({
+                image,
+                url: previewUrl,
+                placement: fitPhoto(space.width, space.height, image.naturalWidth || image.width, image.naturalHeight || image.height),
+                opacity: 0.4,
+                visible: true,
+                locked: true,
+                includeInExport: false,
+              });
+              setDoodleOpen(false);
+              startLesson(lesson, false);
+            };
+            image.src = previewUrl;
+          }}
+        />
       ) : photoFlow ? (
         <PhotoFlow
           onCancel={() => setPhotoFlow(false)}
@@ -422,6 +458,7 @@ export function App() {
             onSelect={selectLesson}
             onPhoto={() => setPhotoOpen(true)}
             onTrace={chooseTrace}
+            onDoodle={() => setDoodleOpen(true)}
             notice={exitNotice}
             offlineReady={offlineReady}
             updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}
@@ -442,7 +479,7 @@ export function App() {
             store={bootstrap.store}
             actionsDisabled={updateGate.showPrompt && applyRequested}
             onOpen={openArtwork}
-            extraLessons={[TRACE_LESSON, ...photoLessons.map((row) => row.lesson)]}
+            extraLessons={[TRACE_LESSON, ...doodleLessons, ...photoLessons.map((row) => row.lesson)]}
           />
         </>
       )}

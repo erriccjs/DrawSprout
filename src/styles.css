@@ -845,6 +845,30 @@ html:has(.pad) body {
   margin-left: 8px;
 }
 
+.doodle-flow {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.doodle-flow__pick {
+  display: inline-flex;
+}
+
+.doodle-flow__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.doodle-flow .target-preview {
+  width: min(100%, 420px);
+  height: auto;
+  background: white;
+  border-radius: 16px;
+}
+
 .trace-setup {
   padding: 24px 16px 48px;
   max-width: 880px;

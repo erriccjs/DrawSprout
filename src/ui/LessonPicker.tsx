@@ -12,6 +12,7 @@ interface LessonPickerProps {
   readonly onSelect: (lessonId: string) => void;
   readonly onPhoto: () => void;
   readonly onTrace: (file: File) => void;
+  readonly onDoodle: () => void;
   readonly notice: string | null;
   /** True only after the worker has stored and checked the whole shell. */
   readonly offlineReady: boolean;
@@ -30,6 +31,7 @@ export function LessonPicker({
   onSelect,
   onPhoto,
   onTrace,
+  onDoodle,
   notice,
   offlineReady,
   updatePhase,
@@ -56,6 +58,9 @@ export function LessonPicker({
         </button>
         <button type="button" className="button" onClick={() => traceInput.current?.click()}>
           {t('tracePhoto')}
+        </button>
+        <button type="button" className="button" onClick={onDoodle}>
+          {t('doodlePhoto')}
         </button>
         <input
           ref={traceInput}

@@ -15,6 +15,8 @@ const SERVER_FILES = new Set([
   'categories/openai.ts',
   'categories/replicate.ts',
   'categories/classify.ts',
+  'doodle/api.ts',
+  'doodle/replicate.ts',
 ]);
 
 function walk(dir: string): string[] {

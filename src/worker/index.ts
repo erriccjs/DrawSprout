@@ -3,10 +3,10 @@
  *
  * `/api/*` is this script. Every other path, including `/sw.js`, is the assets
  * binding, so the single-page fallback and `_headers` stay on the asset layer.
- * Two routes live here. `/api/photo-lesson` is the generated-lesson spike.
- * `/api/photo-match` picks a hand-authored category lesson. Neither log stores
- * a photo: a finished cache entry is JSON, and a log line is status and
- * duration only.
+ * `/api/photo-lesson` is the generated-lesson spike. `/api/photo-match` picks
+ * a hand-authored category lesson. `/api/doodle` turns a photo into a line
+ * drawing. Logs store no photo: a finished cache entry is JSON, and a log
+ * line is status and duration only.
  */
 
 import { classifyMatch } from '../categories/classify';
@@ -15,6 +15,7 @@ import { handlePhotoLessonRequest, PHOTO_API_PATH, type JobCache } from '../phot
 import { openAiClients } from '../photo/openai';
 import { imageProvider, replicateApiKey } from '../photo/provider';
 import { replicateEditor } from '../photo/replicate';
+import { handleDoodleRequest, DOODLE_API_PATH } from '../doodle/api';
 import { durableRateGate, PaidRateLimit } from './rate-limit';
 import { json } from './shared/http';
 
@@ -34,6 +35,7 @@ type WorkerEnv = Env & {
 
 const photoCache: JobCache = { success: new Map(), inflight: new Map() };
 const matchCache = new Map<string, string>();
+const doodleCache = new Map<string, string>();
 
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
@@ -79,6 +81,17 @@ export default {
         status: response.status,
         ms: Date.now() - started,
       }));
+      return response;
+    }
+    if (url.pathname === DOODLE_API_PATH) {
+      const started = Date.now();
+      const apiKey = replicateApiKey(env);
+      const response = await handleDoodleRequest(request, {
+        rateGate: durableRateGate(env.PAID_RATE_LIMIT),
+        cache: doodleCache,
+        ...(apiKey ? { apiKey } : {}),
+      });
+      console.log(JSON.stringify({ route: 'doodle', status: response.status, ms: Date.now() - started }));
       return response;
     }
     if (url.pathname.startsWith('/api/')) {
