@@ -1,20 +1,49 @@
 /**
- * One doodle from black-forest-labs/flux-2-klein-4b.
- * The prompt and seed stay fixed. A 429 is retried once, then reported
- * so the child can pick a category lesson instead.
+ * One doodle from an image-editing model on Replicate.
+ *
+ * The default is flux-kontext-pro, the same editor the photo pipeline uses.
+ * It is asked to restyle the photo rather than to draw a new picture from it,
+ * which is what keeps the child's subject in its own pose. flux-2-klein-4b
+ * drew the subject again from scratch and lost it on any busy photo.
+ *
+ * The seed stays fixed. A 429 is retried once, then reported so the child can
+ * pick a category lesson instead.
  */
 
 import { bytesToBase64 } from '../photo/bytes';
 
-export const DOODLE_MODEL = 'black-forest-labs/flux-2-klein-4b';
+export const DOODLE_MODEL = 'black-forest-labs/flux-kontext-pro';
 export const DOODLE_SEED = 7;
+
+/**
+ * Positive only. A negative list backfires on kontext: naming a thing to leave
+ * out is enough to put it in the picture (D-70).
+ */
 export const DOODLE_PROMPT = [
-  'Turn this photo into a simple children\'s how-to-draw doodle of the main subject only:',
-  'thick bold black outlines on a pure white background, friendly and not chibi,',
-  'very few clean lines, no shading, no hatching, no texture strokes, no grey,',
-  'no color fill, no background, no ground.',
-  'Keep the subject\'s pose, proportions and key features recognisable.',
+  'Turn this photo into a simple children\'s how-to-draw doodle of the main subject.',
+  'Thick bold black outlines on a plain white background.',
+  'A few clean lines, flat and open, like a colouring book page waiting to be coloured.',
+  'Keep the subject\'s pose, proportions and features as they are in the photo.',
+  'Draw the main subject alone.',
 ].join(' ');
+
+/** Any owner/name id is allowed, so a run can compare models without a deploy. */
+export function doodleModelFor(configured: string | undefined): string {
+  const trimmed = configured?.trim();
+  if (trimmed && /^[\w.-]+\/[\w.-]+$/.test(trimmed)) return trimmed;
+  return DOODLE_MODEL;
+}
+
+/**
+ * Which key the model takes the photo under. The kontext editors take one
+ * image, the flux-2 line takes a list, and klein names that list `images`.
+ */
+export function doodleImageField(model: string): 'input_image' | 'input_images' | 'images' {
+  const name = model.split('/').pop() ?? model;
+  if (name.startsWith('flux-2-klein')) return 'images';
+  if (name.startsWith('flux-2')) return 'input_images';
+  return 'input_image';
+}
 
 const PREDICT_URL = 'https://api.replicate.com/v1/models';
 
@@ -31,15 +60,19 @@ export class DoodleUpstreamError extends Error {
 export async function doodleWithReplicate(input: {
   readonly apiKey: string;
   readonly jpeg: Uint8Array;
+  readonly model?: string;
   readonly signal?: AbortSignal;
   readonly fetch?: typeof fetch;
 }): Promise<Uint8Array> {
   const call = input.fetch ?? fetch;
   const signal = input.signal ?? AbortSignal.timeout(45_000);
+  const model = doodleModelFor(input.model);
+  const field = doodleImageField(model);
+  const dataUri = `data:image/jpeg;base64,${bytesToBase64(input.jpeg)}`;
   const body = {
     input: {
       prompt: DOODLE_PROMPT,
-      images: [`data:image/jpeg;base64,${bytesToBase64(input.jpeg)}`],
+      [field]: field === 'input_image' ? dataUri : [dataUri],
       output_format: 'png',
       // The doodle must land on the same frame as the photo: the colour step
       // reads the photo at the doodle's own coordinates. Quantising to 1:1,
@@ -49,7 +82,7 @@ export async function doodleWithReplicate(input: {
       seed: DOODLE_SEED,
     },
   };
-  let response = await call(`${PREDICT_URL}/${DOODLE_MODEL}/predictions`, {
+  let response = await call(`${PREDICT_URL}/${model}/predictions`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${input.apiKey}`,
@@ -61,7 +94,7 @@ export async function doodleWithReplicate(input: {
   });
   if (response.status === 429) {
     await wait(Math.min(8_000, retryAfter(response)), signal);
-    response = await call(`${PREDICT_URL}/${DOODLE_MODEL}/predictions`, {
+    response = await call(`${PREDICT_URL}/${model}/predictions`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${input.apiKey}`,
