@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "typecheck": "tsc -b",
-    "photo-eval": "tsx scripts/photo-eval/run.ts"
+    "photo-eval": "tsx scripts/photo-eval/run.ts",
+    "doodle-eval": "tsx scripts/doodle-eval/run.ts"
   },
   "engines": {
     "node": ">=22.12.0"

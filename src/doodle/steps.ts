@@ -27,10 +27,11 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   // The outline has to follow the subject. A convex hull turns every gap --
   // between two legs, under an arm, around an ear -- into one filled blob, so
   // the child is asked to draw a shadow instead of the thing in the photo.
-  const hull = tracedOutline(doodle, width, height) ?? convexHull(sampleInk(ink, width, bounds));
+  const traced = tracedContours(doodle, width, height);
+  const hull = traced?.outline ?? convexHull(sampleInk(ink, width, bounds));
   if (hull.length < 3) throw new Error('Doodle-nya terlalu kosong.');
 
-  const parts = groupStrokes(ink, width, height, bounds);
+  const parts = groupChains(traced?.interiors ?? [], bounds);
   const colours = subjectColours(width, height, photo, ink, hull);
 
   const shape = pathFrom(hull.map((point) => toSpace(point, bounds)), true);
@@ -61,9 +62,11 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   const regions = colours.map((colour, index) => ({
     id: `colour-${index + 1}`,
     label: 'Warna',
-    // Filling the whole silhouette with a near-black is what makes the page
-    // read as a shadow. A dark dominant colour gets a patch, not the body.
-    d: index === 0 && !isShadowHex(colour.hex)
+    // One colour means one subject to fill, and the body is the nicer shape
+    // to hand a child. Several colours means several places, so each gets the
+    // patch its own samples cover. A near-black never takes the body: that is
+    // what reads as a shadow.
+    d: index === 0 && colours.length === 1 && !isShadowHex(colour.hex)
       ? shape
       : `${ellipse(colour.x, colour.y, colour.rx, colour.ry)} Z`,
     suggestedColor: colour.hex,
@@ -178,17 +181,18 @@ function sampleInk(ink: Uint8Array, width: number, bounds: Bounds): Array<[numbe
 }
 
 /**
- * Outer contour of the drawing, in the downscaled mask's grid.
+ * The drawing's own contours, in the downscaled mask's grid.
  *
- * `traceInk` runs marching squares on the full-resolution doodle, so a notch
- * between two legs stays a notch. Returns null when the drawing is too thin or
+ * `traceInk` runs marching squares on the full-resolution doodle: the outer
+ * loop is the subject's real boundary, and the rest are the lines inside it --
+ * eyes, a nose, an ear's fold. Returns null when the drawing is too thin or
  * too broken for a closed loop, and the caller falls back to the hull.
  */
-function tracedOutline(
+function tracedContours(
   doodle: RgbaImage,
   width: number,
   height: number,
-): Array<[number, number]> | null {
+): { outline: Array<[number, number]>; interiors: Array<Array<[number, number]>> } | null {
   let contours;
   try {
     contours = traceInk(doodle);
@@ -196,20 +200,27 @@ function tracedOutline(
     return null;
   }
   const silhouette = contours.find((contour) => contour.silhouette === true)
-    ?? contours.filter((contour) => contour.closed)
+    ?? [...contours].filter((contour) => contour.closed)
       .sort((left, right) => right.points.length - left.points.length)[0];
   if (!silhouette || silhouette.points.length < 3) return null;
+  // A plain scale, so the points stay fractional until toSpace rounds them.
   const sx = width / Math.max(1, doodle.width);
   const sy = height / Math.max(1, doodle.height);
-  const mapped: Array<[number, number]> = [];
-  for (const point of silhouette.points) {
-    const x = Math.min(width - 1, Math.max(0, Math.round(point.x * sx)));
-    const y = Math.min(height - 1, Math.max(0, Math.round(point.y * sy)));
-    const last = mapped[mapped.length - 1];
-    if (last && last[0] === x && last[1] === y) continue;
-    mapped.push([x, y]);
-  }
-  return mapped.length >= 3 ? mapped : null;
+  const map = (contour: typeof silhouette): Array<[number, number]> =>
+    contour.points.map((point) => [point.x * sx, point.y * sy] as [number, number]);
+  const outline = map(silhouette);
+  if (outline.length < 3) return null;
+  // Only lines on the subject. A speck of background that survived the mask
+  // traces its own loop, and it is not a part of anything the child is drawing.
+  const interiors = contours
+    .filter((contour) => contour !== silhouette)
+    .map(map)
+    .filter((chain) => chain.length >= 3)
+    .filter((chain) => {
+      const centre = chainCentroid(chain);
+      return inside(centre.x, centre.y, outline);
+    });
+  return { outline, interiors };
 }
 
 /** A fill this dark on the whole body is a silhouette, not a colour. */
@@ -265,19 +276,20 @@ function downscaleMask(
   return { ink: out, width: nextWidth, height: nextHeight };
 }
 
-function groupStrokes(
-  ink: Uint8Array,
-  width: number,
-  height: number,
+/**
+ * A few parts, not twenty strokes. Nearby lines join one part, so a face
+ * becomes one step rather than an eye, an eye, a nose and a mouth.
+ */
+function groupChains(
+  chains: ReadonlyArray<Array<[number, number]>>,
   bounds: Bounds,
 ): Array<Array<Array<[number, number]>>> {
-  const chains = strokeChains(ink, width, height);
   const spans = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, 1);
   const anchors: Array<{ chains: Array<Array<[number, number]>>; weight: number; cx: number; cy: number }> = [];
   const ordered = [...chains].sort((a, b) => b.length - a.length);
   for (const chain of ordered) {
     const center = chainCentroid(chain);
-    const near = anchors.find((anchor) => Math.hypot(anchor.cx - center.x, anchor.cy - center.y) < spans * 0.22);
+    const near = anchors.find((anchor) => Math.hypot(anchor.cx - center.x, anchor.cy - center.y) < spans * 0.12);
     if (near) {
       near.chains.push(chain);
       near.weight += chain.length;
@@ -299,18 +311,6 @@ function groupStrokes(
   return anchors
     .sort((a, b) => b.weight - a.weight)
     .map((anchor) => anchor.chains);
-}
-
-/** Thin the ink, cut it at junctions, and keep each piece as its own stroke. */
-function strokeChains(ink: Uint8Array, width: number, height: number): Array<Array<[number, number]>> {
-  const skeleton = breakJunctions(thin(ink, width, height), width, height);
-  const segments = componentsOf(skeleton, width, height).filter((pixels) => pixels.length >= 6);
-  const chosen = segments.length >= 2
-    ? segments
-    : componentsOf(ink, width, height).filter((pixels) => pixels.length >= 12);
-  return chosen
-    .map((pixels) => traceComponent(pixels, width, height))
-    .filter((chain) => chain.length >= 2);
 }
 
 function chainCentroid(chain: readonly [number, number][]): { x: number; y: number } {
@@ -337,157 +337,6 @@ function chainsCentroid(chains: readonly (readonly [number, number][])[]): { x: 
   return { x: sx / count, y: sy / count };
 }
 
-/** Zhang-Suen thinning. The copy is 1 for ink and 0 for paper. */
-function thin(ink: Uint8Array, width: number, height: number): Uint8Array {
-  const image = ink.slice();
-  const remove: number[] = [];
-  for (let pass = 0; pass < 48; pass += 1) {
-    let changed = false;
-    for (const sub of [0, 1]) {
-      remove.length = 0;
-      for (let y = 1; y < height - 1; y += 1) {
-        for (let x = 1; x < width - 1; x += 1) {
-          const index = y * width + x;
-          if (image[index] !== 1) continue;
-          const n = ring(image, x, y, width);
-          const neighbours = n.reduce((sum, bit) => sum + bit, 0);
-          if (neighbours < 2 || neighbours > 6) continue;
-          if (transitions(n) !== 1) continue;
-          const p2 = n[0] ?? 0;
-          const p4 = n[2] ?? 0;
-          const p6 = n[4] ?? 0;
-          const p8 = n[6] ?? 0;
-          if (sub === 0) {
-            if (p2 * p4 * p6 !== 0) continue;
-            if (p4 * p6 * p8 !== 0) continue;
-          } else {
-            if (p2 * p4 * p8 !== 0) continue;
-            if (p2 * p6 * p8 !== 0) continue;
-          }
-          remove.push(index);
-        }
-      }
-      if (remove.length > 0) changed = true;
-      for (const index of remove) image[index] = 0;
-    }
-    if (!changed) break;
-  }
-  return image;
-}
-
-function ring(image: Uint8Array, x: number, y: number, width: number): number[] {
-  const at = (dx: number, dy: number) => image[(y + dy) * width + (x + dx)] === 1 ? 1 : 0;
-  return [at(0, -1), at(1, -1), at(1, 0), at(1, 1), at(0, 1), at(-1, 1), at(-1, 0), at(-1, -1)];
-}
-
-function transitions(neighbours: readonly number[]): number {
-  let count = 0;
-  for (let i = 0; i < neighbours.length; i += 1) {
-    if (neighbours[i] === 0 && neighbours[(i + 1) % neighbours.length] === 1) count += 1;
-  }
-  return count;
-}
-
-function breakJunctions(skeleton: Uint8Array, width: number, height: number): Uint8Array {
-  const out = skeleton.slice();
-  for (let y = 1; y < height - 1; y += 1) {
-    for (let x = 1; x < width - 1; x += 1) {
-      const index = y * width + x;
-      if (skeleton[index] !== 1) continue;
-      // A bend in a single line has two transitions. A real branch has three.
-      if (transitions(ring(skeleton, x, y, width)) >= 3) out[index] = 0;
-    }
-  }
-  return out;
-}
-
-function componentsOf(ink: Uint8Array, width: number, height: number): number[][] {
-  const seen = new Uint8Array(ink.length);
-  const found: number[][] = [];
-  const stack: number[] = [];
-  for (let start = 0; start < ink.length; start += 1) {
-    if (ink[start] !== 1 || seen[start]) continue;
-    stack.push(start);
-    seen[start] = 1;
-    const pixels: number[] = [];
-    while (stack.length > 0) {
-      const index = stack.pop() ?? 0;
-      pixels.push(index);
-      const x = index % width;
-      const y = (index - x) / width;
-      for (const [nx, ny] of neighbours(x, y, width, height)) {
-        const next = ny * width + nx;
-        if (ink[next] === 1 && !seen[next]) {
-          seen[next] = 1;
-          stack.push(next);
-        }
-      }
-    }
-    found.push(pixels);
-  }
-  return found;
-}
-
-function traceComponent(pixels: readonly number[], width: number, height: number): Array<[number, number]> {
-  const set = new Set(pixels);
-  let start = pixels[0] ?? 0;
-  for (const index of pixels) if (index < start) start = index;
-  const path: Array<[number, number]> = [];
-  let current = start;
-  let guard = 0;
-  const seen = new Set<number>();
-  while (guard < pixels.length && !seen.has(current)) {
-    seen.add(current);
-    const x = current % width;
-    const y = (current - x) / width;
-    path.push([x, y]);
-    let next = -1;
-    for (const [nx, ny] of neighbours(x, y, width, height)) {
-      const index = ny * width + nx;
-      if (set.has(index) && !seen.has(index)) {
-        next = index;
-        break;
-      }
-    }
-    if (next < 0) break;
-    current = next;
-    guard += 1;
-  }
-  return simplify(path, 2.2);
-}
-
-function simplify(points: Array<[number, number]>, epsilon: number): Array<[number, number]> {
-  if (points.length < 4) return points;
-  const keep = new Array<boolean>(points.length).fill(false);
-  keep[0] = true;
-  keep[points.length - 1] = true;
-  const stack: Array<[number, number]> = [[0, points.length - 1]];
-  while (stack.length > 0) {
-    const [start, end] = stack.pop() ?? [0, 0];
-    let far = 0;
-    let index = -1;
-    for (let i = start + 1; i < end; i += 1) {
-      const distance = pointLine(points[i]!, points[start]!, points[end]!);
-      if (distance > far) {
-        far = distance;
-        index = i;
-      }
-    }
-    if (index >= 0 && far > epsilon) {
-      keep[index] = true;
-      stack.push([start, index], [index, end]);
-    }
-  }
-  return points.filter((_, index) => keep[index]);
-}
-
-function pointLine(point: [number, number], start: [number, number], end: [number, number]): number {
-  const dx = end[0] - start[0];
-  const dy = end[1] - start[1];
-  const length = Math.hypot(dx, dy) || 1;
-  return Math.abs((point[0] - start[0]) * dy - (point[1] - start[1]) * dx) / length;
-}
-
 interface SubjectColour {
   readonly hex: string;
   readonly x: number;
@@ -511,15 +360,24 @@ function subjectColours(
       if (ink[y * width + x] === 1) continue;
       if (!inside(x, y, hull)) continue;
       const colour = sample(x, y);
-      if (!colour || isPage(colour)) continue;
+      if (!colour) continue;
       samples.push({ ...colour, x, y });
     }
   }
   const corners = cornerColours(photo);
-  const interior = samples.filter((sample) => !nearCorner(sample, corners));
-  const pool = interior.length >= 12 ? interior : samples;
-  const usable = pool.filter((sample) => saturation(sample) >= 0.18);
-  const chosen = (usable.length >= 12 ? usable : pool).slice(0, 4000);
+  // Samples come from inside the traced outline, so background that leaks in
+  // is a thin margin. A colour matching the photo's corners across more than
+  // a third of the subject is therefore the subject -- a white plush in a
+  // bright shop, a grey cat on a pale floor -- and not the room behind it.
+  const matching = samples.filter((sample) => nearCorner(sample, corners)).length;
+  const interior = matching < samples.length * 0.35
+    ? samples.filter((sample) => !nearCorner(sample, corners))
+    : samples;
+  // No saturation bar. A white plush, a white shirt, a grey cat: dropping
+  // every pale sample left the subject with only its one bright patch, and
+  // that colour then stood for the whole body. kidHex still maps a pale or
+  // dark cluster onto the children's palette.
+  const chosen = (interior.length >= 12 ? interior : samples).slice(0, 4000);
   if (chosen.length === 0) {
     return [{ hex: '#f0c43a', x: 500, y: 375, rx: 80, ry: 60 }];
   }
@@ -527,14 +385,17 @@ function subjectColours(
   const total = clustered.reduce((sum, center) => sum + center.n, 0) || 1;
   const centers = distinctColours(clustered.filter((center, index) => index === 0 || center.n >= total * 0.12));
   const bounds = boundsOf(ink, width, height);
-  return centers.slice(0, 4).map((center, index) => {
+  const scale = spaceScale(bounds);
+  return centers.slice(0, 4).map((center) => {
     const at = toSpace([center.x, center.y], bounds);
+    // The patch covers where that colour sits. A fixed ellipse floated over
+    // the middle of the drawing whatever the colour belonged to.
     return {
       hex: kidHex(center),
-      x: index === 0 ? 500 : at.x,
-      y: index === 0 ? 375 : at.y,
-      rx: index === 0 ? 80 : 46,
-      ry: index === 0 ? 60 : 36,
+      x: at.x,
+      y: at.y,
+      rx: patchRadius(center.sx, scale),
+      ry: patchRadius(center.sy, scale),
     };
   });
 }
@@ -565,6 +426,18 @@ export function photoSampler(
   );
 }
 
+/** Mask pixels to lesson-space units: the same scale `toSpace` applies. */
+function spaceScale(bounds: Bounds): number {
+  const width = Math.max(1, bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.maxY - bounds.minY);
+  return Math.min((SPACE_W - 80) / width, (SPACE_H - 80) / height);
+}
+
+/** Wide enough to be worth filling, never so wide it swallows the drawing. */
+function patchRadius(spread: number, scale: number): number {
+  return Math.round(Math.min(220, Math.max(30, spread * 1.5 * scale)));
+}
+
 function cornerColours(photo: RgbaImage): Array<{ r: number; g: number; b: number }> {
   return [[0.04, 0.04], [0.96, 0.04], [0.04, 0.96], [0.96, 0.96]]
     .map(([u, v]) => pixel(photo, u ?? 0, v ?? 0))
@@ -578,11 +451,6 @@ function nearCorner(
   return corners.some((corner) => (
     (corner.r - colour.r) ** 2 + (corner.g - colour.g) ** 2 + (corner.b - colour.b) ** 2 < 35 * 35
   ));
-}
-
-function isPage(colour: { r: number; g: number; b: number }): boolean {
-  const luma = (colour.r * 30 + colour.g * 59 + colour.b * 11) / 100;
-  return luma > 235 || (saturation(colour) < 0.08 && luma > 170);
 }
 
 function saturation(colour: { r: number; g: number; b: number }): number {
@@ -625,10 +493,8 @@ function kidHex(colour: { r: number; g: number; b: number }): string {
   return hex(best[0], best[1], best[2]);
 }
 
-function distinctColours(
-  centers: Array<{ r: number; g: number; b: number; x: number; y: number; n: number }>,
-): Array<{ r: number; g: number; b: number; x: number; y: number; n: number }> {
-  const kept: typeof centers = [];
+function distinctColours<T extends { r: number; g: number; b: number }>(centers: T[]): T[] {
+  const kept: T[] = [];
   for (const center of centers) {
     const similar = kept.find((other) => (
       (other.r - center.r) ** 2 + (other.g - center.g) ** 2 + (other.b - center.b) ** 2 < 45 * 45
@@ -641,7 +507,7 @@ function distinctColours(
 function kMeans(
   samples: Array<{ r: number; g: number; b: number; x: number; y: number }>,
   k: number,
-): Array<{ r: number; g: number; b: number; x: number; y: number; n: number }> {
+): Array<{ r: number; g: number; b: number; x: number; y: number; n: number; sx: number; sy: number }> {
   const centers = samples.filter((_, index) => index % Math.max(1, Math.floor(samples.length / k)) === 0).slice(0, k);
   let groups = centers.map(() => [] as typeof samples);
   for (let pass = 0; pass < 6; pass += 1) {
@@ -677,9 +543,28 @@ function kMeans(
     });
   }
   return centers
-    .map((center, index) => ({ ...center, n: groups[index]?.length ?? 0 }))
+    .map((center, index) => ({ ...center, ...spreadOf(groups[index] ?? [], center) }))
     .filter((center) => center.n > 0)
     .sort((a, b) => b.n - a.n);
+}
+
+/** How far that colour reaches across the drawing, as a standard deviation. */
+function spreadOf(
+  group: ReadonlyArray<{ x: number; y: number }>,
+  center: { x: number; y: number },
+): { n: number; sx: number; sy: number } {
+  if (group.length === 0) return { n: 0, sx: 0, sy: 0 };
+  let dx = 0;
+  let dy = 0;
+  for (const sample of group) {
+    dx += (sample.x - center.x) ** 2;
+    dy += (sample.y - center.y) ** 2;
+  }
+  return {
+    n: group.length,
+    sx: Math.sqrt(dx / group.length),
+    sy: Math.sqrt(dy / group.length),
+  };
 }
 
 function inside(x: number, y: number, hull: Array<[number, number]>): boolean {
