@@ -72,8 +72,6 @@ export async function handleDoodleRequest(request: Request, deps: DoodleApiDeps)
     const png = await (deps.draw ?? doodleWithReplicate)({
       apiKey: deps.apiKey,
       jpeg,
-      width: size.width,
-      height: size.height,
       signal: AbortSignal.timeout(50_000),
     });
     const body = { png: bytesToBase64(png) };

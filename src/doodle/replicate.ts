@@ -31,8 +31,6 @@ export class DoodleUpstreamError extends Error {
 export async function doodleWithReplicate(input: {
   readonly apiKey: string;
   readonly jpeg: Uint8Array;
-  readonly width: number;
-  readonly height: number;
   readonly signal?: AbortSignal;
   readonly fetch?: typeof fetch;
 }): Promise<Uint8Array> {
@@ -43,7 +41,11 @@ export async function doodleWithReplicate(input: {
       prompt: DOODLE_PROMPT,
       images: [`data:image/jpeg;base64,${bytesToBase64(input.jpeg)}`],
       output_format: 'png',
-      aspect_ratio: aspectRatio(input.width, input.height),
+      // The doodle must land on the same frame as the photo: the colour step
+      // reads the photo at the doodle's own coordinates. Quantising to 1:1,
+      // 4:3 or 3:4 re-framed the subject and the colours came off the
+      // background.
+      aspect_ratio: 'match_input_image',
       seed: DOODLE_SEED,
     },
   };
@@ -94,12 +96,6 @@ export async function doodleWithReplicate(input: {
   const bytes = new Uint8Array(await image.arrayBuffer());
   if (bytes[0] !== 137) throw new DoodleUpstreamError('failed', 502);
   return bytes;
-}
-
-function aspectRatio(width: number, height: number): string {
-  const ratio = width / Math.max(1, height);
-  if (Math.abs(ratio - 1) < 0.15) return '1:1';
-  return ratio > 1 ? '4:3' : '3:4';
 }
 
 function retryAfter(response: Response): number {

@@ -505,11 +505,12 @@ function subjectColours(
 ): SubjectColour[] {
   const samples: Array<{ r: number; g: number; b: number; x: number; y: number }> = [];
   const step = Math.max(1, Math.floor(Math.max(width, height) / 80));
+  const sample = photoSampler(width, height, photo);
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
       if (ink[y * width + x] === 1) continue;
       if (!inside(x, y, hull)) continue;
-      const colour = pixel(photo, x / width, y / height);
+      const colour = sample(x, y);
       if (!colour || isPage(colour)) continue;
       samples.push({ ...colour, x, y });
     }
@@ -536,6 +537,32 @@ function subjectColours(
       ry: index === 0 ? 60 : 36,
     };
   });
+}
+
+/**
+ * Doodle coordinate to photo coordinate.
+ *
+ * The doodle is asked for the photo's own aspect ratio, but a generator
+ * rounds its canvas, so the two frames can still differ a little. Reading the
+ * photo at the doodle's raw coordinates then walks off the subject and picks
+ * the colour of whatever is beside it. The shared area is centred, so the
+ * longer relative axis is scaled about the middle instead of stretched.
+ */
+export function photoSampler(
+  width: number,
+  height: number,
+  photo: RgbaImage,
+): (x: number, y: number) => { r: number; g: number; b: number } | null {
+  const doodleRatio = width / Math.max(1, height);
+  const photoRatio = photo.width / Math.max(1, photo.height);
+  const wider = photoRatio > doodleRatio;
+  const sx = wider ? doodleRatio / photoRatio : 1;
+  const sy = wider ? 1 : photoRatio / doodleRatio;
+  return (x, y) => pixel(
+    photo,
+    0.5 + (x / width - 0.5) * sx,
+    0.5 + (y / height - 0.5) * sy,
+  );
 }
 
 function cornerColours(photo: RgbaImage): Array<{ r: number; g: number; b: number }> {

@@ -13,6 +13,7 @@ describe('flux klein doodle', () => {
         expect(href).toContain(DOODLE_MODEL);
         expect(body).toContain(DOODLE_PROMPT.slice(0, 24));
         expect(body).toContain(`"seed":${DOODLE_SEED}`);
+        expect(body).toContain('"aspect_ratio":"match_input_image"');
         expect(body).not.toContain('secret-key');
         expect(new Headers(init?.headers).get('authorization')).toBe('Bearer secret-key');
         return Promise.resolve(new Response(JSON.stringify({
@@ -24,8 +25,6 @@ describe('flux klein doodle', () => {
     const result = await doodleWithReplicate({
       apiKey: 'secret-key',
       jpeg,
-      width: 64,
-      height: 48,
       fetch: fetchMock,
     });
     expect(result[0]).toBe(137);
@@ -43,8 +42,6 @@ describe('flux klein doodle', () => {
     await expect(doodleWithReplicate({
       apiKey: 'secret-key',
       jpeg,
-      width: 8,
-      height: 8,
       fetch: fetchMock,
     })).rejects.toBeInstanceOf(DoodleUpstreamError);
     expect(calls).toBe(2);
