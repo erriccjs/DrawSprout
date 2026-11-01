@@ -259,8 +259,10 @@ npm run doodle-eval -- <line-art.png> [photo.png]
 ```
 
 It prints the steps and writes `<line-art>-steps.svg` beside the input: the
-drawing on the left, and on the right every guide path coloured by step over
-the colour patches. Any line drawing works as input.
+drawing on the left, and on the right every guide path coloured by step, drawn
+over the same picture at the same `fitPhoto` placement the trace layer uses
+(D-86). A guide that does not sit on the drawing there will not sit on it in
+the app. Any line drawing works as input.
 A photo makes a faithful simplified line drawing, then a flat colouring of
 that drawing at `quality=low`, then up to eight low-quality erases that remove
 one planned part at a time (D-74, D-75, D-76, D-77, D-78, D-79, D-80). The line

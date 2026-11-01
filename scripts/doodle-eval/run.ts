@@ -14,6 +14,7 @@ import { basename, dirname, join } from 'node:path';
 import { buildDoodleLesson } from '../../src/doodle/steps';
 import { decodePng } from '../../src/photo/png';
 import type { LessonPackage } from '../../src/lesson-data/schema';
+import { fitPhoto } from '../../src/trace/placement';
 
 const STEP_COLOURS = ['#d62828', '#0b6e4f', '#1d4ed8', '#b45309', '#7c3aed', '#be185d'];
 
@@ -33,7 +34,7 @@ async function main(): Promise<void> {
   const lesson = buildDoodleLesson(art, photo);
   report(lesson);
   const out = join(dirname(artPath), `${basename(artPath).replace(/\.png$/i, '')}-steps.svg`);
-  await writeFile(out, svg(lesson, artBytes), 'utf8');
+  await writeFile(out, svg(lesson, artBytes, art), 'utf8');
   console.log(`\nwrote ${out}`);
 }
 
@@ -59,7 +60,7 @@ function countPoints(d: string): number {
   return (d.match(/[ML]/g) ?? []).length;
 }
 
-function svg(lesson: LessonPackage, artBytes: Uint8Array): string {
+function svg(lesson: LessonPackage, artBytes: Uint8Array, art: { width: number; height: number }): string {
   const { width, height } = lesson.coordinateSpace;
   const outline = lesson.steps.filter((step) => step.phase !== 'color');
   const guides = outline.flatMap((step, index) => step.guidePaths.map((path) => (
@@ -67,24 +68,30 @@ function svg(lesson: LessonPackage, artBytes: Uint8Array): string {
     + ` stroke-width="${index === 0 ? 5 : 3}" stroke-linecap="round" stroke-linejoin="round" />`
   )));
   const regions = lesson.colorRegions.map((region) => (
-    `<path d="${region.d}" fill="${region.suggestedColor}" fill-opacity="0.55" stroke="none" />`
+    `<path d="${region.d}" fill="${region.suggestedColor}" fill-opacity="0.5" stroke="none" />`
   ));
   const key = outline.map((step, index) => (
     `<text x="12" y="${22 + index * 20}" font-size="15" fill="${STEP_COLOURS[index % STEP_COLOURS.length]}">`
     + `${step.id} (${step.guidePaths.length})</text>`
   )).join('');
+  // The same placement the trace layer uses, so a guide that does not sit on
+  // the drawing is a guide that will not sit on it in the app either.
+  const place = fitPhoto(width, height, art.width, art.height);
+  const picture = `<image href="data:image/png;base64,${Buffer.from(artBytes).toString('base64')}"`
+    + ` x="${place.x}" y="${place.y}" width="${place.width}" height="${place.height}" />`;
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width * 2}" height="${height}" viewBox="0 0 ${width * 2} ${height}">`,
     `<rect width="100%" height="100%" fill="#ffffff" />`,
-    `<image href="data:image/png;base64,${Buffer.from(artBytes).toString('base64')}" x="0" y="0" width="${width}" height="${height}"`,
-    ` preserveAspectRatio="xMidYMid meet" />`,
-    `<text x="12" y="${height - 12}" font-size="15" fill="#555">drawing</text>`,
+    `<rect width="${width}" height="${height}" fill="#fcfcfc" stroke="#ddd" />`,
+    picture,
+    `<text x="12" y="${height - 12}" font-size="15" fill="#555">drawing, placed by fitPhoto</text>`,
     `<g transform="translate(${width} 0)">`,
     `<rect width="${width}" height="${height}" fill="#fcfcfc" stroke="#ddd" />`,
+    `<g opacity="0.35">${picture}</g>`,
     regions.join(''),
     guides.join(''),
     key,
-    `<text x="12" y="${height - 12}" font-size="15" fill="#555">what the child is asked to draw</text>`,
+    `<text x="12" y="${height - 12}" font-size="15" fill="#555">guides over the same placement</text>`,
     `</g></svg>`,
   ].join('');
 }

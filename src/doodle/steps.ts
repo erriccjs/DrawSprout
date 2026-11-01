@@ -10,6 +10,7 @@
 import { packageLesson } from '../categories/author';
 import { ellipse } from '../categories/shapes';
 import type { GuidePath, LessonPackage, LessonStep } from '../lesson-data/schema';
+import { fitPhoto, type TracePlacement } from '../trace/placement';
 import type { RgbaImage } from '../photo/png';
 import { traceInk } from '../photo/trace';
 
@@ -24,6 +25,9 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   const count = ink.reduce((sum, bit) => sum + bit, 0);
   if (count < 40) throw new Error('Doodle-nya terlalu kosong.');
   const bounds = boundsOf(ink, width, height);
+  // The guides and the traced picture share one placement, so they cannot drift.
+  const frame = fitPhoto(SPACE_W, SPACE_H, width, height);
+  const scale = frame.width / Math.max(1, width);
   // The outline has to follow the subject. A convex hull turns every gap --
   // between two legs, under an arm, around an ear -- into one filled blob, so
   // the child is asked to draw a shadow instead of the thing in the photo.
@@ -32,9 +36,9 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   if (hull.length < 3) throw new Error('Doodle-nya terlalu kosong.');
 
   const parts = groupChains(traced?.interiors ?? [], bounds);
-  const colours = subjectColours(width, height, photo, ink, hull);
+  const colours = subjectColours(width, height, photo, ink, hull, frame, scale);
 
-  const shape = pathFrom(hull.map((point) => toSpace(point, bounds)), true);
+  const shape = pathFrom(hull.map((point) => toSpace(point, frame, scale)), true);
   const guides: GuidePath[] = [{ id: 'shape', d: shape, role: 'final-outline' }];
   const steps: LessonStep[] = [
     outlineStep('shape', 'Gambar bentuk besarnya.', 'Mulai dari bentuk yang paling besar.', guides),
@@ -42,7 +46,7 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   parts.forEach((part, index) => {
     const guidePaths: GuidePath[] = [];
     part.forEach((chain, chainIndex) => {
-      const d = pathFrom(chain.map((point) => toSpace(point, bounds)), false);
+      const d = pathFrom(chain.map((point) => toSpace(point, frame, scale)), false);
       if (d.length < 8) return;
       guidePaths.push({
         id: `part-${index + 1}-${chainIndex + 1}`,
@@ -351,6 +355,8 @@ function subjectColours(
   photo: RgbaImage,
   ink: Uint8Array,
   hull: Array<[number, number]>,
+  frame: TracePlacement,
+  scale: number,
 ): SubjectColour[] {
   const samples: Array<{ r: number; g: number; b: number; x: number; y: number }> = [];
   const step = Math.max(1, Math.floor(Math.max(width, height) / 80));
@@ -384,10 +390,8 @@ function subjectColours(
   const clustered = kMeans(chosen, Math.min(4, Math.max(1, Math.floor(chosen.length / 30))));
   const total = clustered.reduce((sum, center) => sum + center.n, 0) || 1;
   const centers = distinctColours(clustered.filter((center, index) => index === 0 || center.n >= total * 0.12));
-  const bounds = boundsOf(ink, width, height);
-  const scale = spaceScale(bounds);
   return centers.slice(0, 4).map((center) => {
-    const at = toSpace([center.x, center.y], bounds);
+    const at = toSpace([center.x, center.y], frame, scale);
     // The patch covers where that colour sits. A fixed ellipse floated over
     // the middle of the drawing whatever the colour belonged to.
     return {
@@ -426,12 +430,6 @@ export function photoSampler(
   );
 }
 
-/** Mask pixels to lesson-space units: the same scale `toSpace` applies. */
-function spaceScale(bounds: Bounds): number {
-  const width = Math.max(1, bounds.maxX - bounds.minX);
-  const height = Math.max(1, bounds.maxY - bounds.minY);
-  return Math.min((SPACE_W - 80) / width, (SPACE_H - 80) / height);
-}
 
 /** Wide enough to be worth filling, never so wide it swallows the drawing. */
 function patchRadius(spread: number, scale: number): number {
@@ -590,17 +588,18 @@ function pixel(image: RgbaImage, u: number, v: number): { r: number; g: number; 
   };
 }
 
-function toSpace(point: [number, number], bounds: Bounds): { x: number; y: number } {
-  const width = Math.max(1, bounds.maxX - bounds.minX);
-  const height = Math.max(1, bounds.maxY - bounds.minY);
-  const scale = Math.min((SPACE_W - 80) / width, (SPACE_H - 80) / height);
-  const drawnW = width * scale;
-  const drawnH = height * scale;
-  const ox = (SPACE_W - drawnW) / 2;
-  const oy = (SPACE_H - drawnH) / 2;
+/**
+ * Drawing pixel to lesson space.
+ *
+ * `fitPhoto` is what puts the doodle on the paper when the child traces, so
+ * the guides have to use that same placement. Fitting the ink's bounding box
+ * instead magnified every guide by the drawing's own margin, and the outline
+ * came out larger than the picture under it.
+ */
+function toSpace(point: [number, number], frame: TracePlacement, scale: number): { x: number; y: number } {
   return {
-    x: Math.round(ox + (point[0] - bounds.minX) * scale),
-    y: Math.round(oy + (point[1] - bounds.minY) * scale),
+    x: Math.round(frame.x + point[0] * scale),
+    y: Math.round(frame.y + point[1] * scale),
   };
 }
 
