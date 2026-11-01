@@ -63,7 +63,11 @@ export async function handlePhotoMatch(request: Request, deps: PhotoMatchDeps): 
   if (!sameOrigin(request)) return json({ error: 'Foto tidak dapat dipakai. Pilih gambar lain.', code: 'bad_request' }, 403);
   const now = deps.now ?? Date.now;
   const gate = rateGateFrom(deps);
-  if (!await gate.allow(clientKey(request), now())) {
+  const verdict = await gate.allow(clientKey(request), now());
+  if (!verdict.allowed) {
+    if (verdict.reason === 'unavailable') {
+      return json({ error: 'Server foto belum siap. Coba lagi nanti.', code: 'unavailable' }, 503);
+    }
     return json({ error: 'Terlalu banyak foto. Coba lagi nanti ya.', code: 'rate' }, 429);
   }
 

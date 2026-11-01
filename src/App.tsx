@@ -3,10 +3,13 @@ import type { ArtworkSurface } from './renderer/artwork-surface';
 import { getPlayableLesson } from './categories/library';
 import type { LessonPackage } from './lesson-data/schema';
 import { readPhotoBeta } from './photo/beta';
+import { DoodleFlow } from './doodle/DoodleFlow';
 import { fitPhoto } from './trace/placement';
 import { TRACE_LESSON } from './trace/lesson';
 import { TraceSetup } from './trace/TraceSetup';
 import type { TraceSession } from './trace/types';
+import type { DoodleLessonRecord } from './persistence/doodle-lesson-store';
+import { IndexedDbDoodleLessonStore } from './persistence/doodle-lesson-store';
 import type { PhotoLessonRecord } from './persistence/photo-lesson-store';
 import { IndexedDbPhotoLessonStore } from './persistence/photo-lesson-store';
 import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
@@ -22,7 +25,6 @@ import { requestDocumentFullscreen } from './ui/fullscreen';
 import { RESUME_NOTICE } from './ui/resume-notice';
 import { LessonPicker } from './ui/LessonPicker';
 import { PhotoFlow } from './ui/PhotoFlow';
-import { PhotoMatch } from './ui/PhotoMatch';
 import { TabletNotice } from './ui/TabletNotice';
 import { newId } from './ui/ids';
 import { dismissTabletNotice, isTabletNoticeDismissed } from './ui/tablet-notice';
@@ -67,7 +69,6 @@ export function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [saveInFlight, setSaveInFlight] = useState(false);
   const [tabletNoticeDismissed, setTabletNoticeDismissed] = useState(isTabletNoticeDismissed);
-  const [photoOpen, setPhotoOpen] = useState(false);
   const [photoBeta] = useState(() => readPhotoBeta());
   const photoStoreRef = useRef<IndexedDbPhotoLessonStore | null>(null);
   const photoLessonsRef = useRef<readonly PhotoLessonRecord[]>([]);
@@ -75,6 +76,10 @@ export function App() {
   const [photoFlow, setPhotoFlow] = useState(false);
   const [traceDraft, setTraceDraft] = useState<{ image: HTMLImageElement; url: string; placement: TraceSession['placement'] } | null>(null);
   const [traceLive, setTraceLive] = useState<TraceSession | null>(null);
+  const [doodleOpen, setDoodleOpen] = useState(false);
+  const doodleStoreRef = useRef<IndexedDbDoodleLessonStore | null>(null);
+  const doodleRecordsRef = useRef<DoodleLessonRecord[]>([]);
+  const [doodleLessons, setDoodleLessons] = useState<LessonPackage[]>([]);
   const showTabletNotice = layout !== 'tablet' && !tabletNoticeDismissed;
 
   const dismissTabletHint = () => {
@@ -111,6 +116,22 @@ export function App() {
     };
   }, [photoBeta]);
 
+  useEffect(() => {
+    const store = new IndexedDbDoodleLessonStore();
+    doodleStoreRef.current = store;
+    let cancelled = false;
+    void store.list().then((rows) => {
+      if (cancelled) return;
+      doodleRecordsRef.current = [...rows];
+      setDoodleLessons(rows.map((row) => row.lesson));
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      store.close();
+      if (doodleStoreRef.current === store) doodleStoreRef.current = null;
+    };
+  }, []);
+
   if (bootstrap.status === 'loading') {
     return (
       <main className="shell shell--centered" data-layout={layout}>
@@ -128,8 +149,17 @@ export function App() {
     );
   }
 
+  const rememberDoodle = (lesson: LessonPackage, png: Uint8Array, traced: boolean) => {
+    const record: DoodleLessonRecord = { id: lesson.id, createdAt: Date.now(), lesson, png, traced };
+    doodleRecordsRef.current = [record, ...doodleRecordsRef.current.filter((row) => row.id !== lesson.id)];
+    setDoodleLessons(doodleRecordsRef.current.map((row) => row.lesson));
+    void doodleStoreRef.current?.put(record).catch(() => undefined);
+  };
+
   const resolveLesson = (lessonId: string): LessonPackage => {
     if (lessonId === TRACE_LESSON.id) return TRACE_LESSON;
+    const doodle = doodleRecordsRef.current.find((row) => row.lesson.id === lessonId);
+    if (doodle) return doodle.lesson;
     const photo = photoLessonsRef.current.find((row) => row.lesson.id === lessonId);
     if (photo) return photo.lesson;
     return getPlayableLesson(lessonId);
@@ -174,7 +204,6 @@ export function App() {
     // that line (D-57). A photo match calls this from the button that accepts
     // the lesson, which is still that gesture.
     requestDocumentFullscreen();
-    setPhotoOpen(false);
     setPhotoFlow(false);
     setUpdateDismissed(false);
     const selection = ++selectionRef.current;
@@ -264,7 +293,7 @@ export function App() {
     handoffRef.current = null;
     setExitNotice(null);
 
-    void bootstrap.store.loadSession(sessionId).then((restored) => {
+    void bootstrap.store.loadSession(sessionId).then(async (restored) => {
       if (selectionRef.current !== selection) return;
       if (!restored) {
         setExitNotice('Karya itu tidak dapat dibuka.');
@@ -274,8 +303,32 @@ export function App() {
       try {
         lesson = resolveLesson(restored.checkpoint.lessonId);
       } catch {
-        setExitNotice('Pelajaran untuk karya ini sudah tidak ada.');
-        return;
+        const loaded = await doodleStoreRef.current?.list().catch(() => [] as readonly DoodleLessonRecord[]);
+        if (loaded && loaded.length > 0) {
+          doodleRecordsRef.current = [...loaded];
+          setDoodleLessons(loaded.map((row) => row.lesson));
+        }
+        try {
+          lesson = resolveLesson(restored.checkpoint.lessonId);
+        } catch {
+          setExitNotice('Pelajaran untuk karya ini sudah tidak ada.');
+          return;
+        }
+      }
+      if (selectionRef.current !== selection) return;
+      releaseTrace();
+      const doodle = doodleRecordsRef.current.find((row) => row.id === lesson.id && row.traced);
+      if (doodle) {
+        try {
+          const overlay = await doodleOverlay(doodle.lesson, doodle.png);
+          if (selectionRef.current !== selection) {
+            URL.revokeObjectURL(overlay.url);
+            return;
+          }
+          setTraceLive(overlay);
+        } catch {
+          /* The steps still open when the line drawing cannot be shown. */
+        }
       }
       if (restored.checkpoint.lessonContentVersion !== lesson.contentVersion) {
         setOpenLesson({
@@ -396,10 +449,34 @@ export function App() {
           }}
           onCancel={releaseTrace}
         />
-      ) : photoOpen ? (
-        <PhotoMatch
-          onCancel={() => setPhotoOpen(false)}
-          onOpenLesson={startLesson}
+      ) : doodleOpen ? (
+        <DoodleFlow
+          onCancel={() => setDoodleOpen(false)}
+          onFollow={(lesson, png) => {
+            rememberDoodle(lesson, png, false);
+            setDoodleOpen(false);
+            startLesson(lesson, false);
+          }}
+          onTrace={(lesson, previewUrl, png) => {
+            rememberDoodle(lesson, png, true);
+            const image = new Image();
+            image.onload = () => {
+              const space = lesson.coordinateSpace;
+              setTraceLive({
+                image,
+                url: previewUrl,
+                placement: fitPhoto(space.width, space.height, image.naturalWidth || image.width, image.naturalHeight || image.height),
+                opacity: 0.4,
+                visible: true,
+                locked: true,
+                includeInExport: false,
+                source: 'doodle',
+              });
+              setDoodleOpen(false);
+              startLesson(lesson, false);
+            };
+            image.src = previewUrl;
+          }}
         />
       ) : photoFlow ? (
         <PhotoFlow
@@ -420,8 +497,8 @@ export function App() {
         <>
           <LessonPicker
             onSelect={selectLesson}
-            onPhoto={() => setPhotoOpen(true)}
             onTrace={chooseTrace}
+            onDoodle={() => setDoodleOpen(true)}
             notice={exitNotice}
             offlineReady={offlineReady}
             updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}
@@ -442,7 +519,7 @@ export function App() {
             store={bootstrap.store}
             actionsDisabled={updateGate.showPrompt && applyRequested}
             onOpen={openArtwork}
-            extraLessons={[TRACE_LESSON, ...photoLessons.map((row) => row.lesson)]}
+            extraLessons={[TRACE_LESSON, ...doodleLessons, ...photoLessons.map((row) => row.lesson)]}
           />
         </>
       )}
@@ -455,6 +532,33 @@ function applyControls<T extends SessionPreferences>(state: T, controls: Control
 }
 
 /** Whether a checkpoint holds work a child would recognise as their own. */
+function doodleOverlay(lesson: LessonPackage, png: Uint8Array): Promise<TraceSession> {
+  const copy = new Uint8Array(png.byteLength);
+  copy.set(png);
+  const url = URL.createObjectURL(new Blob([copy], { type: 'image/png' }));
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const space = lesson.coordinateSpace;
+      resolve({
+        image,
+        url,
+        placement: fitPhoto(space.width, space.height, image.naturalWidth || image.width, image.naturalHeight || image.height),
+        opacity: 0.4,
+        visible: true,
+        locked: true,
+        includeInExport: false,
+        source: 'doodle',
+      });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Doodle tidak dapat dibuka.'));
+    };
+    image.src = url;
+  });
+}
+
 function hasProgress(checkpoint: SessionCheckpoint): boolean {
   return (
     checkpoint.committedStrokeIds.length > 0 ||

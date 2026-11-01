@@ -12,7 +12,7 @@
  */
 
 import { DurableObject } from 'cloudflare:workers';
-import { slidingWindowAllow, type RateGate } from './shared/limit';
+import { allowedVerdict, deniedVerdict, RATE_LIMIT, slidingWindowAllow, type RateGate } from './shared/limit';
 
 const HITS = 'hits';
 
@@ -26,31 +26,39 @@ interface PaidRateLimitId {
 }
 
 interface PaidRateLimitStub {
-  allow(now: number): Promise<boolean>;
+  allow(now: number, limit?: number): Promise<boolean>;
 }
 
 export class PaidRateLimit extends DurableObject {
-  async allow(now: number): Promise<boolean> {
+  async allow(now: number, limit = RATE_LIMIT): Promise<boolean> {
     return this.ctx.storage.transaction(async (txn) => {
       const stored = await txn.get<number[]>(HITS);
       const buckets = new Map<string, number[]>([[HITS, stored ?? []]]);
-      const allowed = slidingWindowAllow(buckets, HITS, now);
+      const allowed = slidingWindowAllow(buckets, HITS, now, limit);
       await txn.put(HITS, buckets.get(HITS) ?? []);
       return allowed;
     });
   }
 }
 
-/** Missing binding or a thrown call denies the request. A paid route must not fail open. */
-export function durableRateGate(namespace: PaidRateLimitNamespace | undefined): RateGate {
-  if (!namespace) return { allow: () => false };
+/**
+ * A missing binding or a thrown call is `unavailable`, not a full window.
+ * A paid route still must not fail open.
+ */
+export function durableRateGate(
+  namespace: PaidRateLimitNamespace | undefined,
+  options?: { readonly scope?: string; readonly limit?: number },
+): RateGate {
+  const scope = options?.scope ?? 'paid';
+  const limit = options?.limit ?? RATE_LIMIT;
+  if (!namespace) return { allow: () => deniedVerdict('unavailable') };
   return {
     async allow(key, now) {
       try {
-        const allowed = await namespace.get(namespace.idFromName(key)).allow(now);
-        return allowed === true;
+        const allowed = await namespace.get(namespace.idFromName(`${scope}:${key}`)).allow(now, limit);
+        return allowed === true ? allowedVerdict() : deniedVerdict('limited');
       } catch {
-        return false;
+        return deniedVerdict('unavailable');
       }
     },
   };

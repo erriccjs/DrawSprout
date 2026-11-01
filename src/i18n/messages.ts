@@ -13,7 +13,6 @@ export interface Messages {
   readonly indonesian: string;
   readonly pickerTitle: string;
   readonly pickerLead: string;
-  readonly drawFromPhoto: string;
   readonly tracePhoto: string;
   readonly tracePlace: string;
   readonly traceChoose: string;
@@ -25,6 +24,20 @@ export interface Messages {
   readonly traceUnlock: string;
   readonly traceScale: string;
   readonly traceInclude: string;
+  readonly doodlePhoto: string;
+  readonly doodleLead: string;
+  readonly doodleWorking: string;
+  readonly doodleFollow: string;
+  readonly doodleTrace: string;
+  readonly doodleBack: string;
+  readonly doodleFailed: string;
+  readonly doodleTraceOpacity: string;
+  readonly doodleTraceShow: string;
+  readonly doodleTraceHide: string;
+  readonly doodleTraceLock: string;
+  readonly doodleTraceUnlock: string;
+  readonly doodleTraceScale: string;
+  readonly doodleTraceInclude: string;
   readonly offlineReady: string;
   readonly updateLoading: string;
   readonly updateReady: string;
@@ -59,11 +72,6 @@ export interface Messages {
   readonly bootstrapFailure: string;
   readonly loadFailure: string;
   readonly exitUnsaved: string;
-  readonly photoMatchTitle: string;
-  readonly photoMatchLead: string;
-  readonly choosePhoto: string;
-  readonly makingLesson: string;
-  readonly lookingAtPhoto: string;
   readonly back: string;
   readonly photoFlowTitle: string;
   readonly photoFlowLead: string;
@@ -196,7 +204,6 @@ const id: Messages = {
   indonesian: 'Indonesia',
   pickerTitle: 'Mau gambar apa hari ini?',
   pickerLead: 'Pilih gambar yang kamu suka, lalu ikuti langkahnya.',
-  drawFromPhoto: 'Gambar dari foto',
   tracePhoto: 'Jiplak foto',
   tracePlace: 'Geser fotonya, atur besarnya, lalu mulai.',
   traceChoose: 'Pilih atau ambil foto',
@@ -208,6 +215,20 @@ const id: Messages = {
   traceUnlock: 'Geser foto',
   traceScale: 'Ukuran foto',
   traceInclude: 'Simpan bersama foto',
+  doodlePhoto: 'Doodle dari foto',
+  doodleLead: 'Foto jadi langkah gambar. Kalau tidak bisa, pilih gambar lain.',
+  doodleWorking: 'Membuat doodle…',
+  doodleFollow: 'Ikuti langkahnya',
+  doodleTrace: 'Jiplak doodlenya',
+  doodleBack: 'Pilih gambar lain',
+  doodleFailed: 'Doodle tidak jadi. Pilih gambar dari daftar.',
+  doodleTraceOpacity: 'Ketebalan doodle',
+  doodleTraceShow: 'Tampilkan doodle',
+  doodleTraceHide: 'Sembunyikan doodle',
+  doodleTraceLock: 'Kunci doodle',
+  doodleTraceUnlock: 'Geser doodle',
+  doodleTraceScale: 'Ukuran doodle',
+  doodleTraceInclude: 'Simpan bersama doodle',
   offlineReady: 'Bisa dibuka tanpa internet.',
   updateLoading: 'Memuat versi baru…',
   updateReady: 'Ada versi baru. Gambar yang sudah tersimpan tetap ada.',
@@ -242,11 +263,6 @@ const id: Messages = {
   bootstrapFailure: 'Maaf, pelajaran belum bisa dibuka sekarang. Coba lagi nanti ya.',
   loadFailure: 'Karya sebelumnya tidak dapat dibuka. Kamu bisa mulai menggambar lagi.',
   exitUnsaved: 'Gambar tadi mungkin belum tersimpan. Tidak apa-apa, kamu bisa menggambar lagi.',
-  photoMatchTitle: 'Gambar dari foto',
-  photoMatchLead: 'Pilih foto benda atau hewan yang sudah bisa digambar.',
-  choosePhoto: 'Pilih foto',
-  makingLesson: 'Buat pelajarannya',
-  lookingAtPhoto: 'Sedang melihat fotomu…',
   back: 'Kembali',
   photoFlowTitle: 'Buat dari foto',
   photoFlowLead: 'Pilih foto benda utamanya. Ini untuk orang tua, bukan untuk anak.',
@@ -379,7 +395,6 @@ const en: Messages = {
   indonesian: 'Indonesia',
   pickerTitle: 'What shall we draw today?',
   pickerLead: 'Pick a picture you like, then follow the steps.',
-  drawFromPhoto: 'Draw from a photo',
   tracePhoto: 'Trace a photo',
   tracePlace: 'Move the photo, change its size, then start.',
   traceChoose: 'Choose or take a photo',
@@ -391,6 +406,20 @@ const en: Messages = {
   traceUnlock: 'Move the photo',
   traceScale: 'Photo size',
   traceInclude: 'Save with the photo',
+  doodlePhoto: 'Doodle from a photo',
+  doodleLead: 'The photo becomes drawing steps. If it cannot, pick another picture.',
+  doodleWorking: 'Making the doodle…',
+  doodleFollow: 'Follow the steps',
+  doodleTrace: 'Trace the doodle',
+  doodleBack: 'Pick another picture',
+  doodleFailed: 'The doodle did not work. Pick a picture from the list.',
+  doodleTraceOpacity: 'How strong the doodle is',
+  doodleTraceShow: 'Show the doodle',
+  doodleTraceHide: 'Hide the doodle',
+  doodleTraceLock: 'Lock the doodle',
+  doodleTraceUnlock: 'Move the doodle',
+  doodleTraceScale: 'Doodle size',
+  doodleTraceInclude: 'Save with the doodle',
   offlineReady: 'Works without the internet.',
   updateLoading: 'Loading the new version…',
   updateReady: 'A new version is ready. Your saved pictures stay here.',
@@ -425,11 +454,6 @@ const en: Messages = {
   bootstrapFailure: 'Sorry, the lessons cannot be opened right now. Please try again later.',
   loadFailure: 'The last picture could not be opened. You can start drawing again.',
   exitUnsaved: 'That picture might not have been saved. That is okay. You can draw again.',
-  photoMatchTitle: 'Draw from a photo',
-  photoMatchLead: 'Choose a photo of something we already know how to draw.',
-  choosePhoto: 'Choose a photo',
-  makingLesson: 'Make the lesson',
-  lookingAtPhoto: 'Looking at your photo…',
   back: 'Back',
   photoFlowTitle: 'Make from a photo',
   photoFlowLead: 'Choose a photo of the main thing. This part is for a grown-up, not for a child.',

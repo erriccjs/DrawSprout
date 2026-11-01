@@ -9,4 +9,6 @@ export interface TraceSession {
   readonly visible: boolean;
   readonly locked: boolean;
   readonly includeInExport: boolean;
+  /** Photo tracing keeps the photo words. A doodle uses the doodle words. */
+  readonly source?: 'photo' | 'doodle';
 }

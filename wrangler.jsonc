@@ -24,10 +24,18 @@
     // Everything else, including /sw.js and _headers, is served as a static asset.
     "run_worker_first": ["/api/*"]
   },
-  // Workers Builds runs `wrangler preview` for a branch build. That command
-  // refuses to start without this block. An empty object is enough, and
-  // `wrangler deploy` does not read it.
-  "previews": {},
+  // Workers Builds runs `wrangler preview` for a branch build. Previews do
+  // not inherit top-level bindings. The paid gate reads env.PAID_RATE_LIMIT,
+  // so the preview needs the same binding or every doodle is refused.
+  // Secrets are not in this file. Set them once for new previews with
+  // `npx wrangler preview base-config secret put REPLICATE_API_KEY`.
+  "previews": {
+    "durable_objects": {
+      "bindings": [
+        { "name": "PAID_RATE_LIMIT", "class_name": "PaidRateLimit" }
+      ]
+    }
+  },
   // Photo match. The key is the Worker secret REPLICATE_API_KEY, not a var.
   "vars": {
     "MATCH_PROVIDER": "replicate",

@@ -58,6 +58,7 @@ const parentMessages = {
   bad_request: 'Foto tidak dapat dipakai. Pilih gambar lain.',
   too_large: 'Foto terlalu besar. Pilih bagian yang lebih kecil.',
   rate_limited: 'Terlalu banyak permintaan. Coba lagi nanti.',
+  unavailable: 'Server foto belum siap. Coba lagi nanti.',
   cancelled: 'Permintaan dibatalkan.',
   timeout: 'Waktunya habis. Coba lagi.',
   failed: 'Gambar belum bisa dibuat. Coba lagi, atau pilih foto lain.',
@@ -144,7 +145,10 @@ export async function handlePhotoLessonRequest(
       if (error instanceof PhotoRequestError) throw error;
       throw new PhotoRequestError('bad_request', 400);
     }
-    if (!await gate.allow(clientKey(request), now())) throw new PhotoRequestError('rate_limited', 429);
+    const verdict = await gate.allow(clientKey(request), now());
+    if (!verdict.allowed) {
+      throw new PhotoRequestError(verdict.reason === 'unavailable' ? 'unavailable' : 'rate_limited', verdict.reason === 'unavailable' ? 503 : 429);
+    }
 
     const provider = imageProvider(env.IMAGE_PROVIDER);
     const configuredImageModel = provider === 'replicate' ? env.REPLICATE_IMAGE_MODEL : env.OPENAI_IMAGE_MODEL;

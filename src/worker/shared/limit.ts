@@ -1,20 +1,43 @@
 /**
  * Sliding window shared by the paid photo routes.
  *
- * Six new jobs per ten minutes, per client. The Worker stores the window in
- * a Durable Object. Tests pass a memory map or a gate of their own.
+ * Six category-photo jobs per ten minutes, per client. Doodles use their own
+ * larger window. The Worker stores each window in a Durable Object. Tests
+ * pass a memory map or a gate of their own.
  */
 
 export const RATE_LIMIT = 6;
+/** A doodle is cheap, and it no longer shares the category-photo window. */
+export const DOODLE_RATE_LIMIT = 12;
 export const RATE_WINDOW_MS = 10 * 60 * 1000;
 
-export interface RateGate {
-  allow(key: string, now: number): boolean | Promise<boolean>;
+export type RateDenial = 'limited' | 'unavailable';
+
+export interface RateVerdict {
+  readonly allowed: boolean;
+  readonly reason: RateDenial | null;
 }
 
-export function slidingWindowAllow(buckets: Map<string, number[]>, key: string, nowMs: number): boolean {
+export function allowedVerdict(): RateVerdict {
+  return { allowed: true, reason: null };
+}
+
+export function deniedVerdict(reason: RateDenial): RateVerdict {
+  return { allowed: false, reason };
+}
+
+export interface RateGate {
+  allow(key: string, now: number): RateVerdict | Promise<RateVerdict>;
+}
+
+export function slidingWindowAllow(
+  buckets: Map<string, number[]>,
+  key: string,
+  nowMs: number,
+  limit = RATE_LIMIT,
+): boolean {
   const recent = (buckets.get(key) ?? []).filter((time) => nowMs - time < RATE_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT) {
+  if (recent.length >= limit) {
     buckets.set(key, recent);
     return false;
   }
@@ -23,10 +46,10 @@ export function slidingWindowAllow(buckets: Map<string, number[]>, key: string, 
   return true;
 }
 
-export function memoryGate(buckets: Map<string, number[]>): RateGate {
+export function memoryGate(buckets: Map<string, number[]>, limit = RATE_LIMIT): RateGate {
   return {
     allow(key, now) {
-      return slidingWindowAllow(buckets, key, now);
+      return slidingWindowAllow(buckets, key, now, limit) ? allowedVerdict() : deniedVerdict('limited');
     },
   };
 }
