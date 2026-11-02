@@ -676,8 +676,47 @@ function collapseNested(contours: Contour[]): Contour[] {
   return kept;
 }
 
+/**
+ * One outline per separate thing in the drawing.
+ *
+ * The single silhouette dilates by about 1% of the picture, so a person
+ * standing next to a statue becomes one thick blob, and the smaller figure
+ * can disappear. A two-pixel bridge keeps a real gap as two subjects, and
+ * each one is closed on its own.
+ */
+export function subjectSilhouettes(image: RgbaImage): Point[][] {
+  const { width, height } = image;
+  const ink = cleanInk(eraseStripeRuns(inkMask(image, INK_LUMINANCE), width, height), width, height);
+  const bridged = dilate(ink, width, height, 2);
+  const labeled = label(bridged, width, height);
+  if (labeled.count === 0) return [];
+  const largest = labeled.stats.reduce((max, stat) => Math.max(max, stat.pixels), 0);
+  const kept = labeled.stats
+    .filter((stat) => stat.pixels >= Math.max(80, largest * 0.25))
+    .sort((left, right) => right.pixels - left.pixels)
+    .slice(0, 3);
+  const epsilon = Math.max(1.25, Math.min(width, height) * 0.004);
+  const loops: Point[][] = [];
+  for (const stat of kept) {
+    const only = new Uint8Array(ink.length);
+    for (let index = 0; index < only.length; index += 1) {
+      if (labeled.ids[index] === stat.id && ink[index]) only[index] = 1;
+    }
+    const filled = fillComponent(only, width, height, 3);
+    const loop = largestLoop(marchingSquares(filled, width, height));
+    if (!loop) continue;
+    const outer = finishLoop(loop, epsilon);
+    if (outer.length >= 4) loops.push(outer);
+  }
+  return loops;
+}
+
 function filledSubject(mask: Uint8Array, width: number, height: number): Uint8Array {
   const radius = Math.max(2, Math.round(Math.min(width, height) * 0.012));
+  return fillComponent(mask, width, height, radius);
+}
+
+function fillComponent(mask: Uint8Array, width: number, height: number, radius: number): Uint8Array {
   const dilated = dilate(mask, width, height, radius);
   const outside = new Uint8Array(mask.length);
   const stack: number[] = [];

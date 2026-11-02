@@ -120,6 +120,158 @@ export function regionsColouredBy(
   return colourComponents(aligned, inside, line, width, height, options.keepPale === true);
 }
 
+/**
+ * Colour every area inside each separate subject, even when a line does not
+ * quite close.
+ *
+ * Strict enclosed regions miss a gappy outline and leave the page white.
+ * These regions follow the photo's own colours inside the subject, so a shirt,
+ * a face and a statue each get a flat fill.
+ */
+export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): FlatRegion[] {
+  const fitted = sameSize(lineArt, coloured) ? coloured : scaleNearest(coloured, lineArt.width, lineArt.height);
+  const aligned = registerToLines(lineArt, fitted);
+  const { width, height } = lineArt;
+  const line = lineMask(lineArt);
+  const bridged = dilateMask(line, width, height, 2);
+  const ids = new Int32Array(line.length);
+  const stack = new Int32Array(line.length);
+  let next = 0;
+  const sizes: number[] = [0];
+  for (let start = 0; start < bridged.length; start += 1) {
+    if (!bridged[start] || ids[start]) continue;
+    next += 1;
+    let top = 0;
+    ids[start] = next;
+    stack[top] = start;
+    top += 1;
+    let pixels = 0;
+    while (top > 0) {
+      top -= 1;
+      const index = stack[top] ?? 0;
+      pixels += 1;
+      const x = index % width;
+      const neighbors = [x > 0 ? index - 1 : -1, x + 1 < width ? index + 1 : -1, index >= width ? index - width : -1, index + width < line.length ? index + width : -1];
+      for (const neighbor of neighbors) {
+        if (neighbor < 0 || !bridged[neighbor] || ids[neighbor]) continue;
+        ids[neighbor] = next;
+        stack[top] = neighbor;
+        top += 1;
+      }
+    }
+    sizes[next] = pixels;
+  }
+  const largest = sizes.reduce((max, value) => Math.max(max, value), 0);
+  const interior = new Uint8Array(line.length);
+  for (let id = 1; id <= next; id += 1) {
+    if ((sizes[id] ?? 0) < Math.max(80, largest * 0.25)) continue;
+    const only = new Uint8Array(line.length);
+    for (let index = 0; index < only.length; index += 1) {
+      if (ids[index] === id && line[index]) only[index] = 1;
+    }
+    const close = Math.max(8, Math.min(18, Math.round(Math.min(width, height) * 0.035)));
+    const filled = interiorOf(only, width, height, close);
+    for (let index = 0; index < filled.length; index += 1) {
+      if (filled[index] && !line[index]) interior[index] = 1;
+    }
+  }
+  const names = new Array<string>(line.length);
+  for (let index = 0; index < interior.length; index += 1) {
+    if (!interior[index]) continue;
+    const rgb = pixelAt(aligned.data, index);
+    names[index] = rgb ? paletteName(rgb) : '';
+  }
+  const regionIds = new Int32Array(line.length);
+  const regionSizes: number[] = [0];
+  let region = 0;
+  for (let start = 0; start < interior.length; start += 1) {
+    if (!interior[start] || regionIds[start]) continue;
+    region += 1;
+    let top = 0;
+    regionIds[start] = region;
+    stack[top] = start;
+    top += 1;
+    let pixels = 0;
+    const name = names[start] ?? '';
+    while (top > 0) {
+      top -= 1;
+      const index = stack[top] ?? 0;
+      pixels += 1;
+      const x = index % width;
+      const neighbors = [x > 0 ? index - 1 : -1, x + 1 < width ? index + 1 : -1, index >= width ? index - width : -1, index + width < line.length ? index + width : -1];
+      for (const neighbor of neighbors) {
+        if (neighbor < 0 || !interior[neighbor] || regionIds[neighbor] || names[neighbor] !== name) continue;
+        regionIds[neighbor] = region;
+        stack[top] = neighbor;
+        top += 1;
+      }
+    }
+    regionSizes[region] = pixels;
+  }
+  const floor = Math.max(28, Math.round(width * height * 0.0004));
+  for (let pass = 0; pass < 6; pass += 1) {
+    for (let index = 0; index < regionIds.length; index += 1) {
+      const id = regionIds[index] ?? 0;
+      if (!id || (regionSizes[id] ?? 0) >= floor) continue;
+      const x = index % width;
+      const neighbors = [x > 0 ? index - 1 : -1, x + 1 < width ? index + 1 : -1, index >= width ? index - width : -1, index + width < line.length ? index + width : -1];
+      for (const neighbor of neighbors) {
+        const other = neighbor >= 0 ? (regionIds[neighbor] ?? 0) : 0;
+        if (other && (regionSizes[other] ?? 0) >= floor) {
+          regionSizes[id] = (regionSizes[id] ?? 1) - 1;
+          regionSizes[other] = (regionSizes[other] ?? 0) + 1;
+          regionIds[index] = other;
+          break;
+        }
+      }
+    }
+  }
+  const regions: FlatRegion[] = [];
+  const seen = new Set<number>();
+  for (let index = 0; index < regionIds.length; index += 1) {
+    const id = regionIds[index] ?? 0;
+    if (!id || seen.has(id) || (regionSizes[id] ?? 0) < floor) continue;
+    seen.add(id);
+    let minX = width;
+    let minY = height;
+    let maxX = 0;
+    let maxY = 0;
+    let pixels = 0;
+    const members: number[] = [];
+    for (let cursor = 0; cursor < regionIds.length; cursor += 1) {
+      if (regionIds[cursor] !== id) continue;
+      pixels += 1;
+      members.push(cursor);
+      const x = cursor % width;
+      const y = (cursor - x) / width;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    const points = shapeOf(regionIds, id, width, minX, minY, maxX, maxY, 0);
+    if (!points || points.length < 4) continue;
+    const colours = paintColours(aligned, members);
+    const median = colours.length > 0 ? medianRgb(colours) : { r: 200, g: 160, b: 120 };
+    const name = paletteName(median);
+    const spot = memberPoint(regionIds, id, width);
+    regions.push({
+      name,
+      hex: name === 'putih' ? '#ffffff' : snapKid(median),
+      points,
+      pixels,
+      cx: spot.x,
+      cy: spot.y,
+    });
+  }
+  return regions.sort((left, right) => right.pixels - left.pixels);
+}
+
+function interiorOf(mask: Uint8Array, width: number, height: number, radius: number): Uint8Array {
+  const barrier = dilateMask(mask, width, height, radius);
+  return interiorMask(barrier, width, height);
+}
+
 /** Shift and scale the colour page so its dark lines land on the line drawing. */
 function registerToLines(lineArt: RgbaImage, coloured: RgbaImage): RgbaImage {
   const { width, height } = lineArt;

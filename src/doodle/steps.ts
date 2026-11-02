@@ -1,19 +1,18 @@
 /**
  * Turns a line doodle and the original photo into a short lesson.
  *
- * Step 1 is the convex silhouette, not every line at once. The line drawing
- * is thinned and split at junctions, then nearby strokes are grouped into a
- * few parts. The last steps are a few bright colours taken from the subject,
- * not from the white page or the grey shadows.
+ * Step 1 is the biggest subject's own outline. A second figure standing
+ * beside it is the next step, not part of the same blob. Colour steps fill
+ * the areas inside those outlines, including where a line does not quite close.
  */
 
 import { packageLesson } from '../categories/author';
 import { ellipse } from '../categories/shapes';
 import type { GuidePath, LessonPackage, LessonStep } from '../lesson-data/schema';
 import { fitPhoto, type TracePlacement } from '../trace/placement';
-import { regionsColouredBy, type FlatRegion } from '../photo/flat-colour';
+import { coverByColour, regionsColouredBy, type FlatRegion } from '../photo/flat-colour';
 import type { RgbaImage } from '../photo/png';
-import { traceInk } from '../photo/trace';
+import { subjectSilhouettes, traceInk } from '../photo/trace';
 
 const SPACE_W = 1000;
 const SPACE_H = 750;
@@ -48,8 +47,12 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   // The outline has to follow the subject. A convex hull turns every gap --
   // between two legs, under an arm, around an ear -- into one filled blob, so
   // the child is asked to draw a shadow instead of the thing in the photo.
-  const traced = tracedContours(doodle, width, height);
-  const hull = traced?.outline ?? convexHull(sampleInk(ink, width, bounds));
+  const subjects = subjectSilhouettes(doodle).map((loop) => loop.map((point) => (
+    [point.x * (width / Math.max(1, doodle.width)), point.y * (height / Math.max(1, doodle.height))] as [number, number]
+  )));
+  const split = subjects.length >= 2;
+  const traced = tracedContours(doodle, width, height, split ? subjects : undefined);
+  const hull = (split ? subjects[0] : traced?.outline) ?? convexHull(sampleInk(ink, width, bounds));
   if (hull.length < 3) throw new Error('Doodle-nya terlalu kosong.');
 
   const parts = groupChains(traced?.interiors ?? [], bounds);
@@ -65,6 +68,16 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   const steps: LessonStep[] = [
     outlineStep('shape', 'Gambar bentuk besarnya.', 'Mulai dari bentuk yang paling besar.', guides),
   ];
+  subjects.slice(1).forEach((loop, index) => {
+    const d = pathFrom(loop.map((point) => toSpace(point, frame, scale)), true);
+    if (d.length < 8) return;
+    steps.push(outlineStep(
+      `subject-${index + 2}`,
+      'Gambar bentuk yang lain.',
+      'Benda yang lain, di sampingnya.',
+      [{ id: `subject-${index + 2}`, d, role: 'final-outline' }],
+    ));
+  });
   parts.forEach((part, index) => {
     const guidePaths: GuidePath[] = [];
     part.forEach((chain, chainIndex) => {
@@ -121,7 +134,7 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
     id: `doodle-${inkHash(ink)}`,
     title: 'Doodle dari foto',
     subtitle: 'Dari doodle',
-    contentVersion: 'doodle-1',
+    contentVersion: 'doodle-2',
     colorRegions: regions,
     steps,
   });
@@ -225,6 +238,7 @@ function tracedContours(
   doodle: RgbaImage,
   width: number,
   height: number,
+  subjects?: ReadonlyArray<Array<[number, number]>>,
 ): { outline: Array<[number, number]>; interiors: Array<Array<[number, number]>> } | null {
   let contours;
   try {
@@ -251,7 +265,8 @@ function tracedContours(
     .filter((chain) => chain.length >= 3)
     .filter((chain) => {
       const centre = chainCentroid(chain);
-      return inside(centre.x, centre.y, outline);
+      const homes = subjects && subjects.length > 0 ? subjects : [outline];
+      return homes.some((home) => inside(centre.x, centre.y, home));
     });
   return { outline, interiors };
 }
@@ -390,7 +405,11 @@ function filledRegions(
     // Pale areas are kept here. In a photo of a white plush in a bright shop
     // they are most of the picture, and dropping them left the child three
     // things to colour.
-    found = regionsColouredBy(doodle, photo, { keepPale: true }).regions;
+    const strict = regionsColouredBy(doodle, photo, { keepPale: true }).regions;
+    const painted = coverByColour(doodle, photo);
+    // Open lines leave only a pocket or two closed. The photo's own colours
+    // inside each subject cover the rest, so a body does not stay white.
+    found = painted.length > strict.length ? painted : strict;
   } catch {
     return [];
   }

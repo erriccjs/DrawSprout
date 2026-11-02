@@ -64,6 +64,8 @@ export const PHRASES_EN: Readonly<Record<string, string>> = {
   'Doodle dari foto': 'Doodle from a photo',
   'Dari doodle': 'From a doodle',
   'Gambar bentuk besarnya.': 'Draw the big shape.',
+  'Gambar bentuk yang lain.': 'Draw the other shape.',
+  'Benda yang lain, di sampingnya.': 'The other thing, beside it.',
   'Mulai dari bentuk yang paling besar.': 'Start with the biggest shape.',
   'Gambar bagian ini.': 'Draw this part.',
   'Bagian yang besar.': 'The big part.',
