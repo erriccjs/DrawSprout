@@ -104,6 +104,11 @@ describe('flat colouring page', () => {
     ));
     const white = painted(48, 36, () => [255, 255, 255]);
     expect(regionsColouredBy(lines, white).regions).toHaveLength(0);
+    // keepPale is for the doodle route, where white is a white plush rather
+    // than unpainted paper.
+    const kept = regionsColouredBy(lines, white, { keepPale: true }).regions;
+    expect(kept).toHaveLength(1);
+    expect(kept[0]?.name).toBe('putih');
     const mixed = painted(48, 36, (x, y) => {
       if (x < 8 || x >= 40 || y < 6 || y >= 30) return [255, 255, 255];
       return x < 24 ? [210, 40, 45] : [40, 70, 210];

@@ -1486,3 +1486,13 @@ busy drawing they threw away eyes, a nose and a shoe. `regionsColouredBy`
 already ranks areas by size and keeps at most 24, so that is the only ceiling;
 this layer caps nothing and drops an area only below 0.04%, which is a speck.
 A boy beside a plush dog goes from six colour steps to eleven.
+
+**White is a colour here.** Even uncapped, a photo of a white plush in a
+bright shop gave a child three things to colour. `regionsColouredBy` drops any
+area whose colour reads as `putih`, because in the photo pipeline white means
+unpainted paper. On the doodle route white is the subject: the plush, a white
+shirt, a white wall. It now takes `keepPale`, which the photo pipeline does not
+pass, and the doodle route paints those areas `#eae5da` rather than `#ffffff`
+-- the nearest shade that still reads as white and can be seen on white paper.
+A two-figure drawing whose plush is white goes from three colour steps to
+eighteen.
