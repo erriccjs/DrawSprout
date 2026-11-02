@@ -21,7 +21,12 @@ const INK = 128;
 // The owner asked for detail over brevity: more steps are welcome as long as
 // the drawing and the colours match the photo.
 const MAX_PARTS = 8;
-const MAX_COLOURS = 6;
+// This layer sets no budget of its own: every area the drawing encloses and
+// the photo gives a colour to earns a step. `regionsColouredBy` already ranks
+// by size and keeps at most 24, and that is the only ceiling.
+const MAX_COLOURS = 24;
+/** Below this share of the picture an area is a speck, not something to paint. */
+const SMALLEST_REGION = 0.0004;
 
 export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPackage {
   const scaled = downscaleMask(inkMask(doodle), doodle.width, doodle.height, 280);
@@ -378,7 +383,7 @@ function filledRegions(
   } catch {
     return [];
   }
-  const smallest = doodle.width * doodle.height * 0.002;
+  const smallest = doodle.width * doodle.height * SMALLEST_REGION;
   return found
     .filter((region) => region.points.length >= 4 && region.pixels >= smallest)
     .sort((left, right) => right.pixels - left.pixels)
@@ -443,10 +448,10 @@ function subjectColours(
   if (chosen.length === 0) {
     return [{ hex: '#f0c43a', x: 500, y: 375, rx: 80, ry: 60 }];
   }
-  const clustered = kMeans(chosen, Math.min(4, Math.max(1, Math.floor(chosen.length / 30))));
+  const clustered = kMeans(chosen, Math.min(6, Math.max(1, Math.floor(chosen.length / 30))));
   const total = clustered.reduce((sum, center) => sum + center.n, 0) || 1;
-  const centers = distinctColours(clustered.filter((center, index) => index === 0 || center.n >= total * 0.12));
-  return centers.slice(0, 4).map((center) => {
+  const centers = distinctColours(clustered.filter((center, index) => index === 0 || center.n >= total * 0.06));
+  return centers.slice(0, MAX_COLOURS).map((center) => {
     const at = toSpace([center.x, center.y], frame, scale);
     // The patch covers where that colour sits. A fixed ellipse floated over
     // the middle of the drawing whatever the colour belonged to.
@@ -551,7 +556,7 @@ function distinctColours<T extends { r: number; g: number; b: number }>(centers:
   const kept: T[] = [];
   for (const center of centers) {
     const similar = kept.find((other) => (
-      (other.r - center.r) ** 2 + (other.g - center.g) ** 2 + (other.b - center.b) ** 2 < 45 * 45
+      (other.r - center.r) ** 2 + (other.g - center.g) ** 2 + (other.b - center.b) ** 2 < 32 * 32
     ));
     if (!similar) kept.push(center);
   }
