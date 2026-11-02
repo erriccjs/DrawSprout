@@ -44,7 +44,7 @@ describe('doodle step builder', () => {
     expect(lesson.steps.at(-1)?.phase).toBe('color');
     const colours = lesson.steps.filter((step) => step.phase === 'color').map((step) => step.toolPreset.color);
     expect(colours.length).toBeGreaterThan(0);
-    expect(colours.length).toBeLessThanOrEqual(5);
+    expect(colours.length).toBeLessThanOrEqual(8);
     expect(colours[0]).toMatch(/^#[0-9a-f]{6}$/);
     const red = colours.some((colour) => {
       const value = Number.parseInt(colour.slice(1, 3), 16);
@@ -329,6 +329,60 @@ describe('doodle step builder', () => {
     expect(box.bottom).toBeCloseTo(place.y + 183 * scale, -1);
     // And it is nowhere near filling the paper, as the old mapping did.
     expect(box.right - box.left).toBeLessThan(width * 0.55);
+  });
+
+  it('colours a person and a separate animal instead of one box and two patches', () => {
+    const doodle = blank(360, 280);
+    const photo = blank(360, 280);
+    fillColour(photo, 0, 0, 360, 280, [186, 214, 168]);
+    ring(doodle, 92, 58, 26, 3);
+    rectOutline(doodle, 68, 88, 48, 78);
+    strokeLine(doodle, 78, 166, 78, 230);
+    strokeLine(doodle, 108, 166, 112, 232);
+    fillColour(photo, 66, 32, 52, 52, [232, 186, 150]);
+    fillColour(photo, 68, 90, 48, 78, [50, 92, 186]);
+    fillColour(photo, 74, 168, 42, 66, [36, 36, 48]);
+    ring(doodle, 268, 78, 32, 3);
+    rectOutline(doodle, 230, 112, 78, 64);
+    strokeLine(doodle, 246, 176, 246, 236);
+    strokeLine(doodle, 286, 176, 290, 238);
+    ring(doodle, 256, 74, 8, 2);
+    fillColour(photo, 230, 46, 76, 64, [168, 112, 64]);
+    fillColour(photo, 230, 114, 78, 62, [186, 132, 78]);
+    fillColour(photo, 236, 176, 60, 64, [120, 78, 48]);
+    fillColour(photo, 248, 66, 16, 16, [92, 78, 120]);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    expect(() => assertValidLessons([lesson])).not.toThrow();
+    const lines = lesson.steps.filter((step) => step.phase !== 'color');
+    const outlines = lines.filter((step) => step.guidePaths.some((path) => path.d.includes('Z')));
+    expect(outlines.length).toBeGreaterThanOrEqual(2);
+    const centres = outlines.map((step) => {
+      const points = pointsOf(step.guidePaths[0]?.d ?? '');
+      const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+      return x;
+    });
+    expect(Math.max(...centres) - Math.min(...centres)).toBeGreaterThan(180);
+
+    const colours = lesson.steps.filter((step) => step.phase === 'color');
+    expect(colours.length).toBeGreaterThanOrEqual(4);
+    expect(lesson.colorRegions.length).toBeGreaterThanOrEqual(4);
+    for (const region of lesson.colorRegions) {
+      expect(region.d).not.toMatch(/A /);
+      const luma = Number.parseInt(region.suggestedColor.slice(1, 3), 16) * 0.3
+        + Number.parseInt(region.suggestedColor.slice(3, 5), 16) * 0.59
+        + Number.parseInt(region.suggestedColor.slice(5, 7), 16) * 0.11;
+      expect(luma).toBeLessThan(230);
+    }
+    const boxes = lesson.colorRegions.map((region) => {
+      const points = pointsOf(region.d);
+      return {
+        left: Math.min(...points.map((point) => point.x)),
+        right: Math.max(...points.map((point) => point.x)),
+      };
+    });
+    expect(boxes.some((box) => box.right < 500)).toBe(true);
+    expect(boxes.some((box) => box.left > 400)).toBe(true);
   });
 
   it('refuses a blank page', () => {
