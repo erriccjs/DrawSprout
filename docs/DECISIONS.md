@@ -1454,3 +1454,28 @@ is what the owner asked for.
 `npm run doodle-eval` now draws the guides over the picture at that same
 placement, so a guide that will not sit on the drawing in the app does not sit
 on it in the SVG either.
+
+### D-87 — The doodle's colours are the drawing's own areas
+
+D-85 placed each colour patch from its cluster's spread. That was better than
+a fixed ellipse and still wrong: a patch is an ellipse floated over the page,
+so it can sit near a colour but never match the photo. On a photo of a boy
+beside a plush dog the child was asked to paint a large near-black ellipse and
+a pink one over the middle of both figures.
+
+**Choice.** The colour regions are the areas the drawing already encloses,
+through `regionsColouredBy`, the photo pipeline's flat colouring (D-73), with
+the photo as the colour source. A fill is closed by construction, so a child
+painting one cannot run out of it, and each area takes the colour the photo
+has inside that area: the dog's head and both ears brown, the boy's shirt
+black, his jeans blue, his face its own tone. White areas stay white paper
+rather than becoming a colour, which is what a white plush should do. At most
+six, largest first. When the drawing encloses nothing usable -- a line that
+does not close, an area whose colour reads as paper -- the cluster patches of
+D-85 remain as the fallback.
+
+**More steps.** The owner asked for detail over brevity. `MAX_PARTS` goes from
+five to eight and contours group at a fourteenth of the subject's span rather
+than a fifth, so a busy drawing earns the steps it deserves: a boy beside a
+plush dog goes from five part steps to eight, over the same eighteen interior
+contours. Nothing was being dropped before; it was being crushed together.

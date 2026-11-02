@@ -178,28 +178,57 @@ describe('doodle step builder', () => {
     expect(colours.some((colour) => luma(colour) < 160)).toBe(true);
   });
 
-  it('gives each colour its own patch once there is more than one', () => {
+  it('fills each enclosed area with the colour the photo has inside it', () => {
+    // Two boxes, one above the other. The photo is blue in the top box and
+    // red in the bottom one, so each box takes its own colour and neither
+    // takes an ellipse floated over the middle of the page.
     const doodle = blank(240, 240);
-    ring(doodle, 120, 120, 90, 6);
+    rectOutline(doodle, 40, 30, 160, 84);
+    rectOutline(doodle, 40, 126, 160, 84);
     const photo = blank(240, 240);
     fillColour(photo, 0, 0, 240, 240, [238, 236, 230]);
-    fillColour(photo, 40, 40, 160, 80, [40, 70, 210]);
-    fillColour(photo, 40, 120, 160, 80, [210, 60, 50]);
+    fillColour(photo, 44, 34, 152, 76, [40, 70, 210]);
+    fillColour(photo, 44, 130, 152, 76, [210, 60, 50]);
 
     const lesson = buildDoodleLesson(doodle, photo);
-    const outline = lesson.steps[0]?.guidePaths[0]?.d ?? '';
-    expect(lesson.colorRegions.length).toBeGreaterThanOrEqual(2);
-    // No colour takes the whole body when the subject is not one colour.
+    expect(lesson.colorRegions).toHaveLength(2);
     for (const region of lesson.colorRegions) {
-      expect(region.d).not.toBe(outline);
-      expect(region.d).toMatch(/A /);
+      // A traced area, not an ellipse.
+      expect(region.d).not.toMatch(/A /);
+      expect(region.d).toMatch(/Z$/);
     }
-    // The patches sit apart, each over its own half.
-    const centres = lesson.colorRegions.map((region) => {
-      const first = /M (-?\d+) (-?\d+)/.exec(region.d);
-      return { x: Number(first?.[1] ?? 0), y: Number(first?.[2] ?? 0) };
-    });
-    expect(Math.abs((centres[0]?.y ?? 0) - (centres[1]?.y ?? 0))).toBeGreaterThan(40);
+    const read = lesson.colorRegions.map((region) => {
+      const points = pointsOf(region.d);
+      return {
+        hex: region.suggestedColor,
+        top: Math.min(...points.map((point) => point.y)),
+      };
+    }).sort((left, right) => left.top - right.top);
+    const bluer = (hex: string) => Number.parseInt(hex.slice(5, 7), 16) > Number.parseInt(hex.slice(1, 3), 16);
+    expect(bluer(read[0]?.hex ?? '')).toBe(true);
+    expect(bluer(read[1]?.hex ?? '')).toBe(false);
+  });
+
+  it('earns more steps from a busier drawing', () => {
+    // A face with brows, eyes, nose, mouth and two ears. The owner asked for
+    // detail: a drawing with this much in it should not collapse into two
+    // steps the way the skeleton walk collapsed it.
+    const doodle = blank(320, 320);
+    ring(doodle, 160, 160, 120, 6);
+    ring(doodle, 118, 128, 16, 4);
+    ring(doodle, 202, 128, 16, 4);
+    ring(doodle, 160, 176, 20, 5);
+    ring(doodle, 60, 150, 26, 5);
+    ring(doodle, 260, 150, 26, 5);
+    ring(doodle, 160, 232, 34, 5);
+    const photo = blank(320, 320);
+    fillColour(photo, 0, 0, 320, 320, [210, 60, 50]);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    const lines = lesson.steps.filter((step) => step.phase !== 'color');
+    expect(lines.length).toBeGreaterThanOrEqual(5);
+    const paths = lines.slice(1).reduce((sum, step) => sum + step.guidePaths.length, 0);
+    expect(paths).toBeGreaterThanOrEqual(6);
   });
 
   it('places the guides where the trace layer places the drawing', () => {
@@ -292,4 +321,11 @@ function strokeLine(image: RgbaImage, x1: number, y1: number, x2: number, y2: nu
 
 function pointsOf(d: string): Array<{ x: number; y: number }> {
   return [...d.matchAll(/[ML] (-?\d+) (-?\d+)/g)].map(([, x, y]) => ({ x: Number(x), y: Number(y) }));
+}
+
+function rectOutline(image: RgbaImage, x: number, y: number, width: number, height: number): void {
+  fillRect(image, x, y, width, 5);
+  fillRect(image, x, y + height - 5, width, 5);
+  fillRect(image, x, y, 5, height);
+  fillRect(image, x + width - 5, y, 5, height);
 }
