@@ -11,13 +11,17 @@ import { packageLesson } from '../categories/author';
 import { ellipse } from '../categories/shapes';
 import type { GuidePath, LessonPackage, LessonStep } from '../lesson-data/schema';
 import { fitPhoto, type TracePlacement } from '../trace/placement';
+import { regionsColouredBy, type FlatRegion } from '../photo/flat-colour';
 import type { RgbaImage } from '../photo/png';
 import { traceInk } from '../photo/trace';
 
 const SPACE_W = 1000;
 const SPACE_H = 750;
 const INK = 128;
-const MAX_PARTS = 5;
+// The owner asked for detail over brevity: more steps are welcome as long as
+// the drawing and the colours match the photo.
+const MAX_PARTS = 8;
+const MAX_COLOURS = 6;
 
 export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPackage {
   const scaled = downscaleMask(inkMask(doodle), doodle.width, doodle.height, 280);
@@ -36,7 +40,12 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   if (hull.length < 3) throw new Error('Doodle-nya terlalu kosong.');
 
   const parts = groupChains(traced?.interiors ?? [], bounds);
-  const colours = subjectColours(width, height, photo, ink, hull, frame, scale);
+  // The areas the drawing already encloses, each taking the colour the photo
+  // has inside it. A handful of ellipses over the middle of the page could
+  // never match a photo, whatever colours went into them.
+  const artScale = frame.width / Math.max(1, doodle.width);
+  const filled = filledRegions(doodle, photo, frame, artScale);
+  const colours = filled.length > 0 ? [] : subjectColours(width, height, photo, ink, hull, frame, scale);
 
   const shape = pathFrom(hull.map((point) => toSpace(point, frame, scale)), true);
   const guides: GuidePath[] = [{ id: 'shape', d: shape, role: 'final-outline' }];
@@ -63,18 +72,25 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
     ));
   });
 
-  const regions = colours.map((colour, index) => ({
-    id: `colour-${index + 1}`,
-    label: 'Warna',
-    // One colour means one subject to fill, and the body is the nicer shape
-    // to hand a child. Several colours means several places, so each gets the
-    // patch its own samples cover. A near-black never takes the body: that is
-    // what reads as a shadow.
-    d: index === 0 && colours.length === 1 && !isShadowHex(colour.hex)
-      ? shape
-      : `${ellipse(colour.x, colour.y, colour.rx, colour.ry)} Z`,
-    suggestedColor: colour.hex,
-  }));
+  const regions = filled.length > 0
+    ? filled.map((region, index) => ({
+      id: `colour-${index + 1}`,
+      label: 'Warna',
+      d: region.d,
+      suggestedColor: region.hex,
+    }))
+    : colours.map((colour, index) => ({
+      id: `colour-${index + 1}`,
+      label: 'Warna',
+      // One colour means one subject to fill, and the body is the nicer shape
+      // to hand a child. Several colours means several places, so each gets
+      // the patch its own samples cover. A near-black never takes the body:
+      // that is what reads as a shadow.
+      d: index === 0 && colours.length === 1 && !isShadowHex(colour.hex)
+        ? shape
+        : `${ellipse(colour.x, colour.y, colour.rx, colour.ry)} Z`,
+      suggestedColor: colour.hex,
+    }));
   regions.forEach((region, index) => {
     steps.push({
       id: `color-${index + 1}`,
@@ -281,8 +297,9 @@ function downscaleMask(
 }
 
 /**
- * A few parts, not twenty strokes. Nearby lines join one part, so a face
- * becomes one step rather than an eye, an eye, a nose and a mouth.
+ * Lines that sit together become one part. The radius is small, so a face is
+ * a step and not the whole figure: the owner asked for detail, and MAX_PARTS
+ * is the only thing that caps how many steps a busy drawing earns.
  */
 function groupChains(
   chains: ReadonlyArray<Array<[number, number]>>,
@@ -293,7 +310,7 @@ function groupChains(
   const ordered = [...chains].sort((a, b) => b.length - a.length);
   for (const chain of ordered) {
     const center = chainCentroid(chain);
-    const near = anchors.find((anchor) => Math.hypot(anchor.cx - center.x, anchor.cy - center.y) < spans * 0.12);
+    const near = anchors.find((anchor) => Math.hypot(anchor.cx - center.x, anchor.cy - center.y) < spans * 0.07);
     if (near) {
       near.chains.push(chain);
       near.weight += chain.length;
@@ -339,6 +356,45 @@ function chainsCentroid(chains: readonly (readonly [number, number][])[]): { x: 
     }
   }
   return { x: sx / count, y: sy / count };
+}
+
+/**
+ * The drawing's enclosed areas, each holding the colour the photo has inside
+ * it, mapped onto the lesson's paper.
+ *
+ * `regionsColouredBy` is the photo pipeline's flat colouring: a fill is closed
+ * by construction, so a child painting one cannot run out of it, and white
+ * areas stay white paper rather than becoming a colour.
+ */
+function filledRegions(
+  doodle: RgbaImage,
+  photo: RgbaImage,
+  frame: TracePlacement,
+  artScale: number,
+): Array<{ d: string; hex: string; pixels: number }> {
+  let found: readonly FlatRegion[];
+  try {
+    found = regionsColouredBy(doodle, photo).regions;
+  } catch {
+    return [];
+  }
+  const smallest = doodle.width * doodle.height * 0.002;
+  return found
+    .filter((region) => region.points.length >= 4 && region.pixels >= smallest)
+    .sort((left, right) => right.pixels - left.pixels)
+    .slice(0, MAX_COLOURS)
+    .map((region) => ({
+      hex: region.hex,
+      pixels: region.pixels,
+      d: pathFrom(
+        region.points.map((point) => ({
+          x: Math.round(frame.x + point.x * artScale),
+          y: Math.round(frame.y + point.y * artScale),
+        })),
+        true,
+      ),
+    }))
+    .filter((region) => region.d.length >= 8);
 }
 
 interface SubjectColour {

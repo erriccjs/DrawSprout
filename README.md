@@ -258,6 +258,9 @@ network:
 npm run doodle-eval -- <line-art.png> [photo.png]
 ```
 
+Colour regions are the areas the drawing encloses, taken from the photo
+through the same flat colouring the photo pipeline uses, at most six (D-87).
+
 It prints the steps and writes `<line-art>-steps.svg` beside the input: the
 drawing on the left, and on the right every guide path coloured by step, drawn
 over the same picture at the same `fitPhoto` placement the trace layer uses
