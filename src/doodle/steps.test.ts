@@ -209,6 +209,47 @@ describe('doodle step builder', () => {
     expect(bluer(read[1]?.hex ?? '')).toBe(false);
   });
 
+  it('gives every area the drawing encloses its own colour step', () => {
+    // Eight closed shapes, two of them small, over a photo that puts a
+    // different colour behind each. Nothing here is capped away and nothing
+    // is dismissed for being small: an eye is worth a step.
+    const doodle = blank(400, 400);
+    ring(doodle, 200, 200, 170, 6);
+    const spots: Array<[number, number, number, [number, number, number]]> = [
+      [130, 120, 26, [40, 70, 210]],
+      [270, 120, 26, [40, 70, 210]],
+      [200, 190, 24, [30, 30, 32]],
+      [200, 260, 30, [210, 60, 50]],
+      [100, 250, 28, [60, 150, 70]],
+      [300, 250, 28, [230, 170, 40]],
+      [152, 318, 12, [150, 92, 44]],
+      [248, 318, 12, [120, 60, 150]],
+    ];
+    const photo = blank(400, 400);
+    fillColour(photo, 0, 0, 400, 400, [238, 236, 230]);
+    fillColour(photo, 40, 40, 320, 320, [200, 150, 120]);
+    for (const [cx, cy, radius, colour] of spots) {
+      ring(doodle, cx, cy, radius, 4);
+      fillColour(photo, cx - radius, cy - radius, radius * 2, radius * 2, colour);
+    }
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    // Eight spots plus the face around them: more than the old cap of six,
+    // and the two small spots are above the old minimum area too.
+    expect(lesson.colorRegions.length).toBeGreaterThanOrEqual(8);
+    for (const region of lesson.colorRegions) expect(region.d).not.toMatch(/A /);
+    expect(new Set(lesson.colorRegions.map((region) => region.suggestedColor)).size)
+      .toBeGreaterThanOrEqual(5);
+    // The small spots are there: some region is much smaller than the face.
+    const areas = lesson.colorRegions.map((region) => {
+      const points = pointsOf(region.d);
+      const w = Math.max(...points.map((p) => p.x)) - Math.min(...points.map((p) => p.x));
+      const h = Math.max(...points.map((p) => p.y)) - Math.min(...points.map((p) => p.y));
+      return w * h;
+    });
+    expect(Math.min(...areas)).toBeLessThan(Math.max(...areas) * 0.1);
+  });
+
   it('earns more steps from a busier drawing', () => {
     // A face with brows, eyes, nose, mouth and two ears. The owner asked for
     // detail: a drawing with this much in it should not collapse into two
