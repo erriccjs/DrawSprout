@@ -97,8 +97,18 @@ export function lineArtImage(image: RgbaImage): RgbaImage {
  * Enclosed areas of a line drawing, coloured from a second image that shares
  * its pixels. White paper is not a fill. A region that is not one colour is
  * marked `mixed` and still keeps a single mode.
+ *
+ * `keepPale` keeps the areas whose colour reads as white instead of dropping
+ * them. The photo pipeline wants them gone, because there white means unpainted
+ * paper. A doodle traced from a photo wants them: a white plush, a white shirt
+ * and a white wall are most of some pictures, and dropping them leaves a child
+ * with almost nothing to colour.
  */
-export function regionsColouredBy(lineArt: RgbaImage, coloured: RgbaImage): { regions: FlatRegion[]; mixed: boolean } {
+export function regionsColouredBy(
+  lineArt: RgbaImage,
+  coloured: RgbaImage,
+  options: { readonly keepPale?: boolean } = {},
+): { regions: FlatRegion[]; mixed: boolean } {
   const fitted = sameSize(lineArt, coloured) ? coloured : scaleNearest(coloured, lineArt.width, lineArt.height);
   const aligned = registerToLines(lineArt, fitted);
   const { width, height } = lineArt;
@@ -107,7 +117,7 @@ export function regionsColouredBy(lineArt: RgbaImage, coloured: RgbaImage): { re
   const barrier = erodeMask(dilateMask(line, width, height, radius), width, height, radius);
   if (!barrier.some((value) => value === 1)) return { regions: [], mixed: false };
   const inside = interiorMask(barrier, width, height);
-  return colourComponents(aligned, inside, line, width, height);
+  return colourComponents(aligned, inside, line, width, height, options.keepPale === true);
 }
 
 /** Shift and scale the colour page so its dark lines land on the line drawing. */
@@ -286,7 +296,7 @@ function interiorMask(barrier: Uint8Array, width: number, height: number): Uint8
   return inside;
 }
 
-function colourComponents(coloured: RgbaImage, mask: Uint8Array, line: Uint8Array, width: number, height: number): { regions: FlatRegion[]; mixed: boolean } {
+function colourComponents(coloured: RgbaImage, mask: Uint8Array, line: Uint8Array, width: number, height: number, keepPale = false): { regions: FlatRegion[]; mixed: boolean } {
   const ids = new Int32Array(mask.length);
   const stack = new Int32Array(mask.length);
   const stats: Array<{ id: number; pixels: number; minX: number; minY: number; maxX: number; maxY: number }> = [];
@@ -329,7 +339,7 @@ function colourComponents(coloured: RgbaImage, mask: Uint8Array, line: Uint8Arra
   let mixed = false;
   for (const stat of ranked) {
     const sampled = sampleRegion(coloured, ids, stat.id, width, height);
-    if (!sampled || sampled.name === 'putih') continue;
+    if (!sampled || (!keepPale && sampled.name === 'putih')) continue;
     if (sampled.mixed) mixed = true;
     colourOf.set(stat.id, sampled);
   }
