@@ -27,6 +27,14 @@ const MAX_PARTS = 8;
 const MAX_COLOURS = 24;
 /** Below this share of the picture an area is a speck, not something to paint. */
 const SMALLEST_REGION = 0.0004;
+/**
+ * What a child paints where the photo is white.
+ *
+ * A white plush, a white shirt, a white wall: the photo says white, and pure
+ * white on white paper is a step that shows nothing for the effort. This is
+ * the nearest shade that still reads as white and can be seen once it is down.
+ */
+const PAPER_WHITE = '#eae5da';
 
 export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPackage {
   const scaled = downscaleMask(inkMask(doodle), doodle.width, doodle.height, 280);
@@ -379,7 +387,10 @@ function filledRegions(
 ): Array<{ d: string; hex: string; pixels: number }> {
   let found: readonly FlatRegion[];
   try {
-    found = regionsColouredBy(doodle, photo).regions;
+    // Pale areas are kept here. In a photo of a white plush in a bright shop
+    // they are most of the picture, and dropping them left the child three
+    // things to colour.
+    found = regionsColouredBy(doodle, photo, { keepPale: true }).regions;
   } catch {
     return [];
   }
@@ -389,7 +400,7 @@ function filledRegions(
     .sort((left, right) => right.pixels - left.pixels)
     .slice(0, MAX_COLOURS)
     .map((region) => ({
-      hex: region.hex,
+      hex: region.hex === '#ffffff' ? PAPER_WHITE : region.hex,
       pixels: region.pixels,
       d: pathFrom(
         region.points.map((point) => ({

@@ -155,27 +155,30 @@ describe('doodle step builder', () => {
     expect(reddest).toBe(true);
   });
 
-  it('keeps a pale subject\'s own colour instead of letting one bright patch stand for it', () => {
-    // A white plush under a brown head, photographed in a bright shop: the
-    // body matches the room's corners, and dropping it left brown for the
-    // whole animal.
+  it('keeps a pale subject\'s own colour beside a darker one', () => {
+    // A white plush under a brown head, photographed in a bright shop. The
+    // drawing separates the two, so each keeps its own colour: before, pale
+    // areas were dropped as paper and the brown stood for the whole animal.
     const doodle = blank(240, 240);
     ring(doodle, 120, 120, 90, 6);
+    fillRect(doodle, 32, 118, 176, 6);
     const photo = blank(240, 240);
     fillColour(photo, 0, 0, 240, 240, [238, 236, 230]);
-    fillColour(photo, 40, 40, 160, 80, [150, 92, 44]);
-    fillColour(photo, 40, 120, 160, 80, [245, 243, 240]);
+    fillColour(photo, 40, 40, 160, 76, [150, 92, 44]);
+    fillColour(photo, 40, 126, 160, 74, [245, 243, 240]);
 
     const lesson = buildDoodleLesson(doodle, photo);
-    const colours = lesson.steps
-      .filter((step) => step.phase === 'color')
-      .map((step) => step.toolPreset.color);
-    expect(colours.length).toBeGreaterThanOrEqual(2);
+    expect(lesson.colorRegions.length).toBeGreaterThanOrEqual(2);
     const luma = (hex: string) => Number.parseInt(hex.slice(1, 3), 16) * 0.3
       + Number.parseInt(hex.slice(3, 5), 16) * 0.59
       + Number.parseInt(hex.slice(5, 7), 16) * 0.11;
-    expect(colours.some((colour) => luma(colour) > 200)).toBe(true);
-    expect(colours.some((colour) => luma(colour) < 160)).toBe(true);
+    const read = lesson.colorRegions.map((region) => ({
+      hex: region.suggestedColor,
+      top: Math.min(...pointsOf(region.d).map((point) => point.y)),
+    })).sort((left, right) => left.top - right.top);
+    expect(luma(read[0]?.hex ?? '')).toBeLessThan(160);
+    expect(luma(read.at(-1)?.hex ?? '')).toBeGreaterThan(200);
+    expect(read.at(-1)?.hex).not.toBe('#ffffff');
   });
 
   it('fills each enclosed area with the colour the photo has inside it', () => {
@@ -248,6 +251,32 @@ describe('doodle step builder', () => {
       return w * h;
     });
     expect(Math.min(...areas)).toBeLessThan(Math.max(...areas) * 0.1);
+  });
+
+  it('still gives a white subject something to colour', () => {
+    // A white plush in a bright shop is most of the picture. Treating white
+    // as unpainted paper left the child three things to colour on a photo
+    // that was mostly subject.
+    const doodle = blank(320, 320);
+    ring(doodle, 160, 160, 130, 6);
+    ring(doodle, 110, 120, 24, 4);
+    ring(doodle, 210, 120, 24, 4);
+    ring(doodle, 160, 190, 26, 5);
+    const photo = blank(320, 320);
+    fillColour(photo, 0, 0, 320, 320, [246, 245, 242]);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    expect(lesson.colorRegions.length).toBeGreaterThanOrEqual(3);
+    for (const region of lesson.colorRegions) {
+      // Visible once it is down: pure white on white paper shows nothing.
+      expect(region.suggestedColor).not.toBe('#ffffff');
+      const luma = Number.parseInt(region.suggestedColor.slice(1, 3), 16) * 0.3
+        + Number.parseInt(region.suggestedColor.slice(3, 5), 16) * 0.59
+        + Number.parseInt(region.suggestedColor.slice(5, 7), 16) * 0.11;
+      // Still reads as white, not as a colour invented for it.
+      expect(luma).toBeGreaterThan(200);
+      expect(luma).toBeLessThan(250);
+    }
   });
 
   it('earns more steps from a busier drawing', () => {
