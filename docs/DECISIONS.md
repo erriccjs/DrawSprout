@@ -1479,3 +1479,10 @@ five to eight and contours group at a fourteenth of the subject's span rather
 than a fifth, so a busy drawing earns the steps it deserves: a boy beside a
 plush dog goes from five part steps to eight, over the same eighteen interior
 contours. Nothing was being dropped before; it was being crushed together.
+
+**No colour budget.** The first cut of this kept at most six regions and
+dismissed any area under 0.2% of the picture. Both were arbitrary, and on a
+busy drawing they threw away eyes, a nose and a shoe. `regionsColouredBy`
+already ranks areas by size and keeps at most 24, so that is the only ceiling;
+this layer caps nothing and drops an area only below 0.04%, which is a speck.
+A boy beside a plush dog goes from six colour steps to eleven.
