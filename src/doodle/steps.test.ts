@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assertValidLessons } from '../lesson-data';
 import type { RgbaImage } from '../photo/png';
 import { buildDoodleLesson, photoSampler } from './steps';
+import { fitPhoto } from '../trace/placement';
 
 describe('doodle step builder', () => {
   it('starts with one simple shape, then the parts on the subject, ignoring a speck of background', () => {
@@ -199,6 +200,36 @@ describe('doodle step builder', () => {
       return { x: Number(first?.[1] ?? 0), y: Number(first?.[2] ?? 0) };
     });
     expect(Math.abs((centres[0]?.y ?? 0) - (centres[1]?.y ?? 0))).toBeGreaterThan(40);
+  });
+
+  it('places the guides where the trace layer places the drawing', () => {
+    // The ring sits in the middle of the page with a wide margin round it.
+    // The guide must keep that margin: the child traces over the picture, and
+    // fitting the ink's box to the paper instead blew the outline up by the
+    // drawing's own margin.
+    const doodle = blank(240, 240);
+    ring(doodle, 120, 120, 60, 6);
+    const photo = blank(240, 240);
+    fillColour(photo, 0, 0, 240, 240, [210, 60, 50]);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    const { width, height } = lesson.coordinateSpace;
+    const place = fitPhoto(width, height, 240, 240);
+    const scale = place.width / 240;
+    const points = pointsOf(lesson.steps[0]?.guidePaths[0]?.d ?? '');
+    const box = {
+      left: Math.min(...points.map((point) => point.x)),
+      right: Math.max(...points.map((point) => point.x)),
+      top: Math.min(...points.map((point) => point.y)),
+      bottom: Math.max(...points.map((point) => point.y)),
+    };
+    // The ring spans roughly 54..186 of the drawing once its stroke is traced.
+    expect(box.left).toBeCloseTo(place.x + 57 * scale, -1);
+    expect(box.right).toBeCloseTo(place.x + 183 * scale, -1);
+    expect(box.top).toBeCloseTo(place.y + 57 * scale, -1);
+    expect(box.bottom).toBeCloseTo(place.y + 183 * scale, -1);
+    // And it is nowhere near filling the paper, as the old mapping did.
+    expect(box.right - box.left).toBeLessThan(width * 0.55);
   });
 
   it('refuses a blank page', () => {

@@ -1436,3 +1436,21 @@ when the subject has exactly one colour and that colour is not near-black.
 **Seeing it.** `npm run doodle-eval -- <line-art.png> [photo.png]` runs the
 builder on a drawing and writes an SVG of every guide path and colour patch.
 No key and no network, so the builder can be judged apart from the model.
+
+### D-86 — The doodle's guides use the picture's placement
+
+The child traces over the doodle, so the guides and the picture have to sit in
+the same place. They did not. `fitPhoto` puts the whole drawing on the paper,
+margins and all, while the lesson fitted the ink's bounding box to the paper.
+The guide was therefore magnified by exactly the drawing's own margin, and the
+outline came out larger than the picture beneath it.
+
+**Choice.** `buildDoodleLesson` calls `fitPhoto` itself and maps every point
+through that one placement -- the outline, the parts, and the colour patches.
+Guides and picture cannot drift, because there is one placement and both use
+it. The subject keeps the proportion of the paper it has in the drawing, which
+is what the owner asked for.
+
+`npm run doodle-eval` now draws the guides over the picture at that same
+placement, so a guide that will not sit on the drawing in the app does not sit
+on it in the SVG either.
