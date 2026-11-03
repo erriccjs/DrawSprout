@@ -1496,3 +1496,11 @@ pass, and the doodle route paints those areas `#eae5da` rather than `#ffffff`
 -- the nearest shade that still reads as white and can be seen on white paper.
 A two-figure drawing whose plush is white goes from three colour steps to
 eighteen.
+
+**One colour, one step.** Keeping every pale area gave a child ten cream
+steps in a row on the white plush, which is ten decisions about one thing.
+Areas that share a colour now become one step whose `colorRegionIds` lists
+every one of them, the way `assemble.ts` already buckets the photo pipeline's
+colours. The renderer clips a stroke to each region in turn, so a brush stroke
+lands in whichever of the step's areas it crosses. The white-plush drawing
+goes from eighteen colour steps to seven.

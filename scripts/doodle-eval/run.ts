@@ -51,8 +51,9 @@ function report(lesson: LessonPackage): void {
       + `${String(total).padStart(3)} points  [${lengths.join(', ')}]`,
     );
   }
-  for (const region of lesson.colorRegions) {
-    console.log(`  ${region.id.padEnd(10)} ${region.suggestedColor}  ${region.d.slice(0, 44)}`);
+  for (const step of colour) {
+    const hex = step.toolPreset.color;
+    console.log(`  ${step.id.padEnd(10)} ${hex}  ${step.colorRegionIds.length} area(s)`);
   }
 }
 
