@@ -279,6 +279,46 @@ describe('doodle step builder', () => {
     }
   });
 
+  it('paints one colour once, however many places it covers', () => {
+    // Three separate shapes that are all the same colour in the photo. A
+    // child decides to paint that colour once, not three times.
+    const doodle = blank(320, 320);
+    ring(doodle, 160, 160, 140, 6);
+    ring(doodle, 100, 110, 30, 5);
+    ring(doodle, 220, 110, 30, 5);
+    ring(doodle, 160, 230, 34, 5);
+    const photo = blank(320, 320);
+    fillColour(photo, 0, 0, 320, 320, [246, 245, 242]);
+    for (const [cx, cy] of [[100, 110], [220, 110], [160, 230]]) {
+      fillColour(photo, (cx ?? 0) - 30, (cy ?? 0) - 30, 60, 60, [40, 70, 210]);
+    }
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    const colourSteps = lesson.steps.filter((step) => step.phase === 'color');
+    const blue = colourSteps.filter((step) => {
+      const hex = step.toolPreset.color;
+      return Number.parseInt(hex.slice(5, 7), 16) > Number.parseInt(hex.slice(1, 3), 16) + 40;
+    });
+    // One step for the blue, holding all three shapes.
+    expect(blue).toHaveLength(1);
+    expect(blue[0]?.colorRegionIds.length).toBeGreaterThanOrEqual(3);
+
+    // Every step's colour appears in exactly one step.
+    const hexes = colourSteps.map((step) => step.toolPreset.color);
+    expect(new Set(hexes).size).toBe(hexes.length);
+
+    // Each id still names a region that exists, and they are distinct paths.
+    const byId = new Map(lesson.colorRegions.map((region) => [region.id, region]));
+    const paths = new Set<string>();
+    for (const id of blue[0]?.colorRegionIds ?? []) {
+      const region = byId.get(id);
+      expect(region).toBeDefined();
+      expect(region?.suggestedColor).toBe(blue[0]?.toolPreset.color);
+      paths.add(region?.d ?? '');
+    }
+    expect(paths.size).toBe(blue[0]?.colorRegionIds.length);
+  });
+
   it('earns more steps from a busier drawing', () => {
     // A face with brows, eyes, nose, mouth and two ears. The owner asked for
     // detail: a drawing with this much in it should not collapse into two

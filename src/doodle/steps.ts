@@ -98,16 +98,13 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
     ));
   });
 
-  const regions = filled.length > 0
-    ? filled.map((region, index) => ({
-      id: `colour-${index + 1}`,
-      label: 'Warna',
-      d: region.d,
-      suggestedColor: region.hex,
-    }))
-    : colours.map((colour, index) => ({
-      id: `colour-${index + 1}`,
-      label: 'Warna',
+  // One colour, one step, however many places it covers. A plush's body, head
+  // and legs are the same cream: painting it is one thing a child decides to
+  // do, not ten. `colorRegionIds` already takes a list, and the photo pipeline
+  // buckets its colours the same way.
+  const buckets = filled.length > 0
+    ? colourBuckets(filled)
+    : colourBuckets(colours.map((colour, index) => ({
       // One colour means one subject to fill, and the body is the nicer shape
       // to hand a child. Several colours means several places, so each gets
       // the patch its own samples cover. A near-black never takes the body:
@@ -115,17 +112,29 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
       d: index === 0 && colours.length === 1 && !isShadowHex(colour.hex)
         ? shape
         : `${ellipse(colour.x, colour.y, colour.rx, colour.ry)} Z`,
-      suggestedColor: colour.hex,
-    }));
-  regions.forEach((region, index) => {
+      hex: colour.hex,
+      pixels: colours.length - index,
+    })));
+
+  const regions = buckets.flatMap((bucket, index) => bucket.paths.map((d, part) => ({
+    id: `colour-${index + 1}-r${part + 1}`,
+    label: 'Warna',
+    d,
+    suggestedColor: bucket.hex,
+  })));
+  buckets.forEach((bucket, index) => {
+    const ids = regions.filter((region) => region.id.startsWith(`colour-${index + 1}-r`)).map((region) => region.id);
+    if (ids.length === 0) return;
     steps.push({
       id: `color-${index + 1}`,
       phase: 'color' as const,
-      instruction: index === 0 ? 'Warnai warna yang paling besar.' : 'Warnai warna ini.',
-      hint: 'Warna yang cerah, dari bendanya.',
+      instruction: ids.length > 1
+        ? 'Warnai semua bagian warna ini.'
+        : (index === 0 ? 'Warnai warna yang paling besar.' : 'Warnai warna ini.'),
+      hint: ids.length > 1 ? 'Warnanya sama, jadi sekalian semuanya.' : 'Warna yang cerah, dari bendanya.',
       guidePaths: [],
-      colorRegionIds: [region.id],
-      toolPreset: { tool: 'brush' as const, color: region.suggestedColor, widthViewbox: index === 0 ? 48 : 28 },
+      colorRegionIds: ids,
+      toolPreset: { tool: 'brush' as const, color: bucket.hex, widthViewbox: index === 0 ? 48 : 28 },
       completionPolicy: { manualAllowed: true, automaticEnabled: false },
     });
   });
@@ -430,6 +439,23 @@ function filledRegions(
       ),
     }))
     .filter((region) => region.d.length >= 8);
+}
+
+/** Areas that share a colour become one bucket, biggest total first. */
+function colourBuckets(
+  areas: ReadonlyArray<{ d: string; hex: string; pixels: number }>,
+): Array<{ hex: string; paths: string[]; pixels: number }> {
+  const byHex = new Map<string, { hex: string; paths: string[]; pixels: number }>();
+  for (const area of areas) {
+    const bucket = byHex.get(area.hex);
+    if (bucket) {
+      bucket.paths.push(area.d);
+      bucket.pixels += area.pixels;
+    } else {
+      byHex.set(area.hex, { hex: area.hex, paths: [area.d], pixels: area.pixels });
+    }
+  }
+  return [...byHex.values()].sort((left, right) => right.pixels - left.pixels);
 }
 
 interface SubjectColour {
