@@ -684,7 +684,7 @@ function collapseNested(contours: Contour[]): Contour[] {
  * can disappear. A two-pixel bridge keeps a real gap as two subjects, and
  * each one is closed on its own.
  */
-export function subjectSilhouettes(image: RgbaImage): Point[][] {
+export function subjectSilhouettes(image: RgbaImage, maxCount = 3): Point[][] {
   const { width, height } = image;
   const ink = cleanInk(eraseStripeRuns(inkMask(image, INK_LUMINANCE), width, height), width, height);
   const bridged = dilate(ink, width, height, 2);
@@ -694,7 +694,7 @@ export function subjectSilhouettes(image: RgbaImage): Point[][] {
   const kept = labeled.stats
     .filter((stat) => stat.pixels >= Math.max(80, largest * 0.25))
     .sort((left, right) => right.pixels - left.pixels)
-    .slice(0, 3);
+    .slice(0, maxCount);
   const epsilon = Math.max(1.25, Math.min(width, height) * 0.004);
   const loops: Point[][] = [];
   for (const stat of kept) {

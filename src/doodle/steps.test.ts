@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { assertValidLessons } from '../lesson-data';
 import type { RgbaImage } from '../photo/png';
+import { localizeSentence } from '../i18n/generated';
+import { stepPreview } from '../lesson-data/step-preview';
 import { buildDoodleLesson, doodleInteriorCoverage, photoSampler } from './steps';
 import { fitPhoto } from '../trace/placement';
 
 describe('doodle step builder', () => {
-  it('starts with one simple shape, then the parts on the subject, ignoring a speck of background', () => {
+  it('draws the head, keeps the features on it, and ignores a speck of background', () => {
     // A face: one head, two eyes, a nose -- plus a square of background in the
     // corner that survived the ink mask and belongs to nothing.
     const doodle = blank(240, 240);
@@ -21,22 +23,20 @@ describe('doodle step builder', () => {
     const lesson = buildDoodleLesson(doodle, photo);
     expect(() => assertValidLessons([lesson])).not.toThrow();
     const lines = lesson.steps.filter((step) => step.phase !== 'color');
-    expect(lines[0]?.id).toBe('shape');
-    expect(lines[0]?.guidePaths).toHaveLength(1);
-    expect(lines[0]?.guidePaths[0]?.d).toMatch(/Z/);
-    expect(lines.length).toBeGreaterThanOrEqual(3);
-    expect(lines.length).toBeLessThanOrEqual(6);
+    expect(lines[0]?.instruction).toBe('Gambar kepalanya.');
+    expect(lines[0]?.hint).toBe('Gambar kepalanya.');
+    expect(localizeSentence(lines[0]?.hint ?? '')).toBe('Draw the head.');
+    // The eyes and the nose are part of the head, not steps of their own.
+    expect(lines[0]?.guidePaths.length).toBeGreaterThanOrEqual(4);
+    expect(lines[0]?.guidePaths.every((path) => path.d.endsWith('Z'))).toBe(true);
 
     // Every guide the child draws sits on the subject, so the corner square
     // never became a part of its own.
-    const head = pointsOf(lines[0]?.guidePaths[0]?.d ?? '');
-    const headLeft = Math.min(...head.map((point) => point.x));
-    const headTop = Math.min(...head.map((point) => point.y));
-    for (const step of lines.slice(1)) {
+    for (const step of lines) {
       for (const path of step.guidePaths) {
         for (const point of pointsOf(path.d)) {
-          expect(point.x).toBeGreaterThanOrEqual(headLeft - 1);
-          expect(point.y).toBeGreaterThanOrEqual(headTop - 1);
+          expect(point.x).toBeGreaterThan(100);
+          expect(point.y).toBeGreaterThan(100);
         }
       }
     }
@@ -70,7 +70,10 @@ describe('doodle step builder', () => {
     fillColour(photo, 0, 0, 120, 120, [200, 60, 60]);
 
     const lesson = buildDoodleLesson(doodle, photo);
-    const shape = lesson.steps[0]?.guidePaths[0]?.d ?? '';
+    const shape = lesson.steps
+      .filter((step) => step.phase !== 'color')
+      .flatMap((step) => step.guidePaths.map((path) => path.d))
+      .join(' ');
     const points = [...shape.matchAll(/[ML] (\d+) (\d+)/g)]
       .map(([, x, y]) => ({ x: Number(x), y: Number(y) }));
     expect(points.length).toBeGreaterThan(5);
@@ -336,9 +339,10 @@ describe('doodle step builder', () => {
 
     const lesson = buildDoodleLesson(doodle, photo);
     const lines = lesson.steps.filter((step) => step.phase !== 'color');
-    expect(lines.length).toBeGreaterThanOrEqual(5);
-    const paths = lines.slice(1).reduce((sum, step) => sum + step.guidePaths.length, 0);
-    expect(paths).toBeGreaterThanOrEqual(6);
+    // Eyes, nose, mouth and ears belong to the head, and none of them is dropped.
+    const paths = lines.reduce((sum, step) => sum + step.guidePaths.length, 0);
+    expect(paths).toBeGreaterThanOrEqual(5);
+    expect(lines[0]?.instruction).toBe('Gambar kepalanya.');
   });
 
   it('places the guides where the trace layer places the drawing', () => {
@@ -397,14 +401,29 @@ describe('doodle step builder', () => {
     const lesson = buildDoodleLesson(doodle, photo);
     expect(() => assertValidLessons([lesson])).not.toThrow();
     const lines = lesson.steps.filter((step) => step.phase !== 'color');
-    const outlines = lines.filter((step) => step.guidePaths.some((path) => path.d.includes('Z')));
-    expect(outlines.length).toBeGreaterThanOrEqual(2);
-    const centres = outlines.map((step) => {
-      const points = pointsOf(step.guidePaths[0]?.d ?? '');
-      const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
-      return x;
-    });
-    expect(Math.max(...centres) - Math.min(...centres)).toBeGreaterThan(180);
+    expect(lines.map((step) => step.instruction)).toEqual([
+      'Gambar kepalanya.',
+      'Gambar badannya.',
+      'Gambar kakinya.',
+      'Gambar kepalanya.',
+      'Gambar badannya.',
+      'Gambar kakinya.',
+    ]);
+    expect(lesson.steps[lines.length]?.phase).toBe('color');
+    const bodyStep = stepPreview(lesson, 1);
+    expect(bodyStep.strokes.some((stroke) => stroke.kind === 'new')).toBe(true);
+    expect(bodyStep.strokes.some((stroke) => stroke.kind === 'earlier')).toBe(true);
+    const centres = lines.map((step) => stepCentroid(step.guidePaths.map((path) => path.d)));
+    let reachedTheDog = false;
+    for (const centre of centres) {
+      if (centre.x > 500) reachedTheDog = true;
+      else expect(reachedTheDog).toBe(false);
+    }
+    expect(centres[0]?.x).toBeLessThan(450);
+    expect(centres[3]?.x).toBeGreaterThan(550);
+    expect(headLeads(lines.slice(0, 3))).toBe(true);
+    expect(headLeads(lines.slice(3))).toBe(true);
+    expect(Math.max(...centres.map((centre) => centre.x)) - Math.min(...centres.map((centre) => centre.x))).toBeGreaterThan(180);
 
     const colours = lesson.steps.filter((step) => step.phase === 'color');
     expect(colours.length).toBeGreaterThanOrEqual(3);
@@ -438,6 +457,18 @@ describe('doodle step builder', () => {
   it('covers a teddy and a cat with one step per crayon', () => {
     for (const scene of [teddyPicture(), catPicture()]) {
       const lesson = buildDoodleLesson(scene.doodle, scene.photo);
+      const lines = lesson.steps.filter((step) => step.phase !== 'color');
+      expect(lines[0]?.instruction).toBe('Gambar kepalanya.');
+      expect(localizeSentence('Gambar bagian atas.')).toBe('Draw the top part.');
+      expect(headLeads(lines)).toBe(true);
+      const living = ['Gambar kepalanya.', 'Gambar badannya.', 'Gambar tangannya.', 'Gambar kakinya.'];
+      let previous = -1;
+      for (const step of lines) {
+        const index = living.indexOf(step.instruction);
+        expect(index).toBeGreaterThan(previous);
+        previous = index;
+      }
+      expect(lesson.steps[lines.length]?.phase).toBe('color');
       const colours = lesson.steps.filter((step) => step.phase === 'color');
       expect(colours.length).toBeGreaterThanOrEqual(2);
       expect(colours.length).toBeLessThanOrEqual(6);
@@ -446,6 +477,39 @@ describe('doodle step builder', () => {
       expect(doodleInteriorCoverage(scene.doodle, scene.photo)).toBeGreaterThanOrEqual(0.8);
       expect(colourReachesOutline(lesson)).toBe(true);
     }
+  });
+
+  it('draws every separate object, with no cap on the number of steps', () => {
+    const doodle = blank(980, 90);
+    const photo = blank(980, 90);
+    fillColour(photo, 0, 0, 980, 90, [210, 80, 60]);
+    for (let index = 0; index < 10; index += 1) ring(doodle, 50 + index * 96, 45, 30, 4);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    const lines = lesson.steps.filter((step) => step.phase !== 'color');
+    expect(lines.length).toBeGreaterThanOrEqual(10);
+    const centres = lines.map((step) => stepCentroid(step.guidePaths.map((path) => path.d)).x);
+    const ordered = [...centres].sort((a, b) => a - b);
+    expect(centres).toEqual(ordered);
+  });
+
+  it('splits a thing into top, middle, and bottom', () => {
+    // Three bars close enough to be one object, still three strokes.
+    const doodle = blank(160, 120);
+    const photo = blank(160, 120);
+    fillColour(photo, 0, 0, 160, 120, [80, 140, 210]);
+    rectOutline(doodle, 30, 20, 100, 20);
+    rectOutline(doodle, 30, 43, 100, 20);
+    rectOutline(doodle, 30, 66, 100, 20);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    const lines = lesson.steps.filter((step) => step.phase !== 'color');
+    expect(lines.map((step) => step.instruction)).toEqual([
+      'Gambar bagian atas.',
+      'Gambar bagian tengah.',
+      'Gambar bagian bawah.',
+    ]);
+    expect(localizeSentence(lines[2]?.hint ?? '')).toBe('Draw the bottom part.');
   });
 
   it('refuses a blank page', () => {
@@ -504,6 +568,23 @@ function strokeLine(image: RgbaImage, x1: number, y1: number, x2: number, y2: nu
     const y = Math.round(y1 + ((y2 - y1) * i) / steps);
     fillRect(image, x - 1, y - 1, 3, 3);
   }
+}
+
+function stepCentroid(paths: readonly string[]): { x: number; y: number } {
+  const points = paths.flatMap((path) => pointsOf(path));
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  };
+}
+
+/** The first line step of a living subject sits in the top of that subject's box. */
+function headLeads(steps: ReadonlyArray<{ guidePaths: ReadonlyArray<{ d: string }> }>): boolean {
+  const points = steps.flatMap((step) => step.guidePaths.flatMap((path) => pointsOf(path.d)));
+  const top = Math.min(...points.map((point) => point.y));
+  const bottom = Math.max(...points.map((point) => point.y));
+  const first = stepCentroid(steps[0]?.guidePaths.map((path) => path.d) ?? []);
+  return first.y < top + (bottom - top) * 0.45;
 }
 
 function colourReachesOutline(lesson: { steps: ReadonlyArray<{ phase?: string; guidePaths: ReadonlyArray<{ d: string }> }>; colorRegions: ReadonlyArray<{ d: string }> }): boolean {

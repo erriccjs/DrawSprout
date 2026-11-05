@@ -1,9 +1,10 @@
 /**
- * Turns a line doodle and the original photo into a short lesson.
+ * Turns a line doodle and the original photo into a lesson.
  *
- * Step 1 is the biggest subject's own outline. A second figure standing
- * beside it is the next step, not part of the same blob. Colour steps fill
- * the areas inside those outlines, including where a line does not quite close.
+ * Line steps follow the doodle. One object is drawn completely before the
+ * next. Inside an object the parts go in drawing order: head, body, arms,
+ * then legs for a living subject, or top, middle, then bottom for anything
+ * else. Colour steps come after every line, one crayon at a time.
  */
 
 import { packageLesson } from '../categories/author';
@@ -17,9 +18,6 @@ import { subjectSilhouettes, traceInk } from '../photo/trace';
 const SPACE_W = 1000;
 const SPACE_H = 750;
 const INK = 128;
-// The owner asked for detail over brevity: more steps are welcome as long as
-// the drawing and the colours match the photo.
-const MAX_PARTS = 8;
 // This layer sets no budget of its own: every area the drawing encloses and
 // the photo gives a colour to earns a step. `regionsColouredBy` already ranks
 // by size and keeps at most 24, and that is the only ceiling.
@@ -47,56 +45,42 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   // The outline has to follow the subject. A convex hull turns every gap --
   // between two legs, under an arm, around an ear -- into one filled blob, so
   // the child is asked to draw a shadow instead of the thing in the photo.
-  const subjects = subjectSilhouettes(doodle).map((loop) => loop.map((point) => (
-    [point.x * (width / Math.max(1, doodle.width)), point.y * (height / Math.max(1, doodle.height))] as [number, number]
-  )));
-  const split = subjects.length >= 2;
-  const traced = tracedContours(doodle, width, height, split ? subjects : undefined);
-  const hull = (split ? subjects[0] : traced?.outline) ?? convexHull(sampleInk(ink, width, bounds));
+  const artScale = frame.width / Math.max(1, doodle.width);
+  const sections = lineSections(doodle);
+  const hull = sections.hull.length >= 3
+    ? sections.hull.map((point) => [point[0] * (width / doodle.width), point[1] * (height / doodle.height)] as [number, number])
+    : convexHull(sampleInk(ink, width, bounds));
   if (hull.length < 3) throw new Error('Doodle-nya terlalu kosong.');
-
-  const parts = groupChains(traced?.interiors ?? [], bounds);
   // The areas the drawing already encloses, each taking the colour the photo
   // has inside it. A handful of ellipses over the middle of the page could
   // never match a photo, whatever colours went into them.
-  const artScale = frame.width / Math.max(1, doodle.width);
   const filled = filledRegions(doodle, photo, frame, artScale);
   const colours = filled.length > 0 ? [] : subjectColours(width, height, photo, ink, hull, frame, scale);
-
   const shape = pathFrom(hull.map((point) => toSpace(point, frame, scale)), true);
-  const guides: GuidePath[] = [{ id: 'shape', d: shape, role: 'final-outline' }];
-  const steps: LessonStep[] = [
-    outlineStep('shape', 'Gambar bentuk besarnya.', 'Mulai dari bentuk yang paling besar.', guides),
-  ];
-  subjects.slice(1).forEach((loop, index) => {
-    const d = pathFrom(loop.map((point) => toSpace(point, frame, scale)), true);
-    if (d.length < 8) return;
-    steps.push(outlineStep(
-      `subject-${index + 2}`,
-      'Gambar bentuk yang lain.',
-      'Benda yang lain, di sampingnya.',
-      [{ id: `subject-${index + 2}`, d, role: 'final-outline' }],
-    ));
-  });
-  parts.forEach((part, index) => {
+  const steps: LessonStep[] = [];
+  sections.parts.forEach((part, index) => {
     const guidePaths: GuidePath[] = [];
-    part.forEach((chain, chainIndex) => {
-      const d = pathFrom(chain.map((point) => toSpace(point, frame, scale)), false);
+    part.chains.forEach((chain, chainIndex) => {
+      const d = pathFrom(chain.map((point) => toSpace(
+        [point[0] * (width / doodle.width), point[1] * (height / doodle.height)],
+        frame,
+        scale,
+      )), true);
       if (d.length < 8) return;
       guidePaths.push({
-        id: `part-${index + 1}-${chainIndex + 1}`,
+        id: `line-${index + 1}-${chainIndex + 1}`,
         d,
         role: 'final-outline',
       });
     });
     if (guidePaths.length === 0) return;
-    steps.push(outlineStep(
-      `part-${index + 1}`,
-      index === 0 ? 'Gambar bagian ini.' : 'Gambar bagian yang lebih kecil.',
-      index === 0 ? 'Bagian yang besar.' : 'Bagian yang lebih kecil.',
-      guidePaths,
-    ));
+    steps.push(outlineStep(`line-${index + 1}`, part.instruction, part.hint, guidePaths));
   });
+  if (steps.length === 0) {
+    steps.push(outlineStep('shape', 'Gambar bentuk besarnya.', 'Mulai dari bentuk yang paling besar.', [
+      { id: 'shape', d: shape, role: 'final-outline' },
+    ]));
+  }
 
   // One colour, one step, however many places it covers. A plush's body, head
   // and legs are the same cream: painting it is one thing a child decides to
@@ -143,10 +127,418 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
     id: `doodle-${inkHash(ink)}`,
     title: 'Doodle dari foto',
     subtitle: 'Dari doodle',
-    contentVersion: 'doodle-3',
+    contentVersion: 'doodle-4',
     colorRegions: regions,
     steps,
   });
+}
+
+type PartName = 'head' | 'body' | 'arms' | 'legs' | 'top' | 'middle' | 'bottom';
+
+const LIVING_ORDER: readonly PartName[] = ['head', 'body', 'arms', 'legs'];
+const THING_ORDER: readonly PartName[] = ['top', 'middle', 'bottom'];
+
+const PART_COPY: Record<PartName, { instruction: string; hint: string }> = {
+  head: { instruction: 'Gambar kepalanya.', hint: 'Gambar kepalanya.' },
+  body: { instruction: 'Gambar badannya.', hint: 'Gambar badannya.' },
+  arms: { instruction: 'Gambar tangannya.', hint: 'Gambar tangannya.' },
+  legs: { instruction: 'Gambar kakinya.', hint: 'Gambar kakinya.' },
+  top: { instruction: 'Gambar bagian atas.', hint: 'Gambar bagian atas.' },
+  middle: { instruction: 'Gambar bagian tengah.', hint: 'Gambar bagian tengah.' },
+  bottom: { instruction: 'Gambar bagian bawah.', hint: 'Gambar bagian bawah.' },
+};
+
+interface DoodleStroke {
+  readonly points: Array<[number, number]>;
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+  readonly cx: number;
+  readonly cy: number;
+  readonly pixels: number;
+  /** Label in the ink mask, so a tall stroke can be cut into body and legs. */
+  readonly componentId: number;
+  /** Set when a tall figure has already been cut into a named band. */
+  readonly part?: PartName;
+}
+
+interface LinePart {
+  readonly instruction: string;
+  readonly hint: string;
+  readonly chains: Array<Array<[number, number]>>;
+}
+
+/**
+ * The doodle's own strokes, grouped into one step per part.
+ *
+ * Objects come from separate silhouettes. A living subject is one whose top
+ * holds a roughly round blob, the head; ears and a tail join the part they
+ * sit on. Anything else is split into top, middle, and bottom.
+ */
+function lineSections(doodle: RgbaImage): { hull: Array<[number, number]>; parts: LinePart[] } {
+  const drawn = doodleStrokes(doodle);
+  const strokes = drawn.strokes;
+  const loops = subjectSilhouettes(doodle, 12).map((loop) => loop.map((point) => [point.x, point.y] as [number, number]));
+  const groups = groupStrokes(strokes, loops, doodle);
+  const order = groups
+    .map((list, index) => ({ list, index, left: boxOf(list, loops[index]).minX }))
+    .filter((group) => group.list.length > 0)
+    .sort((a, b) => a.left - b.left || a.index - b.index);
+  const parts: LinePart[] = [];
+  for (const group of order) {
+    const box = boxOf(group.list, loops[group.index]);
+    const pieces = group.list.flatMap((stroke) => splitTall(doodle, drawn.labels, stroke) ?? [stroke]);
+    const head = headStroke(pieces, box);
+    const buckets = new Map<PartName, DoodleStroke[]>();
+    const living = pieces.some((stroke) => stroke.part === 'head') || head !== null;
+    for (const stroke of pieces) {
+      const name = stroke.part ?? (living && head ? livingPart(stroke, head, box) : thingPart(stroke, box));
+      const list = buckets.get(name) ?? [];
+      list.push(stroke);
+      buckets.set(name, list);
+    }
+    for (const name of living ? LIVING_ORDER : THING_ORDER) {
+      const list = buckets.get(name);
+      if (!list || list.length === 0) continue;
+      list.sort((a, b) => a.minY - b.minY || a.minX - b.minX);
+      const copy = PART_COPY[name];
+      parts.push({ instruction: copy.instruction, hint: copy.hint, chains: list.map((stroke) => stroke.points) });
+    }
+  }
+  const hullPoints = strokes.flatMap((stroke) => stroke.points);
+  return { hull: convexHull(hullPoints), parts };
+}
+
+function boxOf(strokes: readonly DoodleStroke[], loop?: Array<[number, number]>): Bounds {
+  const points = strokes.flatMap((stroke) => [[stroke.minX, stroke.minY], [stroke.maxX, stroke.maxY]] as Array<[number, number]>);
+  if (loop) points.push(...loop);
+  if (points.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  return {
+    minX: Math.min(...points.map((point) => point[0])),
+    minY: Math.min(...points.map((point) => point[1])),
+    maxX: Math.max(...points.map((point) => point[0])),
+    maxY: Math.max(...points.map((point) => point[1])),
+  };
+}
+
+/** The topmost large round stroke. A smaller ear above it does not take the name. */
+function headStroke(strokes: readonly DoodleStroke[], box: Bounds): DoodleStroke | null {
+  const height = Math.max(1, box.maxY - box.minY);
+  const round = strokes.filter((stroke) => roughlyRound(stroke));
+  if (round.length === 0) return null;
+  const largest = round.reduce((best, stroke) => Math.max(best, Math.max(stroke.maxX - stroke.minX, stroke.maxY - stroke.minY)), 0);
+  const candidates = round.filter((stroke) => {
+    const size = Math.max(stroke.maxX - stroke.minX, stroke.maxY - stroke.minY);
+    const inUpper = stroke.cy <= box.minY + height * 0.62;
+    return inUpper && size >= largest * 0.6;
+  });
+  if (candidates.length === 0) return null;
+  return [...candidates].sort((a, b) => a.minY - b.minY || b.pixels - a.pixels)[0] ?? null;
+}
+
+function roughlyRound(stroke: DoodleStroke): boolean {
+  const width = Math.max(1, stroke.maxX - stroke.minX);
+  const height = Math.max(1, stroke.maxY - stroke.minY);
+  return Math.min(width, height) / Math.max(width, height) >= 0.62 && Math.max(width, height) >= 12;
+}
+
+/**
+ * One connected figure still has to be drawn in parts.
+ *
+ * A round top with a body underneath is a living subject. A wide top is a
+ * thing, split into top, middle, and bottom. A circle with nothing below it
+ * stays whole, so a face is one head.
+ */
+function splitTall(doodle: RgbaImage, labels: Int32Array, stroke: DoodleStroke): DoodleStroke[] | null {
+  const width = Math.max(1, stroke.maxX - stroke.minX);
+  const height = stroke.maxY - stroke.minY;
+  if (height < 48) return null;
+  const topEnd = Math.round(stroke.minY + height * 0.4);
+  const legStart = Math.round(stroke.minY + height * 0.68);
+  const lowerStart = Math.round(stroke.minY + height * 0.55);
+  let topMinX = stroke.maxX;
+  let topMaxX = stroke.minX;
+  let topMinY = stroke.maxY;
+  let topMaxY = stroke.minY;
+  let below = 0;
+  for (let y = stroke.minY; y <= stroke.maxY; y += 1) {
+    for (let x = stroke.minX; x <= stroke.maxX; x += 1) {
+      if (labels[y * doodle.width + x] !== stroke.componentId) continue;
+      if (y >= lowerStart) below += 1;
+      if (y > topEnd) continue;
+      if (x < topMinX) topMinX = x;
+      if (x > topMaxX) topMaxX = x;
+      if (y < topMinY) topMinY = y;
+      if (y > topMaxY) topMaxY = y;
+    }
+  }
+  // A thin leg is much less ink than the body it hangs from, and it still needs its own step.
+  if (below < stroke.pixels * 0.12 || topMaxX < topMinX) return null;
+  const topW = Math.max(1, topMaxX - topMinX);
+  const topH = Math.max(1, topMaxY - topMinY);
+  const topRound = Math.min(topW, topH) / Math.max(topW, topH) >= 0.55 && topW > width * 0.35;
+  const topNarrow = topW < width * 0.75;
+  if (width / height >= 0.75 && !(topRound && topNarrow)) return null;
+  const names: readonly PartName[] = topRound ? ['head', 'body', 'legs'] : ['top', 'middle', 'bottom'];
+  const bands: Array<[number, number]> = [
+    [stroke.minY, topEnd],
+    [topEnd + 1, legStart],
+    [legStart + 1, stroke.maxY],
+  ];
+  const pieces: DoodleStroke[] = [];
+  for (let index = 0; index < bands.length; index += 1) {
+    const band = bands[index]!;
+    const name = names[index]!;
+    for (const piece of sliceComponent(doodle, labels, stroke.componentId, band[0], band[1])) {
+      const wide = piece.maxX - piece.minX > Math.max(1, piece.maxY - piece.minY) * 1.6;
+      // A tail is a wide stroke in the lower band. It belongs with the body, not the feet.
+      const part = name === 'legs' && wide ? 'body' : name;
+      pieces.push({ ...piece, part });
+    }
+  }
+  return pieces.length >= 2 ? pieces : null;
+}
+
+/** A torso that runs into the feet is one stroke. Cut it so the legs are their own step. */
+function livingPart(stroke: DoodleStroke, head: DoodleStroke, box: Bounds): PartName {
+  if (stroke === head || nearHead(stroke, head)) return 'head';
+  const height = Math.max(1, box.maxY - box.minY);
+  const width = Math.max(1, box.maxX - box.minX);
+  const relY = (stroke.cy - box.minY) / height;
+  const strokeW = Math.max(1, stroke.maxX - stroke.minX);
+  const strokeH = Math.max(1, stroke.maxY - stroke.minY);
+  if (strokeW > strokeH * 1.6) return 'body';
+  const tall = strokeH > strokeW * 1.5;
+  if (relY >= 0.62 || (tall && relY >= 0.48 && stroke.minY >= head.maxY)) return 'legs';
+  const side = stroke.cx < box.minX + width * 0.22 || stroke.cx > box.maxX - width * 0.22;
+  if (relY > 0.22 && relY < 0.72 && side && stroke.pixels < head.pixels) return 'arms';
+  return 'body';
+}
+
+function nearHead(stroke: DoodleStroke, head: DoodleStroke): boolean {
+  const pad = Math.max(head.maxX - head.minX, head.maxY - head.minY) * 0.4;
+  const nearX = stroke.cx >= head.minX - pad && stroke.cx <= head.maxX + pad;
+  const nearY = stroke.cy >= head.minY - pad && stroke.cy <= head.maxY + pad * 0.6;
+  return nearX && nearY && stroke.pixels < head.pixels * 0.85;
+}
+
+function thingPart(stroke: DoodleStroke, box: Bounds): PartName {
+  const height = Math.max(1, box.maxY - box.minY);
+  const relY = (stroke.cy - box.minY) / height;
+  if (relY < 0.34) return 'top';
+  if (relY < 0.67) return 'middle';
+  return 'bottom';
+}
+
+/**
+ * Silhouettes seed the objects. A stroke that merely touches one — a body
+ * drawn just under the head, a leg under the body — stays with that object.
+ * A mark that touches nothing is its own object, unless it is a speck.
+ */
+function groupStrokes(
+  strokes: readonly DoodleStroke[],
+  loops: ReadonlyArray<Array<[number, number]>>,
+  doodle: RgbaImage,
+): DoodleStroke[][] {
+  const touch = Math.max(8, Math.round(Math.min(doodle.width, doodle.height) * 0.035));
+  const owner = strokes.map((stroke) => strokeOwner(stroke, loops));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let index = 0; index < strokes.length; index += 1) {
+      if ((owner[index] ?? -1) >= 0) continue;
+      for (let other = 0; other < strokes.length; other += 1) {
+        const host = owner[other] ?? -1;
+        if (host < 0 || strokeGap(strokes[index]!, strokes[other]!) > touch) continue;
+        owner[index] = host;
+        changed = true;
+        break;
+      }
+    }
+  }
+  const groups = new Map<number, DoodleStroke[]>();
+  const loose: DoodleStroke[] = [];
+  strokes.forEach((stroke, index) => {
+    const id = owner[index] ?? -1;
+    if (id < 0) loose.push(stroke);
+    else {
+      const list = groups.get(id) ?? [];
+      list.push(stroke);
+      groups.set(id, list);
+    }
+  });
+  for (const cluster of clusters(loose, touch)) {
+      const pixels = cluster.reduce((sum, stroke) => sum + stroke.pixels, 0);
+    const biggest = Math.max(...strokes.map((stroke) => stroke.pixels), 1);
+    if (pixels < 80 || pixels < biggest * 0.2) continue;
+    groups.set(groups.size + loops.length + 1, cluster);
+  }
+  return [...groups.values()];
+}
+
+function clusters(strokes: readonly DoodleStroke[], touch: number): DoodleStroke[][] {
+  const parent = strokes.map((_, index) => index);
+  const find = (index: number): number => {
+    let cursor = index;
+    while (parent[cursor] !== cursor) cursor = parent[cursor] ?? cursor;
+    return cursor;
+  };
+  for (let left = 0; left < strokes.length; left += 1) {
+    for (let right = left + 1; right < strokes.length; right += 1) {
+      if (strokeGap(strokes[left]!, strokes[right]!) > touch) continue;
+      parent[find(right)] = find(left);
+    }
+  }
+  const grouped = new Map<number, DoodleStroke[]>();
+  strokes.forEach((stroke, index) => {
+    const root = find(index);
+    const list = grouped.get(root) ?? [];
+    list.push(stroke);
+    grouped.set(root, list);
+  });
+  return [...grouped.values()];
+}
+
+function strokeGap(left: DoodleStroke, right: DoodleStroke): number {
+  const dx = Math.max(0, left.minX - right.maxX, right.minX - left.maxX);
+  const dy = Math.max(0, left.minY - right.maxY, right.minY - left.maxY);
+  return Math.hypot(dx, dy);
+}
+
+function strokeOwner(stroke: DoodleStroke, loops: ReadonlyArray<Array<[number, number]>>): number {
+  if (loops.length === 0) return 0;
+  for (let index = 0; index < loops.length; index += 1) {
+    const loop = loops[index];
+    if (loop && inside(stroke.cx, stroke.cy, loop)) return index;
+  }
+  let best = -1;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < loops.length; index += 1) {
+    const loop = loops[index];
+    if (!loop) continue;
+    for (const [x, y] of loop) {
+      const distance = Math.hypot(stroke.cx - x, stroke.cy - y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    }
+  }
+  const loop = loops[best];
+  const reach = loop ? Math.max(24, (Math.max(...loop.map((point) => point[0])) - Math.min(...loop.map((point) => point[0]))) * 0.2) : 0;
+  return bestDistance <= reach ? best : -1;
+}
+
+function doodleStrokes(doodle: RgbaImage): { strokes: DoodleStroke[]; labels: Int32Array } {
+  const mask = inkMask(doodle);
+  const labels = new Int32Array(mask.length);
+  return { strokes: strokesInMask(doodle, mask, labels), labels };
+}
+
+function sliceComponent(doodle: RgbaImage, labels: Int32Array, id: number, y0: number, y1: number): DoodleStroke[] {
+  const mask = new Uint8Array(labels.length);
+  const top = Math.max(0, y0);
+  const bottom = Math.min(doodle.height - 1, y1);
+  for (let y = top; y <= bottom; y += 1) {
+    for (let x = 0; x < doodle.width; x += 1) {
+      const index = y * doodle.width + x;
+      if (labels[index] === id) mask[index] = 1;
+    }
+  }
+  return strokesInMask(doodle, mask, new Int32Array(mask.length));
+}
+
+function strokesInMask(doodle: RgbaImage, mask: Uint8Array, ids: Int32Array): DoodleStroke[] {
+  const { width, height } = doodle;
+  const stats: Array<{ id: number; pixels: number; minX: number; minY: number; maxX: number; maxY: number; sx: number; sy: number }> = [];
+  let next = 0;
+  const stack: number[] = [];
+  for (let start = 0; start < mask.length; start += 1) {
+    if (mask[start] !== 1 || ids[start]) continue;
+    next += 1;
+    stack.push(start);
+    ids[start] = next;
+    let pixels = 0;
+    let minX = width;
+    let minY = height;
+    let maxX = 0;
+    let maxY = 0;
+    let sx = 0;
+    let sy = 0;
+    while (stack.length > 0) {
+      const index = stack.pop() ?? 0;
+      pixels += 1;
+      const x = index % width;
+      const y = (index - x) / width;
+      sx += x;
+      sy += y;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+      for (const [nx, ny] of neighbours(x, y, width, height)) {
+        const neighbor = ny * width + nx;
+        if (mask[neighbor] === 1 && !ids[neighbor]) {
+          ids[neighbor] = next;
+          stack.push(neighbor);
+        }
+      }
+    }
+    stats.push({ id: next, pixels, minX, minY, maxX, maxY, sx, sy });
+  }
+  const strokes: DoodleStroke[] = [];
+  for (const stat of stats) {
+    const points = traceStroke(doodle, ids, stat.id, stat.minX, stat.minY, stat.maxX, stat.maxY);
+    if (!points || points.length < 4) continue;
+    strokes.push({
+      points,
+      minX: stat.minX,
+      minY: stat.minY,
+      maxX: stat.maxX,
+      maxY: stat.maxY,
+      cx: stat.sx / stat.pixels,
+      cy: stat.sy / stat.pixels,
+      pixels: stat.pixels,
+      componentId: stat.id,
+    });
+  }
+  return strokes;
+}
+
+function traceStroke(
+  doodle: RgbaImage,
+  ids: Int32Array,
+  id: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): Array<[number, number]> | null {
+  const pad = 2;
+  const cropW = maxX - minX + 1 + pad * 2;
+  const cropH = maxY - minY + 1 + pad * 2;
+  if (cropW < 4 || cropH < 4) return null;
+  const data = new Uint8Array(cropW * cropH * 4);
+  data.fill(255);
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      if (ids[y * doodle.width + x] !== id) continue;
+      const index = ((y - minY + pad) * cropW + (x - minX + pad)) * 4;
+      data[index] = 0;
+      data[index + 1] = 0;
+      data[index + 2] = 0;
+    }
+  }
+  let traced;
+  try {
+    traced = traceInk({ width: cropW, height: cropH, data });
+  } catch {
+    return null;
+  }
+  const outer = traced.find((contour) => contour.silhouette) ?? traced[0];
+  if (!outer || outer.points.length < 4) return null;
+  return outer.points.map((point) => [point.x + minX - pad, point.y + minY - pad] as [number, number]);
 }
 
 function outlineStep(id: string, instruction: string, hint: string, guidePaths: readonly GuidePath[]) {
@@ -235,51 +627,6 @@ function sampleInk(ink: Uint8Array, width: number, bounds: Bounds): Array<[numbe
   return points;
 }
 
-/**
- * The drawing's own contours, in the downscaled mask's grid.
- *
- * `traceInk` runs marching squares on the full-resolution doodle: the outer
- * loop is the subject's real boundary, and the rest are the lines inside it --
- * eyes, a nose, an ear's fold. Returns null when the drawing is too thin or
- * too broken for a closed loop, and the caller falls back to the hull.
- */
-function tracedContours(
-  doodle: RgbaImage,
-  width: number,
-  height: number,
-  subjects?: ReadonlyArray<Array<[number, number]>>,
-): { outline: Array<[number, number]>; interiors: Array<Array<[number, number]>> } | null {
-  let contours;
-  try {
-    contours = traceInk(doodle);
-  } catch {
-    return null;
-  }
-  const silhouette = contours.find((contour) => contour.silhouette === true)
-    ?? [...contours].filter((contour) => contour.closed)
-      .sort((left, right) => right.points.length - left.points.length)[0];
-  if (!silhouette || silhouette.points.length < 3) return null;
-  // A plain scale, so the points stay fractional until toSpace rounds them.
-  const sx = width / Math.max(1, doodle.width);
-  const sy = height / Math.max(1, doodle.height);
-  const map = (contour: typeof silhouette): Array<[number, number]> =>
-    contour.points.map((point) => [point.x * sx, point.y * sy] as [number, number]);
-  const outline = map(silhouette);
-  if (outline.length < 3) return null;
-  // Only lines on the subject. A speck of background that survived the mask
-  // traces its own loop, and it is not a part of anything the child is drawing.
-  const interiors = contours
-    .filter((contour) => contour !== silhouette)
-    .map(map)
-    .filter((chain) => chain.length >= 3)
-    .filter((chain) => {
-      const centre = chainCentroid(chain);
-      const homes = subjects && subjects.length > 0 ? subjects : [outline];
-      return homes.some((home) => inside(centre.x, centre.y, home));
-    });
-  return { outline, interiors };
-}
-
 /** A fill this dark on the whole body is a silhouette, not a colour. */
 function isShadowHex(value: string): boolean {
   const r = Number.parseInt(value.slice(1, 3), 16);
@@ -331,68 +678,6 @@ function downscaleMask(
     }
   }
   return { ink: out, width: nextWidth, height: nextHeight };
-}
-
-/**
- * Lines that sit together become one part. The radius is small, so a face is
- * a step and not the whole figure: the owner asked for detail, and MAX_PARTS
- * is the only thing that caps how many steps a busy drawing earns.
- */
-function groupChains(
-  chains: ReadonlyArray<Array<[number, number]>>,
-  bounds: Bounds,
-): Array<Array<Array<[number, number]>>> {
-  const spans = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, 1);
-  const anchors: Array<{ chains: Array<Array<[number, number]>>; weight: number; cx: number; cy: number }> = [];
-  const ordered = [...chains].sort((a, b) => b.length - a.length);
-  for (const chain of ordered) {
-    const center = chainCentroid(chain);
-    const near = anchors.find((anchor) => Math.hypot(anchor.cx - center.x, anchor.cy - center.y) < spans * 0.07);
-    if (near) {
-      near.chains.push(chain);
-      near.weight += chain.length;
-      const next = chainsCentroid(near.chains);
-      near.cx = next.x;
-      near.cy = next.y;
-    } else if (anchors.length < MAX_PARTS) {
-      anchors.push({ chains: [chain], weight: chain.length, cx: center.x, cy: center.y });
-    } else {
-      const host = anchors.reduce((best, anchor) => {
-        const bestDist = Math.hypot(best.cx - center.x, best.cy - center.y);
-        const dist = Math.hypot(anchor.cx - center.x, anchor.cy - center.y);
-        return dist < bestDist ? anchor : best;
-      });
-      host.chains.push(chain);
-      host.weight += chain.length;
-    }
-  }
-  return anchors
-    .sort((a, b) => b.weight - a.weight)
-    .map((anchor) => anchor.chains);
-}
-
-function chainCentroid(chain: readonly [number, number][]): { x: number; y: number } {
-  let sx = 0;
-  let sy = 0;
-  for (const [x, y] of chain) {
-    sx += x;
-    sy += y;
-  }
-  return { x: sx / chain.length, y: sy / chain.length };
-}
-
-function chainsCentroid(chains: readonly (readonly [number, number][])[]): { x: number; y: number } {
-  let sx = 0;
-  let sy = 0;
-  let count = 0;
-  for (const chain of chains) {
-    for (const [x, y] of chain) {
-      sx += x;
-      sy += y;
-      count += 1;
-    }
-  }
-  return { x: sx / count, y: sy / count };
 }
 
 /**
