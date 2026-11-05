@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { assertValidLessons } from '../lesson-data';
 import type { RgbaImage } from '../photo/png';
-import { buildDoodleLesson, photoSampler } from './steps';
+import { buildDoodleLesson, doodleInteriorCoverage, photoSampler } from './steps';
 import { fitPhoto } from '../trace/placement';
 
 describe('doodle step builder', () => {
@@ -377,8 +377,10 @@ describe('doodle step builder', () => {
     fillColour(photo, 0, 0, 360, 280, [186, 214, 168]);
     ring(doodle, 92, 58, 26, 3);
     rectOutline(doodle, 68, 88, 48, 78);
-    strokeLine(doodle, 78, 166, 78, 230);
-    strokeLine(doodle, 108, 166, 112, 232);
+    strokeLine(doodle, 74, 166, 70, 236);
+    strokeLine(doodle, 86, 166, 88, 236);
+    strokeLine(doodle, 104, 166, 104, 236);
+    strokeLine(doodle, 116, 166, 120, 236);
     fillColour(photo, 66, 32, 52, 52, [232, 186, 150]);
     fillColour(photo, 68, 90, 48, 78, [50, 92, 186]);
     fillColour(photo, 74, 168, 42, 66, [36, 36, 48]);
@@ -405,8 +407,16 @@ describe('doodle step builder', () => {
     expect(Math.max(...centres) - Math.min(...centres)).toBeGreaterThan(180);
 
     const colours = lesson.steps.filter((step) => step.phase === 'color');
-    expect(colours.length).toBeGreaterThanOrEqual(4);
+    expect(colours.length).toBeGreaterThanOrEqual(3);
+    expect(colours.length).toBeLessThanOrEqual(6);
+    expect(new Set(colours.map((step) => step.toolPreset.color)).size).toBe(colours.length);
+    expect(colours[0]?.hint).toMatch(/dengan /);
     expect(lesson.colorRegions.length).toBeGreaterThanOrEqual(4);
+    expect(doodleInteriorCoverage(doodle, photo)).toBeGreaterThanOrEqual(0.85);
+    // The metric is the share of interior pixels that survive as a fill.
+    // A body-only colouring used to score well while the legs stayed white,
+    // so the lowest fill also has to reach the feet of the outline.
+    expect(colourReachesOutline(lesson)).toBe(true);
     for (const region of lesson.colorRegions) {
       expect(region.d).not.toMatch(/A /);
       const luma = Number.parseInt(region.suggestedColor.slice(1, 3), 16) * 0.3
@@ -423,6 +433,19 @@ describe('doodle step builder', () => {
     });
     expect(boxes.some((box) => box.right < 500)).toBe(true);
     expect(boxes.some((box) => box.left > 400)).toBe(true);
+  });
+
+  it('covers a teddy and a cat with one step per crayon', () => {
+    for (const scene of [teddyPicture(), catPicture()]) {
+      const lesson = buildDoodleLesson(scene.doodle, scene.photo);
+      const colours = lesson.steps.filter((step) => step.phase === 'color');
+      expect(colours.length).toBeGreaterThanOrEqual(2);
+      expect(colours.length).toBeLessThanOrEqual(6);
+      expect(new Set(colours.map((step) => step.toolPreset.color)).size).toBe(colours.length);
+      expect(colours[0]?.hint).toMatch(/dengan /);
+      expect(doodleInteriorCoverage(scene.doodle, scene.photo)).toBeGreaterThanOrEqual(0.8);
+      expect(colourReachesOutline(lesson)).toBe(true);
+    }
   });
 
   it('refuses a blank page', () => {
@@ -483,8 +506,57 @@ function strokeLine(image: RgbaImage, x1: number, y1: number, x2: number, y2: nu
   }
 }
 
+function colourReachesOutline(lesson: { steps: ReadonlyArray<{ phase?: string; guidePaths: ReadonlyArray<{ d: string }> }>; colorRegions: ReadonlyArray<{ d: string }> }): boolean {
+  const outlineBottom = Math.max(...lesson.steps.filter((step) => step.phase !== 'color').flatMap((step) => (
+    step.guidePaths.flatMap((path) => pointsOf(path.d).map((point) => point.y))
+  )));
+  const colourBottom = Math.max(...lesson.colorRegions.flatMap((region) => pointsOf(region.d).map((point) => point.y)));
+  return colourBottom > outlineBottom * 0.85;
+}
+
 function pointsOf(d: string): Array<{ x: number; y: number }> {
   return [...d.matchAll(/[ML] (-?\d+) (-?\d+)/g)].map(([, x, y]) => ({ x: Number(x), y: Number(y) }));
+}
+
+function teddyPicture(): { doodle: RgbaImage; photo: RgbaImage } {
+  const doodle = blank(240, 240);
+  const photo = blank(240, 240);
+  fillColour(photo, 0, 0, 240, 240, [210, 230, 210]);
+  ring(doodle, 120, 78, 36, 4);
+  ring(doodle, 78, 50, 16, 3);
+  ring(doodle, 162, 50, 16, 3);
+  ring(doodle, 120, 150, 14, 3);
+  rectOutline(doodle, 78, 112, 84, 70);
+  strokeLine(doodle, 90, 182, 86, 220);
+  strokeLine(doodle, 102, 182, 106, 220);
+  strokeLine(doodle, 140, 182, 136, 220);
+  strokeLine(doodle, 152, 182, 156, 220);
+  fillColour(photo, 80, 40, 80, 80, [186, 140, 90]);
+  fillColour(photo, 78, 114, 84, 68, [150, 96, 52]);
+  fillColour(photo, 106, 136, 28, 28, [196, 40, 56]);
+  fillColour(photo, 84, 184, 76, 40, [120, 72, 40]);
+  return { doodle, photo };
+}
+
+function catPicture(): { doodle: RgbaImage; photo: RgbaImage } {
+  const doodle = blank(240, 200);
+  const photo = blank(240, 200);
+  fillColour(photo, 0, 0, 240, 200, [180, 210, 170]);
+  ring(doodle, 120, 70, 40, 4);
+  strokeLine(doodle, 86, 48, 70, 16);
+  strokeLine(doodle, 98, 46, 86, 18);
+  strokeLine(doodle, 154, 48, 170, 16);
+  strokeLine(doodle, 142, 46, 154, 18);
+  rectOutline(doodle, 88, 108, 64, 50);
+  strokeLine(doodle, 150, 130, 210, 150);
+  strokeLine(doodle, 150, 142, 208, 162);
+  fillColour(photo, 80, 30, 80, 80, [210, 150, 60]);
+  fillColour(photo, 64, 12, 46, 42, [210, 150, 60]);
+  fillColour(photo, 136, 12, 46, 42, [210, 150, 60]);
+  fillColour(photo, 108, 78, 24, 16, [40, 40, 48]);
+  fillColour(photo, 88, 110, 64, 48, [190, 120, 40]);
+  fillColour(photo, 148, 126, 68, 40, [200, 140, 50]);
+  return { doodle, photo };
 }
 
 function rectOutline(image: RgbaImage, x: number, y: number, width: number, height: number): void {

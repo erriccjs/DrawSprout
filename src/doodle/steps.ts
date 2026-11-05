@@ -131,7 +131,7 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
       instruction: ids.length > 1
         ? 'Warnai semua bagian warna ini.'
         : (index === 0 ? 'Warnai warna yang paling besar.' : 'Warnai warna ini.'),
-      hint: ids.length > 1 ? 'Warnanya sama, jadi sekalian semuanya.' : 'Warna yang cerah, dari bendanya.',
+      hint: `Warnai bagian ini dengan ${bucket.name}.`,
       guidePaths: [],
       colorRegionIds: ids,
       toolPreset: { tool: 'brush' as const, color: bucket.hex, widthViewbox: index === 0 ? 48 : 28 },
@@ -143,7 +143,7 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
     id: `doodle-${inkHash(ink)}`,
     title: 'Doodle dari foto',
     subtitle: 'Dari doodle',
-    contentVersion: 'doodle-2',
+    contentVersion: 'doodle-3',
     colorRegions: regions,
     steps,
   });
@@ -418,7 +418,7 @@ function filledRegions(
     const painted = coverByColour(doodle, photo);
     // Open lines leave only a pocket or two closed. The photo's own colours
     // inside each subject cover the rest, so a body does not stay white.
-    found = painted.length > strict.length ? painted : strict;
+    found = painted.regions.length > strict.length ? painted.regions : strict;
   } catch {
     return [];
   }
@@ -442,20 +442,80 @@ function filledRegions(
 }
 
 /** Areas that share a colour become one bucket, biggest total first. */
+const CRAYONS: ReadonlyArray<{ name: string; r: number; g: number; b: number }> = [
+  { name: 'kulit', r: 240, g: 184, b: 150 },
+  { name: 'cokelat', r: 176, g: 112, b: 64 },
+  { name: 'merah', r: 226, g: 59, b: 59 },
+  { name: 'kuning', r: 240, g: 196, b: 58 },
+  { name: 'hijau', r: 62, g: 154, b: 85 },
+  { name: 'biru', r: 61, g: 116, b: 214 },
+  { name: 'hitam', r: 58, g: 58, b: 58 },
+  { name: 'abu-abu', r: 150, g: 150, b: 158 },
+  { name: 'merah muda', r: 242, g: 166, b: 179 },
+  { name: 'ungu', r: 122, g: 90, b: 170 },
+];
+
+/** Share of the subject interior that receives a colour. The page outside stays out. */
+export function doodleInteriorCoverage(doodle: RgbaImage, photo: RgbaImage): number {
+  try {
+    return coverByColour(doodle, photo).coverage;
+  } catch {
+    return 0;
+  }
+}
+
 function colourBuckets(
   areas: ReadonlyArray<{ d: string; hex: string; pixels: number }>,
-): Array<{ hex: string; paths: string[]; pixels: number }> {
-  const byHex = new Map<string, { hex: string; paths: string[]; pixels: number }>();
-  for (const area of areas) {
-    const bucket = byHex.get(area.hex);
-    if (bucket) {
-      bucket.paths.push(area.d);
-      bucket.pixels += area.pixels;
-    } else {
-      byHex.set(area.hex, { hex: area.hex, paths: [area.d], pixels: area.pixels });
+): Array<{ name: string; hex: string; paths: string[]; pixels: number }> {
+  const tagged = areas.map((area) => ({ ...area, crayon: crayonFor(area.hex) }));
+  const areaOf = (name: string) => tagged.filter((area) => area.crayon.name === name)
+    .reduce((sum, area) => sum + area.pixels, 0);
+  let names = [...new Set(tagged.map((area) => area.crayon.name))];
+  while (names.length > 6) {
+    const ranked = [...names].sort((left, right) => areaOf(left) - areaOf(right));
+    const small = ranked[0]!;
+    const from = tagged.find((area) => area.crayon.name === small)?.crayon ?? CRAYONS[0]!;
+    const host = ranked.slice(1).reduce((best, name) => {
+      const swatch = CRAYONS.find((item) => item.name === name) ?? from;
+      const distance = (swatch.r - from.r) ** 2 + (swatch.g - from.g) ** 2 + (swatch.b - from.b) ** 2;
+      return distance < best.distance ? { name, distance } : best;
+    }, { name: ranked[1]!, distance: Number.POSITIVE_INFINITY });
+    const next = CRAYONS.find((item) => item.name === host.name) ?? from;
+    for (const area of tagged) {
+      if (area.crayon.name === small) area.crayon = next;
+    }
+    names = [...new Set(tagged.map((area) => area.crayon.name))];
+  }
+  return names.map((name) => {
+    const members = tagged.filter((area) => area.crayon.name === name);
+    const crayon = members[0]?.crayon ?? CRAYONS[0]!;
+    return {
+      name: crayon.name,
+      hex: crayon.name === 'putih' ? PAPER_WHITE : hex(crayon.r, crayon.g, crayon.b),
+      pixels: members.reduce((sum, area) => sum + area.pixels, 0),
+      paths: members.map((area) => area.d),
+    };
+  }).sort((left, right) => right.pixels - left.pixels);
+}
+
+function crayonFor(value: string): { name: string; r: number; g: number; b: number } {
+  const r = Number.parseInt(value.slice(1, 3), 16);
+  const g = Number.parseInt(value.slice(3, 5), 16);
+  const b = Number.parseInt(value.slice(5, 7), 16);
+  const lum = (r * 30 + g * 59 + b * 11) / 100;
+  const max = Math.max(r, g, b);
+  const sat = max === 0 ? 0 : (max - Math.min(r, g, b)) / max;
+  if (lum >= 215 && sat < 0.18) return { name: 'putih', r: 234, g: 229, b: 218 };
+  let best = CRAYONS[0]!;
+  let gap = Number.POSITIVE_INFINITY;
+  for (const swatch of CRAYONS) {
+    const distance = (swatch.r - r) ** 2 + (swatch.g - g) ** 2 + (swatch.b - b) ** 2;
+    if (distance < gap) {
+      gap = distance;
+      best = swatch;
     }
   }
-  return [...byHex.values()].sort((left, right) => right.pixels - left.pixels);
+  return best;
 }
 
 interface SubjectColour {
