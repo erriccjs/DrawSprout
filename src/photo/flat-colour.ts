@@ -128,12 +128,16 @@ export function regionsColouredBy(
  * These regions follow the photo's own colours inside the subject, so a shirt,
  * a face and a statue each get a flat fill.
  */
-export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): FlatRegion[] {
+export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { regions: FlatRegion[]; coverage: number } {
   const fitted = sameSize(lineArt, coloured) ? coloured : scaleNearest(coloured, lineArt.width, lineArt.height);
-  const aligned = registerToLines(lineArt, fitted);
+  // The doodle and the photo already share a frame. Chasing a dark fill
+  // would slide the colours off the lines.
+  const aligned = registerToLines(lineArt, fitted, false);
   const { width, height } = lineArt;
   const line = lineMask(lineArt);
-  const bridged = dilateMask(line, width, height, 2);
+  // Seal pinholes in an outline without eating a leg that is drawn as two lines.
+  const closed = erodeMask(dilateMask(line, width, height, 2), width, height, 1);
+  const bridged = dilateMask(closed, width, height, 2);
   const ids = new Int32Array(line.length);
   const stack = new Int32Array(line.length);
   let next = 0;
@@ -162,19 +166,25 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): FlatRegi
     sizes[next] = pixels;
   }
   const largest = sizes.reduce((max, value) => Math.max(max, value), 0);
+  // A few pixels seals a gap in an outline. A wider brush would turn the
+  // space between a double-line leg into barrier, and the leg would stay white.
+  const seal = Math.max(4, Math.min(8, Math.round(Math.min(width, height) * 0.02)));
   const interior = new Uint8Array(line.length);
   for (let id = 1; id <= next; id += 1) {
     if ((sizes[id] ?? 0) < Math.max(80, largest * 0.25)) continue;
     const only = new Uint8Array(line.length);
     for (let index = 0; index < only.length; index += 1) {
-      if (ids[index] === id && line[index]) only[index] = 1;
+      if (ids[index] === id && closed[index]) only[index] = 1;
     }
-    const close = Math.max(8, Math.min(18, Math.round(Math.min(width, height) * 0.035)));
-    const filled = interiorOf(only, width, height, close);
+    const filled = sealedInterior(only, line, width, height, seal);
     for (let index = 0; index < filled.length; index += 1) {
-      if (filled[index] && !line[index]) interior[index] = 1;
+      if (filled[index]) interior[index] = 1;
     }
   }
+  // Open-ended limbs are not holes. A pixel with a line on both sides, closer
+  // than the gap between two subjects, is still inside the drawing.
+  const reach = Math.max(seal * 2 + 4, Math.min(32, Math.round(Math.min(width, height) * 0.07)));
+  addOpenChannels(interior, line, aligned, width, height, reach);
   const names = new Array<string>(line.length);
   for (let index = 0; index < interior.length; index += 1) {
     if (!interior[index]) continue;
@@ -208,8 +218,12 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): FlatRegi
     }
     regionSizes[region] = pixels;
   }
-  const floor = Math.max(28, Math.round(width * height * 0.0004));
-  for (let pass = 0; pass < 6; pass += 1) {
+  // A stroke can leave a one-pixel sliver of the same colour beside the fill.
+  bridgeSameColour(regionIds, regionSizes, names, width, 2);
+  // A thin cap of backdrop inside an outline is leftover, not its own colour.
+  // Real patches sit behind a line, so they never touch a neighbour to be absorbed.
+  const floor = Math.max(80, Math.round(width * height * 0.0015));
+  for (let pass = 0; pass < 10; pass += 1) {
     for (let index = 0; index < regionIds.length; index += 1) {
       const id = regionIds[index] ?? 0;
       if (!id || (regionSizes[id] ?? 0) >= floor) continue;
@@ -226,8 +240,21 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): FlatRegi
       }
     }
   }
+  absorbLeftovers(regionIds, regionSizes, interior, width);
   const regions: FlatRegion[] = [];
   const seen = new Set<number>();
+  const emitted = new Set<number>();
+  const background = cornerColour(aligned);
+  const paleSubject = mostlyBackground(aligned, interior, background);
+  const drafts: Array<{
+    id: number;
+    points: Point[];
+    pixels: number;
+    cx: number;
+    cy: number;
+    median: Rgb;
+    backdrop: boolean;
+  }> = [];
   for (let index = 0; index < regionIds.length; index += 1) {
     const id = regionIds[index] ?? 0;
     if (!id || seen.has(id) || (regionSizes[id] ?? 0) < floor) continue;
@@ -253,33 +280,247 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): FlatRegi
     if (!points || points.length < 4) continue;
     const colours = paintColours(aligned, members);
     const median = colours.length > 0 ? medianRgb(colours) : { r: 200, g: 160, b: 120 };
-    const name = paletteName(median);
     const spot = memberPoint(regionIds, id, width);
-    regions.push({
-      name,
-      hex: name === 'putih' ? '#ffffff' : snapKid(median),
+    drafts.push({
+      id,
       points,
       pixels,
       cx: spot.x,
       cy: spot.y,
+      median,
+      backdrop: nearBackground(median, background),
     });
   }
-  return regions.sort((left, right) => right.pixels - left.pixels);
+  const donors = drafts.filter((draft) => !draft.backdrop);
+  const borrowLimit = Math.min(width, height) * 0.35;
+  for (const draft of drafts) {
+    let median = draft.median;
+    if (draft.backdrop && !paleSubject) {
+      // An ear drawn over the backdrop still gets the colour beside it.
+      let nearest: Rgb | null = null;
+      let best = borrowLimit * borrowLimit;
+      for (const donor of donors) {
+        const distance = (donor.cx - draft.cx) ** 2 + (donor.cy - draft.cy) ** 2;
+        if (distance < best) {
+          best = distance;
+          nearest = donor.median;
+        }
+      }
+      if (!nearest) continue;
+      median = nearest;
+    }
+    emitted.add(draft.id);
+    const name = paletteName(median);
+    regions.push({
+      name,
+      hex: name === 'putih' ? '#ffffff' : snapKid(median),
+      points: draft.points,
+      pixels: draft.pixels,
+      cx: draft.cx,
+      cy: draft.cy,
+    });
+  }
+  let interiorPixels = 0;
+  let coveredPixels = 0;
+  for (let index = 0; index < interior.length; index += 1) {
+    if (!interior[index]) continue;
+    interiorPixels += 1;
+    if (emitted.has(regionIds[index] ?? 0)) coveredPixels += 1;
+  }
+  return {
+    regions: regions.sort((left, right) => right.pixels - left.pixels),
+    coverage: interiorPixels === 0 ? 1 : coveredPixels / interiorPixels,
+  };
 }
 
-function interiorOf(mask: Uint8Array, width: number, height: number, radius: number): Uint8Array {
+/**
+ * Holes inside a lightly dilated outline, grown back to the original ink.
+ *
+ * Dilating to close a gap also eats the rim of a head. Those eaten pixels are
+ * still on the inside of the ink, so they belong to the fill.
+ */
+function sealedInterior(mask: Uint8Array, line: Uint8Array, width: number, height: number, radius: number): Uint8Array {
   const barrier = dilateMask(mask, width, height, radius);
-  return interiorMask(barrier, width, height);
+  const holes = interiorMask(barrier, width, height);
+  // Grow the hole back to the ink. A flood through the barrier would leak out
+  // of a one-pixel gap and paint the background around the subject.
+  const grown = dilateMask(holes, width, height, radius);
+  const out = new Uint8Array(mask.length);
+  for (let index = 0; index < out.length; index += 1) {
+    if (line[index]) continue;
+    if (holes[index] || (grown[index] && barrier[index])) out[index] = 1;
+  }
+  return out;
+}
+
+/** A pixel between two nearby lines is a limb, even when the end of the limb is open. */
+function addOpenChannels(
+  interior: Uint8Array,
+  line: Uint8Array,
+  coloured: RgbaImage,
+  width: number,
+  height: number,
+  reach: number,
+): void {
+  const background = cornerColour(coloured);
+  const paleSubject = mostlyBackground(coloured, interior, background);
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const index = y * width + x;
+      if (line[index] || interior[index]) continue;
+      if (!spanned(line, x, y, width, height, reach)) continue;
+      const rgb = pixelAt(coloured.data, index);
+      // The page showing between two closed shapes is not a limb.
+      if (!paleSubject && rgb && nearBackground(rgb, background)) continue;
+      interior[index] = 1;
+    }
+  }
+}
+
+function cornerColour(image: RgbaImage): Rgb {
+  const spots = [
+    pixelAt(image.data, 0),
+    pixelAt(image.data, image.width - 1),
+    pixelAt(image.data, (image.height - 1) * image.width),
+    pixelAt(image.data, image.width * image.height - 1),
+  ].filter((spot): spot is Rgb => spot !== null);
+  if (spots.length === 0) return { r: 255, g: 255, b: 255 };
+  const sum = spots.reduce((acc, spot) => ({ r: acc.r + spot.r, g: acc.g + spot.g, b: acc.b + spot.b }), { r: 0, g: 0, b: 0 });
+  return { r: sum.r / spots.length, g: sum.g / spots.length, b: sum.b / spots.length };
+}
+
+function nearBackground(rgb: Rgb, background: Rgb): boolean {
+  const distance = (rgb.r - background.r) ** 2 + (rgb.g - background.g) ** 2 + (rgb.b - background.b) ** 2;
+  return distance < 42 * 42;
+}
+
+/** A white plush on a white table: the corner colour is the subject, so a limb of that colour still counts. */
+function mostlyBackground(image: RgbaImage, interior: Uint8Array, background: Rgb): boolean {
+  let seen = 0;
+  let matching = 0;
+  const step = Math.max(1, Math.floor(interior.length / 4000));
+  for (let index = 0; index < interior.length; index += step) {
+    if (!interior[index]) continue;
+    const rgb = pixelAt(image.data, index);
+    if (!rgb) continue;
+    seen += 1;
+    if (nearBackground(rgb, background)) matching += 1;
+  }
+  return seen > 0 && matching / seen >= 0.45;
+}
+
+function spanned(line: Uint8Array, x: number, y: number, width: number, height: number, reach: number): boolean {
+  const hit = (dx: number, dy: number): number => {
+    for (let step = 1; step <= reach; step += 1) {
+      const sx = x + dx * step;
+      const sy = y + dy * step;
+      if (sx < 0 || sy < 0 || sx >= width || sy >= height) return 0;
+      if (line[sy * width + sx]) return step;
+    }
+    return 0;
+  };
+  const left = hit(-1, 0);
+  const right = hit(1, 0);
+  if (left && right && left + right <= reach + 2) return true;
+  const up = hit(0, -1);
+  const down = hit(0, 1);
+  return Boolean(up && down && up + down <= reach + 2);
+}
+
+/** Join two areas of one colour that a stroke barely separated. A real gap stays apart. */
+function bridgeSameColour(
+  regionIds: Int32Array,
+  regionSizes: number[],
+  names: readonly string[],
+  width: number,
+  radius: number,
+): void {
+  const parent = regionSizes.map((_, index) => index);
+  const find = (id: number): number => {
+    let cursor = id;
+    while ((parent[cursor] ?? cursor) !== cursor) cursor = parent[cursor] ?? cursor;
+    return cursor;
+  };
+  const unite = (left: number, right: number) => {
+    const a = find(left);
+    const b = find(right);
+    if (a !== b) parent[b] = a;
+  };
+  for (let index = 0; index < regionIds.length; index += 1) {
+    const id = regionIds[index] ?? 0;
+    if (!id) continue;
+    const name = names[index] ?? '';
+    const x = index % width;
+    for (let step = 1; step <= radius; step += 1) {
+      if (x + step < width) {
+        const other = regionIds[index + step] ?? 0;
+        if (other && other !== id && names[index + step] === name) unite(id, other);
+      }
+      if (index + step * width < regionIds.length) {
+        const other = regionIds[index + step * width] ?? 0;
+        if (other && other !== id && names[index + step * width] === name) unite(id, other);
+      }
+    }
+  }
+  const sizes = new Array<number>(regionSizes.length).fill(0);
+  for (let index = 0; index < regionIds.length; index += 1) {
+    const id = regionIds[index] ?? 0;
+    if (!id) continue;
+    const root = find(id);
+    regionIds[index] = root;
+    sizes[root] = (sizes[root] ?? 0) + 1;
+  }
+  for (let id = 0; id < regionSizes.length; id += 1) regionSizes[id] = sizes[id] ?? 0;
+}
+
+/** Interior pixels that never grew their own region take the nearest colour. */
+function absorbLeftovers(
+  regionIds: Int32Array,
+  regionSizes: number[],
+  interior: Uint8Array,
+  width: number,
+): void {
+  const queue = new Int32Array(regionIds.length);
+  let head = 0;
+  let tail = 0;
+  for (let index = 0; index < regionIds.length; index += 1) {
+    if ((regionIds[index] ?? 0) > 0) {
+      queue[tail] = index;
+      tail += 1;
+    }
+  }
+  while (head < tail) {
+    const index = queue[head] ?? 0;
+    head += 1;
+    const id = regionIds[index] ?? 0;
+    if (!id) continue;
+    const x = index % width;
+    const neighbors = [
+      x > 0 ? index - 1 : -1,
+      x + 1 < width ? index + 1 : -1,
+      index >= width ? index - width : -1,
+      index + width < regionIds.length ? index + width : -1,
+    ];
+    for (const neighbor of neighbors) {
+      if (neighbor < 0 || !interior[neighbor] || (regionIds[neighbor] ?? 0) > 0) continue;
+      regionIds[neighbor] = id;
+      regionSizes[id] = (regionSizes[id] ?? 0) + 1;
+      queue[tail] = neighbor;
+      tail += 1;
+    }
+  }
 }
 
 /** Shift and scale the colour page so its dark lines land on the line drawing. */
-function registerToLines(lineArt: RgbaImage, coloured: RgbaImage): RgbaImage {
+function registerToLines(lineArt: RgbaImage, coloured: RgbaImage, chaseFills = true): RgbaImage {
   const { width, height } = lineArt;
   const line = lineMask(lineArt);
   const black = nearBlackMask(coloured);
   let blackCount = 0;
   for (const value of black) blackCount += value;
   const wide = blackCount >= 40;
+  // A solid dark fill is not a line. Chasing it shifts every colour off the drawing.
+  if (!wide && !chaseFills) return coloured;
   const dark = wide ? black : darkMask(coloured);
   const samples: number[] = [];
   const stride = Math.max(1, Math.floor(line.reduce((count, value) => count + value, 0) / 1800));
@@ -316,6 +557,9 @@ function registerToLines(lineArt: RgbaImage, coloured: RgbaImage): RgbaImage {
     }
   }
   const identity = hitScore(samples, dark, width, height, 1, 0, 0);
+  // A dark nose can land on a stroke by chance. That is not the page's lines,
+  // and shifting to chase it pulls the colours off the drawing.
+  if (best.score < samples.length * 0.15) return coloured;
   if (wide && best.score < identity + Math.max(8, samples.length * 0.04)) return coloured;
   if (best.dx === 0 && best.dy === 0 && best.scale === 1) return coloured;
   return warp(coloured, best.scale, best.dx, best.dy);
