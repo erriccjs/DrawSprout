@@ -7,7 +7,7 @@
  */
 
 import type { RgbaImage } from './png';
-import { traceInk, type Point } from './trace';
+import { componentOutlines, traceInk, type Point } from './trace';
 
 export interface FlatRegion {
   readonly name: string;
@@ -168,7 +168,7 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
   const largest = sizes.reduce((max, value) => Math.max(max, value), 0);
   // A few pixels seals a gap in an outline. A wider brush would turn the
   // space between a double-line leg into barrier, and the leg would stay white.
-  const seal = Math.max(4, Math.min(8, Math.round(Math.min(width, height) * 0.02)));
+  const seal = Math.max(5, Math.min(12, Math.round(Math.min(width, height) * 0.028)));
   const interior = new Uint8Array(line.length);
   for (let id = 1; id <= next; id += 1) {
     if ((sizes[id] ?? 0) < Math.max(80, largest * 0.25)) continue;
@@ -183,8 +183,11 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
   }
   // Open-ended limbs are not holes. A pixel with a line on both sides, closer
   // than the gap between two subjects, is still inside the drawing.
-  const reach = Math.max(seal * 2 + 4, Math.min(32, Math.round(Math.min(width, height) * 0.07)));
+  const reach = Math.max(seal * 2 + 4, Math.min(36, Math.round(Math.min(width, height) * 0.08)));
   addOpenChannels(interior, line, aligned, width, height, reach);
+  // A stick limb never closes a corridor. A few pixels either side of that
+  // stroke still belong to the subject; the open page further out does not.
+  addStickBuffer(interior, line, width, height, Math.max(4, Math.round(seal * 0.6)));
   const names = new Array<string>(line.length);
   for (let index = 0; index < interior.length; index += 1) {
     if (!interior[index]) continue;
@@ -222,11 +225,13 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
   bridgeSameColour(regionIds, regionSizes, names, width, 2);
   // A thin cap of backdrop inside an outline is leftover, not its own colour.
   // Real patches sit behind a line, so they never touch a neighbour to be absorbed.
-  const floor = Math.max(80, Math.round(width * height * 0.0015));
-  for (let pass = 0; pass < 10; pass += 1) {
+  const floor = Math.max(80, Math.round(width * height * 0.0012));
+  for (let pass = 0; pass < 12; pass += 1) {
     for (let index = 0; index < regionIds.length; index += 1) {
       const id = regionIds[index] ?? 0;
-      if (!id || (regionSizes[id] ?? 0) >= floor) continue;
+      const hungry = names[index] === 'putih' || names[index] === 'abu-abu';
+      const limit = hungry ? Math.max(floor, Math.round(width * height * 0.008)) : floor;
+      if (!id || (regionSizes[id] ?? 0) >= limit) continue;
       const x = index % width;
       const neighbors = [x > 0 ? index - 1 : -1, x + 1 < width ? index + 1 : -1, index >= width ? index - width : -1, index + width < line.length ? index + width : -1];
       for (const neighbor of neighbors) {
@@ -243,7 +248,6 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
   absorbLeftovers(regionIds, regionSizes, interior, width);
   const regions: FlatRegion[] = [];
   const seen = new Set<number>();
-  const emitted = new Set<number>();
   const background = cornerColour(aligned);
   const paleSubject = mostlyBackground(aligned, interior, background);
   const drafts: Array<{
@@ -257,59 +261,57 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
   }> = [];
   for (let index = 0; index < regionIds.length; index += 1) {
     const id = regionIds[index] ?? 0;
-    if (!id || seen.has(id) || (regionSizes[id] ?? 0) < floor) continue;
+    if (!id || seen.has(id) || (regionSizes[id] ?? 0) < Math.max(16, Math.round(floor * 0.35))) continue;
     seen.add(id);
-    let minX = width;
-    let minY = height;
-    let maxX = 0;
-    let maxY = 0;
-    let pixels = 0;
     const members: number[] = [];
     for (let cursor = 0; cursor < regionIds.length; cursor += 1) {
-      if (regionIds[cursor] !== id) continue;
-      pixels += 1;
-      members.push(cursor);
-      const x = cursor % width;
-      const y = (cursor - x) / width;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
+      if (regionIds[cursor] === id) members.push(cursor);
     }
-    const points = shapeOf(regionIds, id, width, minX, minY, maxX, maxY, 0);
-    if (!points || points.length < 4) continue;
     const colours = paintColours(aligned, members);
     const median = colours.length > 0 ? medianRgb(colours) : { r: 200, g: 160, b: 120 };
     const spot = memberPoint(regionIds, id, width);
-    drafts.push({
-      id,
-      points,
-      pixels,
-      cx: spot.x,
-      cy: spot.y,
-      median,
-      backdrop: nearBackground(median, background),
-    });
+    const piece = new Uint8Array(regionIds.length);
+    for (const index of members) piece[index] = 1;
+    const outlines = componentOutlines(piece, width, height);
+    if (outlines.length === 0) continue;
+    for (const outline of outlines) {
+      drafts.push({
+        id,
+        points: outline.points,
+        pixels: outline.pixels,
+        cx: spot.x,
+        cy: spot.y,
+        median,
+        backdrop: nearBackground(median, background),
+      });
+    }
   }
-  const donors = drafts.filter((draft) => !draft.backdrop);
-  const borrowLimit = Math.min(width, height) * 0.35;
+  const cap = Math.max(500, Math.round(width * height * 0.012));
   for (const draft of drafts) {
     let median = draft.median;
-    if (draft.backdrop && !paleSubject) {
-      // An ear drawn over the backdrop still gets the colour beside it.
+    if (draft.backdrop && (!paleSubject || draft.pixels < cap)) {
+      // A pocket of the page colour trapped inside the drawing takes the nearest crayon.
+      // On a white subject, only a small cap does: the white body itself stays white.
       let nearest: Rgb | null = null;
-      let best = borrowLimit * borrowLimit;
-      for (const donor of donors) {
-        const distance = (donor.cx - draft.cx) ** 2 + (donor.cy - draft.cy) ** 2;
+      let nearestIsBackdrop = false;
+      let best = Number.POSITIVE_INFINITY;
+      for (const other of drafts) {
+        if (other === draft || other.pixels < draft.pixels) continue;
+        const distance = (other.cx - draft.cx) ** 2 + (other.cy - draft.cy) ** 2;
         if (distance < best) {
           best = distance;
-          nearest = donor.median;
+          nearest = other.median;
+          nearestIsBackdrop = other.backdrop;
         }
       }
-      if (!nearest) continue;
-      median = nearest;
+      if (paleSubject && nearestIsBackdrop) {
+        // The white plush is the nearest thing. Leave the cap white.
+      } else if (nearest) {
+        median = nearest;
+      } else if (!paleSubject) {
+        continue;
+      }
     }
-    emitted.add(draft.id);
     const name = paletteName(median);
     regions.push({
       name,
@@ -320,17 +322,69 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
       cy: draft.cy,
     });
   }
+  const painted = new Uint8Array(interior.length);
+  for (const region of regions) rasterize(painted, width, height, region.points);
+  const forgiving = dilateMask(painted, width, height, 2);
   let interiorPixels = 0;
   let coveredPixels = 0;
   for (let index = 0; index < interior.length; index += 1) {
     if (!interior[index]) continue;
     interiorPixels += 1;
-    if (emitted.has(regionIds[index] ?? 0)) coveredPixels += 1;
+    if (forgiving[index]) coveredPixels += 1;
   }
   return {
     regions: regions.sort((left, right) => right.pixels - left.pixels),
     coverage: interiorPixels === 0 ? 1 : coveredPixels / interiorPixels,
   };
+}
+
+/** A stroke with no fill on either side is a stick. Colour a narrow strip along it. */
+function addStickBuffer(interior: Uint8Array, line: Uint8Array, width: number, height: number, radius: number): void {
+  // A thick outline is several pixels from the hole it closes. That is not a stick.
+  const beside = dilateMask(interior, width, height, 6);
+  const sticks = new Uint8Array(line.length);
+  let any = false;
+  for (let index = 0; index < line.length; index += 1) {
+    if (!line[index] || beside[index]) continue;
+    sticks[index] = 1;
+    any = true;
+  }
+  if (!any) return;
+  const halo = dilateMask(sticks, width, height, radius);
+  for (let index = 0; index < halo.length; index += 1) {
+    if (halo[index] && !line[index]) interior[index] = 1;
+  }
+}
+
+function rasterize(mask: Uint8Array, width: number, height: number, points: readonly Point[]): void {
+  if (points.length < 3) return;
+  let minY = height;
+  let maxY = 0;
+  for (const point of points) {
+    if (point.y < minY) minY = Math.floor(point.y);
+    if (point.y > maxY) maxY = Math.ceil(point.y);
+  }
+  minY = Math.max(0, minY);
+  maxY = Math.min(height - 1, maxY);
+  const crossings: number[] = [];
+  for (let y = minY; y <= maxY; y += 1) {
+    const sample = y + 0.5;
+    crossings.length = 0;
+    for (let index = 0, previous = points.length - 1; index < points.length; previous = index, index += 1) {
+      const start = points[previous];
+      const end = points[index];
+      if (!start || !end || (start.y > sample) === (end.y > sample)) continue;
+      const span = end.y - start.y;
+      if (span === 0) continue;
+      crossings.push(start.x + ((sample - start.y) / span) * (end.x - start.x));
+    }
+    crossings.sort((left, right) => left - right);
+    for (let index = 0; index + 1 < crossings.length; index += 2) {
+      const from = Math.max(0, Math.ceil(crossings[index] ?? 0));
+      const to = Math.min(width - 1, Math.floor(crossings[index + 1] ?? -1));
+      for (let x = from; x <= to; x += 1) mask[y * width + x] = 1;
+    }
+  }
 }
 
 /**
