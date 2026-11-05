@@ -44,7 +44,7 @@ describe('doodle step builder', () => {
     expect(lesson.steps.at(-1)?.phase).toBe('color');
     const colours = lesson.steps.filter((step) => step.phase === 'color').map((step) => step.toolPreset.color);
     expect(colours.length).toBeGreaterThan(0);
-    expect(colours.length).toBeLessThanOrEqual(8);
+    expect(colours.length).toBeLessThanOrEqual(11);
     expect(colours[0]).toMatch(/^#[0-9a-f]{6}$/);
     const red = colours.some((colour) => {
       const value = Number.parseInt(colour.slice(1, 3), 16);
@@ -427,11 +427,11 @@ describe('doodle step builder', () => {
 
     const colours = lesson.steps.filter((step) => step.phase === 'color');
     expect(colours.length).toBeGreaterThanOrEqual(3);
-    expect(colours.length).toBeLessThanOrEqual(6);
+    expect(colours.length).toBeLessThanOrEqual(11);
     expect(new Set(colours.map((step) => step.toolPreset.color)).size).toBe(colours.length);
     expect(colours[0]?.hint).toMatch(/dengan /);
     expect(lesson.colorRegions.length).toBeGreaterThanOrEqual(4);
-    expect(doodleInteriorCoverage(doodle, photo)).toBeGreaterThanOrEqual(0.85);
+    expect(doodleInteriorCoverage(doodle, photo)).toBeGreaterThanOrEqual(0.95);
     // The metric is the share of interior pixels that survive as a fill.
     // A body-only colouring used to score well while the legs stayed white,
     // so the lowest fill also has to reach the feet of the outline.
@@ -452,6 +452,7 @@ describe('doodle step builder', () => {
     });
     expect(boxes.some((box) => box.right < 500)).toBe(true);
     expect(boxes.some((box) => box.left > 400)).toBe(true);
+    expect(lesson.colorRegions.every((region) => !coversPoint(region.d, 16, 16))).toBe(true);
   });
 
   it('covers a teddy and a cat with one step per crayon', () => {
@@ -471,10 +472,10 @@ describe('doodle step builder', () => {
       expect(lesson.steps[lines.length]?.phase).toBe('color');
       const colours = lesson.steps.filter((step) => step.phase === 'color');
       expect(colours.length).toBeGreaterThanOrEqual(2);
-      expect(colours.length).toBeLessThanOrEqual(6);
+      expect(colours.length).toBeLessThanOrEqual(11);
       expect(new Set(colours.map((step) => step.toolPreset.color)).size).toBe(colours.length);
       expect(colours[0]?.hint).toMatch(/dengan /);
-      expect(doodleInteriorCoverage(scene.doodle, scene.photo)).toBeGreaterThanOrEqual(0.8);
+      expect(doodleInteriorCoverage(scene.doodle, scene.photo)).toBeGreaterThanOrEqual(0.95);
       expect(colourReachesOutline(lesson)).toBe(true);
     }
   });
@@ -510,6 +511,30 @@ describe('doodle step builder', () => {
       'Gambar bagian bawah.',
     ]);
     expect(localizeSentence(lines[2]?.hint ?? '')).toBe('Draw the bottom part.');
+  });
+
+  it('colours a single-stroke limb without painting the page', () => {
+    const doodle = blank(180, 220);
+    const photo = blank(180, 220);
+    fillColour(photo, 0, 0, 180, 220, [190, 210, 170]);
+    ring(doodle, 90, 42, 24, 3);
+    rectOutline(doodle, 66, 70, 48, 60);
+    strokeLine(doodle, 90, 130, 90, 200);
+    fillColour(photo, 66, 18, 48, 48, [232, 186, 150]);
+    fillColour(photo, 66, 72, 48, 58, [50, 92, 186]);
+    fillColour(photo, 80, 130, 20, 72, [36, 36, 48]);
+
+    const lesson = buildDoodleLesson(doodle, photo);
+    expect(doodleInteriorCoverage(doodle, photo)).toBeGreaterThanOrEqual(0.95);
+    const colours = lesson.steps.filter((step) => step.phase === 'color');
+    expect(colours.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(colours.map((step) => step.toolPreset.color)).size).toBe(colours.length);
+    const low = lesson.colorRegions.some((region) => {
+      const points = pointsOf(region.d);
+      return Math.max(...points.map((point) => point.y)) > 520;
+    });
+    expect(low).toBe(true);
+    expect(lesson.colorRegions.every((region) => !coversPoint(region.d, 12, 12))).toBe(true);
   });
 
   it('refuses a blank page', () => {
@@ -568,6 +593,21 @@ function strokeLine(image: RgbaImage, x1: number, y1: number, x2: number, y2: nu
     const y = Math.round(y1 + ((y2 - y1) * i) / steps);
     fillRect(image, x - 1, y - 1, 3, 3);
   }
+}
+
+function coversPoint(d: string, x: number, y: number): boolean {
+  const points = pointsOf(d);
+  let inside = false;
+  for (let index = 0, previous = points.length - 1; index < points.length; previous = index, index += 1) {
+    const start = points[previous];
+    const end = points[index];
+    if (!start || !end || (start.y > y) === (end.y > y)) continue;
+    const span = end.y - start.y;
+    if (span === 0) continue;
+    const at = start.x + ((y - start.y) / span) * (end.x - start.x);
+    if (at > x) inside = !inside;
+  }
+  return inside;
 }
 
 function stepCentroid(paths: readonly string[]): { x: number; y: number } {

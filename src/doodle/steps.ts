@@ -21,7 +21,7 @@ const INK = 128;
 // This layer sets no budget of its own: every area the drawing encloses and
 // the photo gives a colour to earns a step. `regionsColouredBy` already ranks
 // by size and keeps at most 24, and that is the only ceiling.
-const MAX_COLOURS = 24;
+const MAX_COLOURS = 64;
 /** Below this share of the picture an area is a speck, not something to paint. */
 const SMALLEST_REGION = 0.0004;
 /**
@@ -127,7 +127,7 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
     id: `doodle-${inkHash(ink)}`,
     title: 'Doodle dari foto',
     subtitle: 'Dari doodle',
-    contentVersion: 'doodle-4',
+    contentVersion: 'doodle-5',
     colorRegions: regions,
     steps,
   });
@@ -753,24 +753,7 @@ function colourBuckets(
   areas: ReadonlyArray<{ d: string; hex: string; pixels: number }>,
 ): Array<{ name: string; hex: string; paths: string[]; pixels: number }> {
   const tagged = areas.map((area) => ({ ...area, crayon: crayonFor(area.hex) }));
-  const areaOf = (name: string) => tagged.filter((area) => area.crayon.name === name)
-    .reduce((sum, area) => sum + area.pixels, 0);
-  let names = [...new Set(tagged.map((area) => area.crayon.name))];
-  while (names.length > 6) {
-    const ranked = [...names].sort((left, right) => areaOf(left) - areaOf(right));
-    const small = ranked[0]!;
-    const from = tagged.find((area) => area.crayon.name === small)?.crayon ?? CRAYONS[0]!;
-    const host = ranked.slice(1).reduce((best, name) => {
-      const swatch = CRAYONS.find((item) => item.name === name) ?? from;
-      const distance = (swatch.r - from.r) ** 2 + (swatch.g - from.g) ** 2 + (swatch.b - from.b) ** 2;
-      return distance < best.distance ? { name, distance } : best;
-    }, { name: ranked[1]!, distance: Number.POSITIVE_INFINITY });
-    const next = CRAYONS.find((item) => item.name === host.name) ?? from;
-    for (const area of tagged) {
-      if (area.crayon.name === small) area.crayon = next;
-    }
-    names = [...new Set(tagged.map((area) => area.crayon.name))];
-  }
+  const names = [...new Set(tagged.map((area) => area.crayon.name))];
   return names.map((name) => {
     const members = tagged.filter((area) => area.crayon.name === name);
     const crayon = members[0]?.crayon ?? CRAYONS[0]!;

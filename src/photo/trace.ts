@@ -711,6 +711,31 @@ export function subjectSilhouettes(image: RgbaImage, maxCount = 3): Point[][] {
   return loops;
 }
 
+/**
+ * Outer contour of every solid blob in a mask.
+ *
+ * This does not thin strokes or keep only the largest blob. A fill has to
+ * cover each piece it claims, including a thin limb.
+ */
+export function componentOutlines(mask: Uint8Array, width: number, height: number): Array<{ points: Point[]; pixels: number }> {
+  const labeled = label(mask, width, height);
+  if (labeled.count === 0) return [];
+  const epsilon = Math.max(0.8, Math.min(width, height) * 0.003);
+  const outlines: Array<{ points: Point[]; pixels: number }> = [];
+  for (const stat of labeled.stats) {
+    if (stat.pixels < 12) continue;
+    const only = new Uint8Array(mask.length);
+    for (let index = 0; index < only.length; index += 1) {
+      if (labeled.ids[index] === stat.id) only[index] = 1;
+    }
+    const loop = largestLoop(marchingSquares(only, width, height));
+    if (!loop) continue;
+    const outer = finishLoop(loop, epsilon);
+    if (outer.length >= 4) outlines.push({ points: outer, pixels: stat.pixels });
+  }
+  return outlines;
+}
+
 function filledSubject(mask: Uint8Array, width: number, height: number): Uint8Array {
   const radius = Math.max(2, Math.round(Math.min(width, height) * 0.012));
   return fillComponent(mask, width, height, radius);
