@@ -3,6 +3,7 @@ import { assertValidLessons } from '../lesson-data';
 import type { RgbaImage } from '../photo/png';
 import { localizeSentence } from '../i18n/generated';
 import { stepPreview } from '../lesson-data/step-preview';
+import { coverByColour } from '../photo/flat-colour';
 import { buildDoodleLesson, doodleInteriorCoverage, photoSampler } from './steps';
 import { fitPhoto } from '../trace/placement';
 
@@ -513,28 +514,53 @@ describe('doodle step builder', () => {
     expect(localizeSentence(lines[2]?.hint ?? '')).toBe('Draw the bottom part.');
   });
 
-  it('colours a single-stroke limb without painting the page', () => {
-    const doodle = blank(180, 220);
-    const photo = blank(180, 220);
-    fillColour(photo, 0, 0, 180, 220, [190, 210, 170]);
-    ring(doodle, 90, 42, 24, 3);
-    rectOutline(doodle, 66, 70, 48, 60);
-    strokeLine(doodle, 90, 130, 90, 200);
-    fillColour(photo, 66, 18, 48, 48, [232, 186, 150]);
-    fillColour(photo, 66, 72, 48, 58, [50, 92, 186]);
-    fillColour(photo, 80, 130, 20, 72, [36, 36, 48]);
+  it('keeps a concave gap and a hole out of the fill', () => {
+    const doodle = blank(220, 300);
+    const photo = blank(220, 300);
+    fillColour(photo, 0, 0, 220, 300, [210, 220, 200]);
+    ring(doodle, 110, 48, 32, 3);
+    strokeLine(doodle, 80, 78, 140, 78);
+    strokeLine(doodle, 140, 78, 150, 160);
+    strokeLine(doodle, 150, 160, 128, 160);
+    strokeLine(doodle, 128, 160, 124, 250);
+    strokeLine(doodle, 124, 250, 100, 250);
+    strokeLine(doodle, 100, 250, 96, 170);
+    strokeLine(doodle, 96, 170, 70, 170);
+    strokeLine(doodle, 70, 170, 60, 250);
+    strokeLine(doodle, 60, 250, 40, 250);
+    strokeLine(doodle, 40, 250, 48, 160);
+    strokeLine(doodle, 48, 160, 30, 120);
+    strokeLine(doodle, 30, 120, 70, 100);
+    strokeLine(doodle, 70, 100, 80, 78);
+    ring(doodle, 110, 48, 8, 2);
+    fillColour(photo, 78, 20, 64, 60, [40, 40, 48]);
+    fillColour(photo, 50, 80, 100, 90, [30, 30, 36]);
+    fillColour(photo, 40, 170, 90, 80, [24, 24, 28]);
+    fillColour(photo, 102, 40, 16, 16, [210, 60, 50]);
 
-    const lesson = buildDoodleLesson(doodle, photo);
-    expect(doodleInteriorCoverage(doodle, photo)).toBeGreaterThanOrEqual(0.95);
-    const colours = lesson.steps.filter((step) => step.phase === 'color');
-    expect(colours.length).toBeGreaterThanOrEqual(2);
-    expect(new Set(colours.map((step) => step.toolPreset.color)).size).toBe(colours.length);
-    const low = lesson.colorRegions.some((region) => {
-      const points = pointsOf(region.d);
-      return Math.max(...points.map((point) => point.y)) > 520;
-    });
-    expect(low).toBe(true);
-    expect(lesson.colorRegions.every((region) => !coversPoint(region.d, 12, 12))).toBe(true);
+    const painted = coverByColour(doodle, photo);
+    // The armpit notch is open paper. A chord across it is the dark triangle.
+    expect(painted.regions.some((region) => insideFill(region, 36, 145))).toBe(false);
+    // The eye is a hole in the head, not part of the head fill.
+    const head = painted.regions.find((region) => insideFill(region, 98, 40));
+    expect(head).toBeDefined();
+    expect(insideFill(head!, 110, 48)).toBe(false);
+    // The torso itself is still filled.
+    expect(painted.regions.some((region) => insideFill(region, 100, 120))).toBe(true);
+    // The page stays white.
+    expect(painted.regions.some((region) => insideFill(region, 8, 8))).toBe(false);
+
+    const separate = blank(240, 120);
+    const separatePhoto = blank(240, 120);
+    fillColour(separatePhoto, 0, 0, 240, 120, [230, 230, 220]);
+    ring(separate, 50, 60, 36, 3);
+    ring(separate, 180, 60, 36, 3);
+    fillColour(separatePhoto, 20, 30, 60, 60, [40, 40, 48]);
+    fillColour(separatePhoto, 150, 30, 60, 60, [40, 40, 48]);
+    const parts = coverByColour(separate, separatePhoto);
+    expect(parts.regions.some((region) => insideFill(region, 115, 60))).toBe(false);
+    expect(parts.regions.some((region) => insideFill(region, 50, 60))).toBe(true);
+    expect(parts.regions.some((region) => insideFill(region, 180, 60))).toBe(true);
   });
 
   it('refuses a blank page', () => {
@@ -593,6 +619,27 @@ function strokeLine(image: RgbaImage, x1: number, y1: number, x2: number, y2: nu
     const y = Math.round(y1 + ((y2 - y1) * i) / steps);
     fillRect(image, x - 1, y - 1, 3, 3);
   }
+}
+
+function insideFill(
+  region: { points: readonly { x: number; y: number }[]; holes?: readonly (readonly { x: number; y: number }[])[] },
+  x: number,
+  y: number,
+): boolean {
+  if (!ringContains(region.points, x, y)) return false;
+  return !(region.holes ?? []).some((hole) => ringContains(hole, x, y));
+}
+
+function ringContains(points: readonly { x: number; y: number }[], x: number, y: number): boolean {
+  let inside = false;
+  for (let index = 0, previous = points.length - 1; index < points.length; previous = index, index += 1) {
+    const start = points[previous];
+    const end = points[index];
+    if (!start || !end || (start.y > y) === (end.y > y) || end.y === start.y) continue;
+    const at = start.x + ((y - start.y) / (end.y - start.y)) * (end.x - start.x);
+    if (at > x) inside = !inside;
+  }
+  return inside;
 }
 
 function coversPoint(d: string, x: number, y: number): boolean {

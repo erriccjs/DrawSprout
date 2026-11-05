@@ -715,13 +715,7 @@ function filledRegions(
     .map((region) => ({
       hex: region.hex === '#ffffff' ? PAPER_WHITE : region.hex,
       pixels: region.pixels,
-      d: pathFrom(
-        region.points.map((point) => ({
-          x: Math.round(frame.x + point.x * artScale),
-          y: Math.round(frame.y + point.y * artScale),
-        })),
-        true,
-      ),
+      d: regionPath(region.points, region.holes, frame, artScale),
     }))
     .filter((region) => region.d.length >= 8);
 }
@@ -1046,6 +1040,21 @@ function toSpace(point: [number, number], frame: TracePlacement, scale: number):
     x: Math.round(frame.x + point[0] * scale),
     y: Math.round(frame.y + point[1] * scale),
   };
+}
+
+function regionPath(
+  points: readonly { x: number; y: number }[],
+  holes: readonly (readonly { x: number; y: number }[])[] | undefined,
+  frame: TracePlacement,
+  scale: number,
+): string {
+  const loop = (ring: readonly { x: number; y: number }[]) => pathFrom(ring.map((point) => ({
+    x: Math.round(frame.x + point.x * scale),
+    y: Math.round(frame.y + point.y * scale),
+  })), true);
+  const outer = loop(points);
+  if (!holes || holes.length === 0) return outer;
+  return [outer, ...holes.map((hole) => loop(hole))].join(' ');
 }
 
 function pathFrom(points: Array<{ x: number; y: number }>, close: boolean): string {

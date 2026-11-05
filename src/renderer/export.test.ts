@@ -128,6 +128,34 @@ describe('exported artwork', () => {
     expect(output.at(-1)?.args[0]).toBe('source-over');
   });
 
+  it('draws the tracing picture under the paint only when an underlay is given', () => {
+    const picture = createRecordingCanvas(20, 20).canvas;
+    const without = recordingFactory();
+    renderArtworkToCanvas({
+      space,
+      strokes: [inkStroke],
+      clipPaths,
+      pixelWidth: 400,
+      createCanvas: without.factory,
+    });
+    const withPicture = recordingFactory();
+    renderArtworkToCanvas({
+      space,
+      strokes: [inkStroke],
+      clipPaths,
+      pixelWidth: 400,
+      createCanvas: withPicture.factory,
+      underlay: { image: picture, x: 24, y: 24, width: 200, height: 150, opacity: 0.4 },
+    });
+    const images = (calls: ReturnType<typeof without.allCalls>) => calls.filter((call) => call.op === 'drawImage');
+    expect(images(withPicture.allCalls()).length).toBe(images(without.allCalls()).length + 1);
+    const output = withPicture.recordings.at(-1)!.calls;
+    const underlayAt = output.findIndex((call) => call.op === 'drawImage' && call.args[0] === picture);
+    expect(underlayAt).toBeGreaterThan(-1);
+    const mode = output.slice(0, underlayAt).filter((call) => call.op === 'set:globalCompositeOperation').at(-1);
+    expect(mode?.args[0]).toBe('destination-over');
+  });
+
   it('never dashes anything, which is the only way a guide is drawn', () => {
     const { factory, allCalls } = recordingFactory();
     renderArtworkToCanvas({
