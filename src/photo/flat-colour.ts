@@ -14,6 +14,8 @@ export interface FlatRegion {
   readonly hex: string;
   /** Closed outline in image pixels. */
   readonly points: readonly Point[];
+  /** Loops inside `points` that stay unpainted, wound opposite the outline. */
+  readonly holes?: readonly (readonly Point[])[];
   readonly pixels: number;
   readonly cx: number;
   readonly cy: number;
@@ -185,9 +187,6 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
   // than the gap between two subjects, is still inside the drawing.
   const reach = Math.max(seal * 2 + 4, Math.min(36, Math.round(Math.min(width, height) * 0.08)));
   addOpenChannels(interior, line, aligned, width, height, reach);
-  // A stick limb never closes a corridor. A few pixels either side of that
-  // stroke still belong to the subject; the open page further out does not.
-  addStickBuffer(interior, line, width, height, Math.max(4, Math.round(seal * 0.6)));
   const names = new Array<string>(line.length);
   for (let index = 0; index < interior.length; index += 1) {
     if (!interior[index]) continue;
@@ -253,6 +252,7 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
   const drafts: Array<{
     id: number;
     points: Point[];
+    holes: Point[][];
     pixels: number;
     cx: number;
     cy: number;
@@ -278,6 +278,7 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
       drafts.push({
         id,
         points: outline.points,
+        holes: outline.holes,
         pixels: outline.pixels,
         cx: spot.x,
         cy: spot.y,
@@ -317,6 +318,7 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
       name,
       hex: name === 'putih' ? '#ffffff' : snapKid(median),
       points: draft.points,
+      ...(draft.holes.length > 0 ? { holes: draft.holes } : {}),
       pixels: draft.pixels,
       cx: draft.cx,
       cy: draft.cy,
@@ -336,24 +338,6 @@ export function coverByColour(lineArt: RgbaImage, coloured: RgbaImage): { region
     regions: regions.sort((left, right) => right.pixels - left.pixels),
     coverage: interiorPixels === 0 ? 1 : coveredPixels / interiorPixels,
   };
-}
-
-/** A stroke with no fill on either side is a stick. Colour a narrow strip along it. */
-function addStickBuffer(interior: Uint8Array, line: Uint8Array, width: number, height: number, radius: number): void {
-  // A thick outline is several pixels from the hole it closes. That is not a stick.
-  const beside = dilateMask(interior, width, height, 6);
-  const sticks = new Uint8Array(line.length);
-  let any = false;
-  for (let index = 0; index < line.length; index += 1) {
-    if (!line[index] || beside[index]) continue;
-    sticks[index] = 1;
-    any = true;
-  }
-  if (!any) return;
-  const halo = dilateMask(sticks, width, height, radius);
-  for (let index = 0; index < halo.length; index += 1) {
-    if (halo[index] && !line[index]) interior[index] = 1;
-  }
 }
 
 function rasterize(mask: Uint8Array, width: number, height: number, points: readonly Point[]): void {

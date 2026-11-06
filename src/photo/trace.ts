@@ -712,28 +712,80 @@ export function subjectSilhouettes(image: RgbaImage, maxCount = 3): Point[][] {
 }
 
 /**
- * Outer contour of every solid blob in a mask.
+ * Outer contour of every solid blob, with the holes inside it kept.
  *
- * This does not thin strokes or keep only the largest blob. A fill has to
- * cover each piece it claims, including a thin limb.
+ * Simplifying a contour until it has only a few corners draws a straight
+ * chord across a notch, and the paint then fills that notch. These outlines
+ * stay close to the pixels, and a loop inside another loop is a hole.
  */
-export function componentOutlines(mask: Uint8Array, width: number, height: number): Array<{ points: Point[]; pixels: number }> {
+export function componentOutlines(mask: Uint8Array, width: number, height: number): Array<{ points: Point[]; holes: Point[][]; pixels: number }> {
   const labeled = label(mask, width, height);
   if (labeled.count === 0) return [];
-  const epsilon = Math.max(0.8, Math.min(width, height) * 0.003);
-  const outlines: Array<{ points: Point[]; pixels: number }> = [];
+  const outlines: Array<{ points: Point[]; holes: Point[][]; pixels: number }> = [];
   for (const stat of labeled.stats) {
     if (stat.pixels < 12) continue;
     const only = new Uint8Array(mask.length);
     for (let index = 0; index < only.length; index += 1) {
       if (labeled.ids[index] === stat.id) only[index] = 1;
     }
-    const loop = largestLoop(marchingSquares(only, width, height));
-    if (!loop) continue;
-    const outer = finishLoop(loop, epsilon);
-    if (outer.length >= 4) outlines.push({ points: outer, pixels: stat.pixels });
+    const loops = marchingSquares(only, width, height)
+      .map((loop) => faithfulLoop(loop))
+      .filter((loop) => loop.length >= 4);
+    if (loops.length === 0) continue;
+    const ranked = loops.map((points) => ({ points, area: Math.abs(signedArea(points)) }))
+      .sort((left, right) => right.area - left.area);
+    const outer = ranked[0];
+    if (!outer) continue;
+    const outerSign = Math.sign(signedArea(outer.points)) || 1;
+    const holes: Point[][] = [];
+    for (const loop of ranked.slice(1)) {
+      const centre = loopCentre(loop.points);
+      if (!pointInLoop(centre.x, centre.y, outer.points)) continue;
+      const hole = Math.sign(signedArea(loop.points)) === outerSign ? [...loop.points].reverse() : loop.points;
+      holes.push(hole);
+    }
+    outlines.push({ points: outer.points, holes, pixels: stat.pixels });
   }
   return outlines;
+}
+
+/** A light smooth only. A coarser fit would bridge a concave gap. */
+function faithfulLoop(points: readonly Point[]): Point[] {
+  const simplified = simplify(points, 1.15);
+  if (simplified.length <= 220) return simplified;
+  return resampleClosed(points, 200);
+}
+
+function signedArea(points: readonly Point[]): number {
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const start = points[index]!;
+    const end = points[(index + 1) % points.length]!;
+    area += start.x * end.y - end.x * start.y;
+  }
+  return area / 2;
+}
+
+function loopCentre(points: readonly Point[]): Point {
+  let x = 0;
+  let y = 0;
+  for (const point of points) {
+    x += point.x;
+    y += point.y;
+  }
+  return { x: x / points.length, y: y / points.length };
+}
+
+function pointInLoop(x: number, y: number, loop: readonly Point[]): boolean {
+  let inside = false;
+  for (let index = 0, previous = loop.length - 1; index < loop.length; previous = index, index += 1) {
+    const start = loop[previous]!;
+    const end = loop[index]!;
+    if ((start.y > y) === (end.y > y) || end.y === start.y) continue;
+    const at = start.x + ((y - start.y) / (end.y - start.y)) * (end.x - start.x);
+    if (at > x) inside = !inside;
+  }
+  return inside;
 }
 
 function filledSubject(mask: Uint8Array, width: number, height: number): Uint8Array {
