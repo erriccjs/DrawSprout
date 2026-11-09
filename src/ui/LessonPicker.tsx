@@ -10,7 +10,7 @@ import type { PhotoLessonRecord } from '../persistence/photo-lesson-store';
 
 interface LessonPickerProps {
   readonly onSelect: (lessonId: string) => void;
-  readonly onTrace: (file: File) => void;
+  readonly onTrace: (file: File | null) => void;
   readonly onDoodle: () => void;
   readonly notice: string | null;
   /** True only after the worker has stored and checked the whole shell. */
@@ -42,6 +42,7 @@ export function LessonPicker({
 }: LessonPickerProps) {
   const traceInput = useRef<HTMLInputElement>(null);
   const { t, locale } = useI18n();
+  const [traceHint, setTraceHint] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const applying = updatePhase === 'applying';
@@ -54,7 +55,15 @@ export function LessonPicker({
         <button type="button" className="button button--primary" onClick={onDoodle}>
           {t('doodlePhoto')}
         </button>
-        <button type="button" className="button" onClick={() => traceInput.current?.click()}>
+        <button
+          type="button"
+          className="button"
+          aria-describedby="trace-photo-note"
+          onClick={() => {
+            setTraceHint(t('traceOpening'));
+            traceInput.current?.click();
+          }}
+        >
           {t('tracePhoto')}
         </button>
         <input
@@ -64,11 +73,15 @@ export function LessonPicker({
           accept="image/*"
           aria-label={t('traceChoose')}
           onChange={(event) => {
-            const file = event.target.files?.[0];
+            const file = event.target.files?.[0] ?? null;
             event.target.value = '';
-            if (file) onTrace(file);
+            setTraceHint(null);
+            onTrace(file);
           }}
         />
+        <p id="trace-photo-note" className="lesson-picker__photo-note">{t('traceStaysHere')}</p>
+        <p className="lesson-picker__photo-note">{t('doodleUsesServer')}</p>
+        {traceHint && <p className="banner" role="status">{traceHint}</p>}
       </div>
       {notice && <p className="banner" role="status">{say(locale, notice)}</p>}
       {offlineReady && (

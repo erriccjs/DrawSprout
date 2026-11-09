@@ -74,6 +74,35 @@ describe('lesson picker', () => {
     expect(getPlayableLesson('house-front').id).toBe('house-front');
   });
 
+  it('shows a visible trace choice and reports a cancelled or unusable photo', () => {
+    const onTrace = vi.fn();
+    render(
+      <LessonPicker
+        onSelect={() => {}}
+        onTrace={onTrace}
+        onDoodle={() => {}}
+        notice={null}
+        offlineReady={false}
+        updatePhase="hidden"
+        onApplyUpdate={() => {}}
+        onDismissUpdate={() => {}}
+      />,
+    );
+    expect(screen.getByText('Jiplak foto tetap di perangkat ini.')).toBeTruthy();
+    expect(screen.getByText('Doodle dari foto dibuat di server.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Jiplak foto' }));
+    expect(screen.getByRole('status').textContent).toMatch(/tetap di perangkat/);
+    const input = screen.getByLabelText<HTMLInputElement>('Pilih atau ambil foto');
+    fireEvent.change(input, { target: { files: [] } });
+    expect(onTrace).toHaveBeenCalledWith(null);
+    const again = new File(['a'], 'cat.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [again] } });
+    fireEvent.change(input, { target: { files: [again] } });
+    expect(onTrace).toHaveBeenLastCalledWith(again);
+    expect(css).toMatch(/\.shell\[data-layout\^='phone'\] \.doodle-flow__actions[\s\S]*flex-direction:\s*column/);
+    expect(css).toMatch(/\.lesson-edits__lesson[\s\S]*border-top:/);
+  });
+
   it('scrolls a grid that stays two columns on a portrait phone', () => {
     expect(css).toMatch(/\.shell:not\(:has\(> \.pad\)\)\s*\{[^}]*overflow:\s*auto/);
     expect(css).toMatch(/\.lesson-picker__choices\s*\{[^}]*display:\s*grid/);

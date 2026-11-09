@@ -11,7 +11,7 @@ import { StorageFullError } from './persistence/types';
 import { markOfflineReady, markUpdateWaiting, resetOfflineStatus } from './offline/status';
 import * as exportApi from './renderer/export';
 import { strokeInput } from './test/factories';
-import { drawStroke, pointerDown, pointerMove, pointerUp, stubLayoutBox } from './test/pointer';
+import { drawStroke, stubLayoutBox } from './test/pointer';
 import { App } from './App';
 import { TABLET_NOTICE_KEY } from './ui/tablet-notice';
 
@@ -75,10 +75,13 @@ function lessonChoice(title: string): HTMLElement {
   return choice;
 }
 
-async function open(title: string) {
+async function open(title: string, resume: 'continue' | 'stay' = 'continue') {
   await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
   fireEvent.click(lessonChoice(title));
-  await screen.findByRole('heading', { name: new RegExp(title) });
+  // Level 1 is the drawing title or the continue choice. Gallery cards are level 3.
+  await screen.findByRole('heading', { level: 1, name: new RegExp(title) });
+  const choice = screen.queryByRole('button', { name: /Lanjutkan|Lihat karyamu/ });
+  if (choice && resume === 'continue') fireEvent.click(choice);
   await act(async () => { await Promise.resolve(); });
 }
 
@@ -159,11 +162,60 @@ describe('lesson picker', () => {
     await store.saveProgress({ checkpoint: toCheckpoint(oldSession, 1, 123), newStrokes: [] });
 
     render(<App />);
-    await open('Kucing');
+    await open('Kucing', 'stay');
+    expect(screen.queryByText('Selesai! Ini karyamu.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Lanjutkan' }));
     expect(await screen.findByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
     await waitFor(async () => {
       expect((await store.loadLatestSessionForLesson(cat.id))?.checkpoint.sessionId).toBe('old-cat-session');
+      expect((await store.loadSession('old-cat-session'))?.checkpoint.updatedAt).toBe(123);
     });
+  });
+
+  it('starts a new attempt without removing or re-dating the saved picture', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const finished = reduceSession(
+      cat,
+      reduceSession(cat, createSession(cat, 'finished-cat'), { type: 'next-step' }),
+      { type: 'finish' },
+    );
+    await store.saveProgress({ checkpoint: toCheckpoint(finished, 2, 555), newStrokes: [] });
+
+    render(<App />);
+    await open('Kucing', 'stay');
+    expect(screen.queryByText('Selesai! Ini karyamu.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Lihat karyamu' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Gambar baru' }));
+    expect(await screen.findByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    const kept = await store.loadSession('finished-cat');
+    expect(kept?.checkpoint.updatedAt).toBe(555);
+    expect(kept?.checkpoint.finished).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /Lanjut/ }));
+    await returnToPicker();
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { name: 'Kucing Duduk', level: 3 })).toHaveLength(2);
+    });
+    expect((await store.loadSession('finished-cat'))?.checkpoint.updatedAt).toBe(555);
+  });
+
+  it('offers the finished picture when a later visit has no marks', async () => {
+    const cat = lessonData.BUNDLED_LESSONS[0]!;
+    const finished = reduceSession(
+      cat,
+      reduceSession(cat, createSession(cat, 'finished-cat'), { type: 'next-step' }),
+      { type: 'finish' },
+    );
+    const blank = createSession(cat, 'blank-cat');
+    await store.saveProgress({ checkpoint: toCheckpoint(finished, 1, 100), newStrokes: [] });
+    await store.saveProgress({ checkpoint: toCheckpoint(blank, 1, 900), newStrokes: [] });
+
+    render(<App />);
+    await open('Kucing', 'stay');
+    expect(screen.getByRole('button', { name: 'Lihat karyamu' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Gambar baru' })).toBeTruthy();
+    expect((await store.loadSession('finished-cat'))?.checkpoint.updatedAt).toBe(100);
+    expect((await store.loadSession('blank-cat'))?.checkpoint.updatedAt).toBe(900);
   });
 
   it('refuses with a calm line and logs the technical detail when a bundled package is broken', async () => {
@@ -227,6 +279,7 @@ describe('lesson picker', () => {
     render(<App />);
     await screen.findByRole('heading', { name: 'Karyaku' });
     fireEvent.click(lessonChoice('Kucing'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Lihat karyamu' }));
     await screen.findByRole('heading', { name: 'Selesai! Ini karyamu.' });
     fireEvent.click(screen.getByRole('button', { name: 'Pilih gambar lain' }));
     await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
@@ -248,6 +301,7 @@ describe('lesson picker', () => {
     render(<App />);
     await screen.findByRole('heading', { name: 'Karyaku' });
     fireEvent.click(lessonChoice('Kucing'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Lihat karyamu' }));
     await screen.findByRole('heading', { name: 'Selesai! Ini karyamu.' });
     fireEvent.click(screen.getByRole('button', { name: /Gambar lagi/ }));
     expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
@@ -275,14 +329,17 @@ describe('lesson picker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Buka Kucing Duduk' }));
     await screen.findByRole('heading', { name: 'Kucing Duduk', level: 1 });
     expect(screen.queryByRole('heading', { name: 'Karyaku' })).toBeNull();
+    await returnToPicker();
+    expect((await store.loadSession('gallery-cat'))?.checkpoint.updatedAt).toBe(Date.UTC(2026, 9, 21, 9, 5));
 
-    fireEvent.click(screen.getByRole('button', { name: /Pilih gambar/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Hapus Kucing Duduk' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Lainnya untuk Kucing Duduk' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Hapus Kucing Duduk' }));
     expect(screen.getByText('Hapus karya ini?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Batal' }));
     expect(await store.loadSession('gallery-cat')).not.toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus Kucing Duduk' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lainnya untuk Kucing Duduk' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Hapus Kucing Duduk' }));
     fireEvent.click(screen.getByRole('button', { name: 'Hapus' }));
     expect(await screen.findByText('Belum ada karya tersimpan.')).toBeTruthy();
     expect(await store.loadSession('gallery-cat')).toBeNull();
@@ -330,6 +387,62 @@ describe('lesson picker', () => {
     expect(document.querySelector('.guide-overlay')?.getAttribute('data-visible')).toBe('false');
     expect(screen.queryByRole('heading', { name: 'Karyaku' })).toBeNull();
     paint.mockRestore();
+  });
+
+  it('says what happened when a trace photo is cancelled, rejected, or cannot be read', async () => {
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    const input = screen.getByLabelText('Pilih atau ambil foto');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Jiplak foto' }));
+    expect(screen.getByText(/Pilih foto untuk dijiplak/)).toBeTruthy();
+
+    fireEvent.change(input, { target: { files: [] } });
+    expect(await screen.findByText('Tidak ada foto yang dipilih.')).toBeTruthy();
+
+    fireEvent.change(input, { target: { files: [new File(['hello'], 'notes.txt', { type: 'text/plain' })] } });
+    expect(await screen.findByText('Pilih foto JPG atau PNG ya.')).toBeTruthy();
+
+    const originalCreate = URL.createObjectURL.bind(URL);
+    const originalRevoke = URL.revokeObjectURL.bind(URL);
+    URL.createObjectURL = () => 'blob:trace-test';
+    URL.revokeObjectURL = () => undefined;
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    let decodeAttempts = 0;
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      configurable: true,
+      get: () => 'blob:trace-test',
+      set(this: HTMLImageElement) {
+        decodeAttempts += 1;
+        queueMicrotask(() => this.dispatchEvent(new Event('error')));
+      },
+    });
+    try {
+      const photo = new File([new Uint8Array([1, 2, 3])], 'bad.png', { type: 'image/png' });
+      fireEvent.change(input, { target: { files: [photo] } });
+      fireEvent.change(input, { target: { files: [photo] } });
+      expect(await screen.findByText('Foto tidak dapat dibaca. Pilih gambar lain.')).toBeTruthy();
+      expect(decodeAttempts).toBe(2);
+      expect(screen.queryByRole('heading', { name: 'Mau gambar apa hari ini?' })).toBeTruthy();
+
+      Object.defineProperty(HTMLImageElement.prototype, 'src', {
+        configurable: true,
+        get: () => 'blob:trace-test',
+        set(this: HTMLImageElement) {
+          Object.defineProperty(this, 'naturalWidth', { configurable: true, value: 0 });
+          Object.defineProperty(this, 'naturalHeight', { configurable: true, value: 0 });
+          queueMicrotask(() => this.dispatchEvent(new Event('load')));
+        },
+      });
+      fireEvent.change(input, { target: { files: [photo] } });
+      expect(screen.getByText('Membuka foto…')).toBeTruthy();
+      expect(await screen.findByText('Foto tidak dapat dibaca. Pilih gambar lain.')).toBeTruthy();
+      expect(screen.queryByRole('heading', { name: 'Mau gambar apa hari ini?' })).toBeTruthy();
+    } finally {
+      if (descriptor) Object.defineProperty(HTMLImageElement.prototype, 'src', descriptor);
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+    }
   });
 });
 
@@ -403,7 +516,7 @@ describe('leaving a drawing', () => {
 describe('resume notice', () => {
   const RESUMED = /Karya terakhirmu dilanjutkan/;
 
-  it('opens immediately while a saved drawing is stalled and keeps a changed step', async () => {
+  it('keeps the canvas hidden until a saved picture is known, then continues that step', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;
     const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
     await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: [] });
@@ -411,71 +524,66 @@ describe('resume notice', () => {
     vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
 
     render(<App />);
-    await open('Kucing');
-    fireEvent.click(screen.getByRole('button', { name: /Lanjut/ }));
-    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    fireEvent.click(lessonChoice('Kucing'));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('img', { name: /Kanvas gambar/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Lanjut/ })).toBeNull();
 
     await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] })));
-    expect(screen.queryByText(RESUMED)).toBeNull();
-    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Lanjutkan' }));
+    expect(await screen.findByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.getByText(RESUMED)).toBeTruthy();
+    expect((await store.loadSession('saved-cat'))?.checkpoint.updatedAt).toBe(123);
   });
 
-  it('applies a late saved drawing when the child has not started', async () => {
+  it('offers continue when a saved picture arrives and the child has not drawn', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;
     const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
     let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
     vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
 
     render(<App />);
-    await open('Kucing');
-    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    fireEvent.click(lessonChoice('Kucing'));
+    expect(screen.queryByText('Tahap 1 dari 9', { exact: false })).toBeNull();
     release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] });
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Lanjutkan' }));
     expect(await screen.findByText(RESUMED)).toBeTruthy();
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
   });
 
-  it('keeps a saved drawing latest after repeated selected-control taps during its load', async () => {
+  it('does not save or replace a picture while its continue choice is still loading', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;
     const stepped = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
     const saved = reduceSession(cat, stepped, {
       type: 'commit-stroke', stroke: strokeInput(cat.steps[1]!.id),
     });
     await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: saved.strokes });
-    const saveProgress = store.saveProgress.bind(store);
-    let releaseSave: () => void = () => {};
-    const pendingSave = new Promise<void>((resolve) => { releaseSave = resolve; });
-    const save = vi.spyOn(store, 'saveProgress').mockImplementation((input) =>
-      pendingSave.then(() => saveProgress(input)));
+    const save = vi.spyOn(store, 'saveProgress');
     const loadLatestSessionForLesson = store.loadLatestSessionForLesson.bind(store);
     let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
     vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
 
     render(<App />);
-    await open('Kucing');
-    fireEvent.click(screen.getByRole('button', { name: /Mode jari/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Pen' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Ikuti panduan' }));
-    fireEvent.change(screen.getByRole('slider', { name: 'Ukuran kuas' }), { target: { value: '12' } });
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    fireEvent.click(lessonChoice('Kucing'));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('button', { name: /Mode jari/ })).toBeNull();
+    expect(screen.queryByRole('slider', { name: 'Ukuran kuas' })).toBeNull();
     expect(save).not.toHaveBeenCalled();
 
     await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));
-
-    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
-    expect(screen.getByText(RESUMED)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
-    await waitFor(() => expect(save).toHaveBeenCalled());
-    expect(save.mock.lastCall?.[0].checkpoint.sessionId).toBe(saved.sessionId);
-    await act(() => Promise.resolve(releaseSave()));
-    await waitFor(async () => {
-      const latest = await loadLatestSessionForLesson(cat.id);
-      expect(latest?.checkpoint.sessionId).toBe(saved.sessionId);
-      expect(latest?.checkpoint.committedStrokeIds).toEqual([saved.strokes[0]!.id]);
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Pilih gambar lain' }));
+    expect(save).not.toHaveBeenCalled();
+    const latest = await loadLatestSessionForLesson(cat.id);
+    expect(latest?.checkpoint.sessionId).toBe(saved.sessionId);
+    expect(latest?.checkpoint.updatedAt).toBe(123);
+    expect(latest?.checkpoint.committedStrokeIds).toEqual([saved.strokes[0]!.id]);
   });
 
-  it('keeps saved work when a pointer goes down but the child leaves before lifting', async () => {
-    stubLayoutBox();
+  it('leaves the saved picture untouched when the child goes back from the choice', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;
     const stepped = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
     const saved = reduceSession(cat, stepped, {
@@ -484,104 +592,88 @@ describe('resume notice', () => {
     await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: saved.strokes });
     const loadLatestSessionForLesson = store.loadLatestSessionForLesson.bind(store);
     const save = vi.spyOn(store, 'saveProgress');
-    let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
-    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
 
     render(<App />);
-    await open('Kucing');
-    act(() => pointerDown(screen.getByRole('img', { name: /Kanvas gambar/ }),
-      { x: 100, y: 100 }, { pointerType: 'touch' }));
-    await returnToPicker();
-    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));
+    await open('Kucing', 'stay');
+    expect(screen.queryByRole('img', { name: /Kanvas gambar/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Pilih gambar lain' }));
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
 
     expect(save).not.toHaveBeenCalled();
     const latest = await loadLatestSessionForLesson(cat.id);
     expect(latest?.checkpoint.sessionId).toBe(saved.sessionId);
     expect(latest?.checkpoint.committedStrokeIds).toEqual([saved.strokes[0]!.id]);
+    expect(latest?.checkpoint.updatedAt).toBe(123);
   });
 
-  it('restores a saved drawing under a changed control selected during loading', async () => {
+  it('continues a saved drawing and keeps a control chosen after that', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;
     const stepped = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
     const saved = reduceSession(cat, stepped, {
       type: 'commit-stroke', stroke: strokeInput(cat.steps[1]!.id),
     });
     await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: saved.strokes });
-    let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
-    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
 
     render(<App />);
     await open('Kucing');
-    fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
-    expect(screen.getByRole('button', { name: /Mode pensil/ }).getAttribute('aria-pressed')).toBe('true');
-
-    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
     expect(screen.getByRole('button', { name: /Mode pensil/ }).getAttribute('aria-pressed')).toBe('true');
+    expect((await store.loadSession('saved-cat'))?.checkpoint.updatedAt).toBe(123);
   });
 
-  it('keeps a committed new stroke when an older saved drawing arrives late', async () => {
+  it('starts a second attempt only after the child asks, and keeps the first picture', async () => {
     stubLayoutBox();
     const cat = lessonData.BUNDLED_LESSONS[0]!;
     const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
+    await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: [] });
     const loadLatestSessionForLesson = store.loadLatestSessionForLesson.bind(store);
-    let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
-    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
 
     render(<App />);
-    await open('Kucing');
+    await open('Kucing', 'stay');
+    expect(screen.queryByRole('img', { name: /Kanvas gambar/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Gambar baru' }));
+    expect(await screen.findByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
     act(() => drawStroke(screen.getByRole('img', { name: /Kanvas gambar/ }), [
       { x: 100, y: 100 }, { x: 200, y: 200 },
     ], { pointerType: 'touch' }));
-    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] })));
+    await returnToPicker();
 
-    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
-    expect(screen.queryByText(RESUMED)).toBeNull();
     await waitFor(async () => {
       const latest = await loadLatestSessionForLesson(cat.id);
-      expect(latest?.checkpoint.currentStepIndex).toBe(0);
+      expect(latest?.checkpoint.sessionId).not.toBe('saved-cat');
       expect(latest?.strokes).toHaveLength(1);
     });
+    const first = await store.loadSession('saved-cat');
+    expect(first?.checkpoint.currentStepIndex).toBe(1);
+    expect(first?.checkpoint.updatedAt).toBe(123);
   });
 
-  it('keeps a live stroke when the saved drawing arrives before pointer-up', async () => {
-    stubLayoutBox();
+  it('does not mount the canvas while a saved picture is still being read', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;
     const stepped = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
     const saved = reduceSession(cat, stepped, {
       type: 'commit-stroke', stroke: strokeInput(cat.steps[1]!.id),
     });
     await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: saved.strokes });
-    const loadLatestSessionForLesson = store.loadLatestSessionForLesson.bind(store);
     const save = vi.spyOn(store, 'saveProgress');
     let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
     vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
 
     render(<App />);
-    await open('Kucing');
-    const canvas = screen.getByRole('img', { name: /Kanvas gambar/ });
-    act(() => {
-      pointerDown(canvas, { x: 100, y: 100 }, { pointerType: 'touch' });
-      pointerMove(canvas, { x: 150, y: 150 }, { pointerType: 'touch' });
-    });
-
-    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));
-    expect(screen.getByRole('img', { name: /Kanvas gambar/ })).toBe(canvas);
-    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
-    expect(screen.queryByText(RESUMED)).toBeNull();
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    fireEvent.click(lessonChoice('Kucing'));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('img', { name: /Kanvas gambar/ })).toBeNull();
     expect(save).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
-    act(() => pointerUp(canvas, { x: 200, y: 200 }, { pointerType: 'touch' }));
-    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
-    await waitFor(async () => {
-      const latest = await loadLatestSessionForLesson(cat.id);
-      expect(latest?.checkpoint.currentStepIndex).toBe(0);
-      expect(latest?.strokes).toHaveLength(1);
-      expect(latest?.strokes[0]?.points).toHaveLength(2);
-    });
+    await act(() => Promise.resolve(release({ checkpoint: toCheckpoint(saved, 1, 123), strokes: saved.strokes })));
+    expect(screen.queryByRole('img', { name: /Kanvas gambar/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Lanjutkan' }));
+    expect(await screen.findByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.getByText(RESUMED)).toBeTruthy();
+    expect((await store.loadSession('saved-cat'))?.checkpoint.updatedAt).toBe(123);
   });
 
   it('opens an outdated checkpoint without progress silently', async () => {
@@ -661,42 +753,44 @@ describe('resume notice', () => {
     expect(screen.queryByText(/missing-stroke/)).toBeNull();
   });
 
-  it('shows a failed load after drawing without replacing the new stroke', async () => {
-    stubLayoutBox();
+  it('shows one calm notice when a saved picture fails to load, before any canvas', async () => {
     let rejectLoad: (error: Error) => void = () => {};
     vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((_resolve, reject) => {
       rejectLoad = reject;
     }));
 
     render(<App />);
-    await open('Kucing');
-    act(() => drawStroke(screen.getByRole('img', { name: /Kanvas gambar/ }), [
-      { x: 100, y: 100 }, { x: 200, y: 200 },
-    ], { pointerType: 'touch' }));
-    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    fireEvent.click(lessonChoice('Kucing'));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('img', { name: /Kanvas gambar/ })).toBeNull();
 
     await act(() => Promise.resolve(rejectLoad(new Error('secret database failure'))));
+    expect(await screen.findByText(/Karya sebelumnya tidak dapat dibuka/)).toBeTruthy();
     expect(screen.getAllByText(/Karya sebelumnya tidak dapat dibuka/)).toHaveLength(1);
     expect(screen.queryByText(/secret database failure/)).toBeNull();
-    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(true);
   });
 
-  it('shows a corrupt late checkpoint after a step change without replacing the step', async () => {
+  it('shows a calm notice for a corrupt checkpoint and opens a fresh step 1', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;
     const saved = createSession(cat, 'broken-cat');
     let release: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
     vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { release = resolve; }));
 
     render(<App />);
-    await open('Kucing');
-    fireEvent.click(screen.getByRole('button', { name: /Lanjut/ }));
+    await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
+    fireEvent.click(lessonChoice('Kucing'));
+    expect(screen.queryByRole('button', { name: /Lanjut/ })).toBeNull();
 
     await act(() => Promise.resolve(release({
       checkpoint: { ...toCheckpoint(saved, 1, 123), committedStrokeIds: ['missing-stroke'] },
       strokes: [],
     })));
+    expect(await screen.findByText(/Karya sebelumnya tidak dapat dibuka/)).toBeTruthy();
     expect(screen.getAllByText(/Karya sebelumnya tidak dapat dibuka/)).toHaveLength(1);
-    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.getByText('Tahap 1 dari 9', { exact: false })).toBeTruthy();
     expect(screen.queryByText(/missing-stroke/)).toBeNull();
   });
 
@@ -747,57 +841,22 @@ describe('resume notice', () => {
     expect(savePreferences.mock.lastCall?.[0].inputMode).toBe('pencil');
   });
 
-  it('keeps an explicit control change when both lesson reads finish late', async () => {
+  it('keeps a control chosen after continuing, and uses it on the next lesson', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;
     const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
-    let releasePreferences: (value: typeof DEFAULT_PREFERENCES) => void = () => {};
-    let releaseSession: (value: Awaited<ReturnType<typeof store.loadLatestSessionForLesson>>) => void = () => {};
-    vi.spyOn(store, 'loadPreferences').mockImplementation(() => new Promise((resolve) => { releasePreferences = resolve; }));
-    vi.spyOn(store, 'loadLatestSessionForLesson').mockImplementation(() => new Promise((resolve) => { releaseSession = resolve; }));
-    const savePreferences = vi.spyOn(store, 'savePreferences');
+    await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: [] });
 
     render(<App />);
     await open('Kucing');
-    fireEvent.click(screen.getByRole('radio', { name: /Mandiri/ }));
-    expect(screen.getByRole<HTMLInputElement>('radio', { name: /Mandiri/ }).checked).toBe(true);
-
-    await act(() => Promise.resolve(releasePreferences(DEFAULT_PREFERENCES)));
-    await waitFor(() => expect(savePreferences.mock.lastCall?.[0].assistanceMode).toBe('independent'));
-    await act(() => Promise.resolve(releaseSession({ checkpoint: toCheckpoint(saved, 1, 123), strokes: [] })));
-    expect(screen.getByRole<HTMLInputElement>('radio', { name: /Mandiri/ }).checked).toBe(true);
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
-    expect(screen.getByText(RESUMED)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
+    await waitFor(async () => expect((await store.loadPreferences())?.inputMode).toBe('pencil'));
+
+    await returnToPicker();
+    await open('Bunga');
+    expect(screen.getByRole('button', { name: /Mode pensil/ }).getAttribute('aria-pressed')).toBe('true');
+    expect((await store.loadSession('saved-cat'))?.checkpoint.updatedAt).toBe(123);
   });
-
-  it.each(['null', 'failure'] as const)(
-    'keeps a control choice for later lessons when preferences load with %s after restore', async (outcome) => {
-      const cat = lessonData.BUNDLED_LESSONS[0]!;
-      const saved = reduceSession(cat, createSession(cat, 'saved-cat'), { type: 'next-step' });
-      await store.saveProgress({ checkpoint: toCheckpoint(saved, 1, 123), newStrokes: [] });
-      let releasePreferences: (value: typeof DEFAULT_PREFERENCES | null) => void = () => {};
-      let rejectPreferences: (error: Error) => void = () => {};
-      vi.spyOn(store, 'loadPreferences').mockImplementationOnce(() => new Promise((resolve, reject) => {
-        releasePreferences = resolve;
-        rejectPreferences = reject;
-      }));
-
-      render(<App />);
-      await open('Kucing');
-      fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
-      expect(await screen.findByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
-
-      if (outcome === 'null') {
-        await act(() => Promise.resolve(releasePreferences(null)));
-      } else {
-        await act(() => Promise.resolve(rejectPreferences(new Error('unavailable'))));
-      }
-      await waitFor(async () => expect((await store.loadPreferences())?.inputMode).toBe('pencil'));
-
-      await returnToPicker();
-      await open('Bunga');
-      expect(screen.getByRole('button', { name: /Mode pensil/ }).getAttribute('aria-pressed')).toBe('true');
-    },
-  );
 
   it('does not replace stored preferences with an older checkpoint on restore', async () => {
     const cat = lessonData.BUNDLED_LESSONS[0]!;

@@ -3,7 +3,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
 import { CAT_LESSON } from '../lesson-data';
 import { createSession, reduceSession } from '../lesson-engine/session';
-import { toCheckpoint } from '../persistence/mapping';
+import { fromRestoredSession, toCheckpoint } from '../persistence/mapping';
 import { IndexedDbSessionStore } from '../persistence/indexeddb-store';
 import { MemorySessionStore } from '../persistence/memory-store';
 import type { SessionStore } from '../persistence/types';
@@ -64,6 +64,22 @@ describe('useAutosave', () => {
     expect(result.current.status).toEqual({ kind: 'idle' });
     const stored = await store.loadSession('drawn');
     expect(stored?.checkpoint.committedStrokeIds).toEqual([drawn.strokes[0]!.id]);
+  });
+
+  it('does not change the saved time when an opened picture is unchanged', async () => {
+    const store = new MemorySessionStore();
+    const saved = reduceSession(CAT_LESSON, createSession(CAT_LESSON, 'saved'), {
+      type: 'commit-stroke', stroke: strokeInput(CAT_LESSON.steps[0]!.id),
+    });
+    await store.saveProgress({ checkpoint: toCheckpoint(saved, 4, 111), newStrokes: saved.strokes });
+    const restored = fromRestoredSession((await store.loadSession('saved'))!);
+    const { result } = renderHook(() => useAutosave(store, restored, false));
+
+    await act(async () => { expect(await result.current.flush()).toBe(true); });
+
+    const again = await store.loadSession('saved');
+    expect(again?.checkpoint.updatedAt).toBe(111);
+    expect(again?.checkpoint.revision).toBe(4);
   });
 
   it.each([

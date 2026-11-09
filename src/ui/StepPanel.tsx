@@ -194,39 +194,45 @@ export function LessonEdits({ lesson, state, dispatch, onRestart }: LessonEditsP
   const onLastStep = state.currentStepIndex === lesson.steps.length - 1;
 
   return (
-    <fieldset className="lesson-edits">
-      <legend>{t('thisStep')}</legend>
-      {onLastStep && !state.freeCreation && (
-        <button type="button" className="button" onClick={() => dispatch({ type: 'enter-free-creation' })}>
-          {t('freeDraw')}
-        </button>
-      )}
-      <button
-        type="button"
-        className="button"
-        disabled={!canRepeat}
-        onClick={() => dispatch({ type: 'clear-step' })}
-      >
-        {t('repeatStep')}
-      </button>
-      {confirmingRestart ? (
-        <ClearArtworkPrompt
-          compact
-          label={t('restartChoice')}
-          onKeep={() => setConfirmingRestart(false)}
-          onClear={onRestart}
-        />
-      ) : (
+    <div className="lesson-edits">
+      <fieldset className="lesson-edits__step">
+        <legend>{t('thisStep')}</legend>
+        {onLastStep && !state.freeCreation && (
+          <button type="button" className="button" onClick={() => dispatch({ type: 'enter-free-creation' })}>
+            {t('freeDraw')}
+          </button>
+        )}
         <button
           type="button"
           className="button"
-          aria-label={t('restartArtwork')}
-          onClick={() => setConfirmingRestart(true)}
+          disabled={!canRepeat}
+          onClick={() => dispatch({ type: 'clear-step' })}
         >
-          {t('startOver')}
+          {t('repeatStep')}
         </button>
-      )}
-    </fieldset>
+      </fieldset>
+      <fieldset className="lesson-edits__lesson">
+        <legend>{t('wholeLesson')}</legend>
+        {confirmingRestart ? (
+          <ClearArtworkPrompt
+            compact
+            label={t('restartChoice')}
+            question={t('restartQuestion')}
+            onKeep={() => setConfirmingRestart(false)}
+            onClear={onRestart}
+          />
+        ) : (
+          <button
+            type="button"
+            className="button"
+            aria-label={t('restartArtwork')}
+            onClick={() => setConfirmingRestart(true)}
+          >
+            {t('startOver')}
+          </button>
+        )}
+      </fieldset>
+    </div>
   );
 }
 

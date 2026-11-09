@@ -20,6 +20,7 @@ import { gateUpdate } from './offline/update-policy';
 import { useOfflineSupport } from './offline/useOffline';
 import { useI18n } from './i18n/context';
 import { ArtworkGallery } from './ui/ArtworkGallery';
+import { ResumeChoice } from './ui/ResumeChoice';
 import { DrawingPad } from './ui/DrawingPad';
 import { requestDocumentFullscreen } from './ui/fullscreen';
 import { RESUME_NOTICE } from './ui/resume-notice';
@@ -68,6 +69,7 @@ export function App() {
   const [exitNotice, setExitNotice] = useState<string | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [saveInFlight, setSaveInFlight] = useState(false);
+  const [galleryReload, setGalleryReload] = useState(0);
   const [tabletNoticeDismissed, setTabletNoticeDismissed] = useState(isTabletNoticeDismissed);
   const [photoBeta] = useState(() => readPhotoBeta());
   const photoStoreRef = useRef<IndexedDbPhotoLessonStore | null>(null);
@@ -80,6 +82,12 @@ export function App() {
   const doodleStoreRef = useRef<IndexedDbDoodleLessonStore | null>(null);
   const doodleRecordsRef = useRef<DoodleLessonRecord[]>([]);
   const [doodleLessons, setDoodleLessons] = useState<LessonPackage[]>([]);
+  const [resumeOffer, setResumeOffer] = useState<{
+    lesson: LessonPackage;
+    state: SessionState;
+    finished: boolean;
+    pendingSave: Promise<boolean> | null;
+  } | null>(null);
   const showTabletNotice = layout !== 'tablet' && !tabletNoticeDismissed;
 
   const dismissTabletHint = () => {
@@ -176,29 +184,110 @@ export function App() {
     });
   };
 
-  const chooseTrace = (file: File) => {
-    const url = URL.createObjectURL(file);
+  const chooseTrace = (file: File | null) => {
+    if (!file) {
+      setExitNotice('Tidak ada foto yang dipilih.');
+      return;
+    }
+    if (file.type !== '' && !file.type.startsWith('image/')) {
+      setExitNotice('Pilih foto JPG atau PNG ya.');
+      return;
+    }
+    setExitNotice('Membuka foto…');
+    let url: string;
+    try {
+      url = URL.createObjectURL(file);
+    } catch {
+      setExitNotice('Foto tidak dapat dibaca. Pilih gambar lain.');
+      return;
+    }
     const image = new Image();
-    image.onload = () => {
+    const fail = () => {
+      URL.revokeObjectURL(url);
+      setExitNotice('Foto tidak dapat dibaca. Pilih gambar lain.');
+    };
+    image.addEventListener('load', () => {
+      if (image.naturalWidth < 1 || image.naturalHeight < 1) {
+        fail();
+        return;
+      }
       const space = TRACE_LESSON.coordinateSpace;
+      setExitNotice(null);
       setTraceDraft({
         image,
         url,
         placement: fitPhoto(space.width, space.height, image.naturalWidth || image.width, image.naturalHeight || image.height),
       });
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      setExitNotice('Foto tidak dapat dibaca. Pilih gambar lain.');
-    };
+    });
+    image.addEventListener('error', fail);
     image.src = url;
   };
 
   const selectLesson = (lessonId: string) => {
-    startLesson(resolveLesson(lessonId), true);
+    const lesson = resolveLesson(lessonId);
+    const selection = ++selectionRef.current;
+    setResumeOffer(null);
+    // The picture they just left may still be saving. Offer that one immediately
+    // so a slow read cannot open a blank page over it.
+    const handoff = handoffRef.current?.state.lessonId === lesson.id ? handoffRef.current : null;
+    if (handoff && sessionHasProgress(handoff.state)) {
+      setResumeOffer({
+        lesson,
+        state: handoff.state,
+        finished: handoff.state.finished,
+        pendingSave: handoff.saved,
+      });
+      return;
+    }
+    void bootstrap.store.loadLatestSessionForLesson(lesson.id).then(async (latest) => {
+      if (selectionRef.current !== selection) return;
+      let restored = latest;
+      // A blank visit must not hide an older finished or in-progress picture.
+      if (restored && !hasProgress(restored.checkpoint)) {
+        const artworks = await bootstrap.store.listSavedArtworks().catch(() => []);
+        const earlier = artworks.find((artwork) => artwork.lessonId === lesson.id);
+        if (selectionRef.current !== selection) return;
+        if (earlier) restored = await bootstrap.store.loadSession(earlier.sessionId);
+      }
+      if (selectionRef.current !== selection) return;
+      const versionMatches = !restored || restored.checkpoint.lessonContentVersion === lesson.contentVersion;
+      if (!restored || !hasProgress(restored.checkpoint) || !versionMatches) {
+        startLesson(lesson, Boolean(restored) && !versionMatches);
+        return;
+      }
+      try {
+        const state = fromRestoredSession(restored);
+        setResumeOffer({ lesson, state, finished: state.finished, pendingSave: null });
+      } catch {
+        startLesson(lesson, false, LOAD_FAILURE_NOTICE);
+      }
+    }).catch(() => {
+      if (selectionRef.current === selection) startLesson(lesson, false, LOAD_FAILURE_NOTICE);
+    });
   };
 
-  const startLesson = (lesson: LessonPackage, resume: boolean) => {
+  const openPrepared = (lesson: LessonPackage, state: SessionState, notice: string | null, pendingSave: Promise<boolean> | null = null) => {
+    requestDocumentFullscreen();
+    setPhotoFlow(false);
+    setUpdateDismissed(false);
+    selectionRef.current += 1;
+    touchedRef.current = true;
+    controlsRef.current = { preferences: {}, tools: {} };
+    handoffRef.current = null;
+    setExitNotice(null);
+    setResumeOffer(null);
+    setOpenLesson({
+      lesson,
+      initialState: state,
+      notice,
+      restorePending: false,
+      preferencesPending: false,
+      pendingSave,
+      revision: 0,
+    });
+  };
+
+  const startLesson = (lesson: LessonPackage, resume: boolean, failureNotice: string | null = null) => {
     // This runs inside the click that opens the drawing screen. Fullscreen has
     // to be asked for here, not on the first stroke: the resize would smear
     // that line (D-57). A photo match calls this from the button that accepts
@@ -212,7 +301,7 @@ export function App() {
     controlsRef.current = { preferences: {}, tools: {} };
     setExitNotice(null);
     const initialState = handoff?.state ?? createSession(lesson, newId(), DEFAULT_PREFERENCES);
-    setOpenLesson({ lesson, initialState, notice: null, restorePending: resume && handoff === null, preferencesPending: true,
+    setOpenLesson({ lesson, initialState, notice: failureNotice, restorePending: resume && handoff === null, preferencesPending: true,
       pendingSave: handoff?.saved ?? null, revision: 0 });
 
     void bootstrap.store.loadPreferences().then((preferences) => {
@@ -412,6 +501,7 @@ export function App() {
             setSaveInFlight(true);
             void saved.then((wasSaved) => {
               setSaveInFlight(false);
+              setGalleryReload((current) => current + 1);
               if (wasSaved && handoffRef.current === handoff) handoffRef.current = null;
               if (!wasSaved) {
                 setExitNotice(
@@ -420,6 +510,7 @@ export function App() {
               }
             }, () => {
               setSaveInFlight(false);
+              setGalleryReload((current) => current + 1);
               setExitNotice(
                 'Gambar tadi mungkin belum tersimpan. Tidak apa-apa, kamu bisa menggambar lagi.',
               );
@@ -493,6 +584,26 @@ export function App() {
             selectLesson(lesson.id);
           }}
         />
+      ) : resumeOffer ? (
+        <ResumeChoice
+          lesson={resumeOffer.lesson}
+          finished={resumeOffer.finished}
+          onContinue={() => {
+            const offer = resumeOffer;
+            openPrepared(
+              offer.lesson,
+              offer.state,
+              offer.finished ? null : RESUME_NOTICE,
+              offer.pendingSave,
+            );
+          }}
+          onStartNew={() => {
+            const lesson = resumeOffer.lesson;
+            setResumeOffer(null);
+            startLesson(lesson, false);
+          }}
+          onBack={() => setResumeOffer(null)}
+        />
       ) : (
         <>
           <LessonPicker
@@ -518,6 +629,7 @@ export function App() {
           <ArtworkGallery
             store={bootstrap.store}
             actionsDisabled={updateGate.showPrompt && applyRequested}
+            reloadToken={galleryReload}
             onOpen={openArtwork}
             extraLessons={[TRACE_LESSON, ...doodleLessons, ...photoLessons.map((row) => row.lesson)]}
           />
@@ -559,8 +671,13 @@ function doodleOverlay(lesson: LessonPackage, png: Uint8Array): Promise<TraceSes
   });
 }
 
+function sessionHasProgress(state: SessionState): boolean {
+  return state.finished || state.strokes.length > 0 || state.redoStack.length > 0 || state.currentStepIndex > 0;
+}
+
 function hasProgress(checkpoint: SessionCheckpoint): boolean {
   return (
+    checkpoint.finished ||
     checkpoint.committedStrokeIds.length > 0 ||
     checkpoint.redoStrokeIds.length > 0 ||
     checkpoint.currentStepIndex > 0

@@ -18,9 +18,11 @@ interface ClearArtworkPromptProps {
   readonly onClear: () => void;
   /** `true` in the drawing screen's narrow control column. */
   readonly compact?: boolean;
+  /** Replaces the shared question when the action's scope is different. */
+  readonly question?: string;
 }
 
-export function ClearArtworkPrompt({ label, onKeep, onClear, compact = false }: ClearArtworkPromptProps) {
+export function ClearArtworkPrompt({ label, onKeep, onClear, compact = false, question }: ClearArtworkPromptProps) {
   const { t } = useI18n();
   return (
     <div
@@ -28,7 +30,7 @@ export function ClearArtworkPrompt({ label, onKeep, onClear, compact = false }: 
       role="group"
       aria-label={label}
     >
-      <h2>{t('clearQuestion')}</h2>
+      <h2>{question ?? t('clearQuestion')}</h2>
       <div className="finish__actions">
         <button type="button" className="button" onClick={onKeep} autoFocus>
           {t('keepDrawing')}

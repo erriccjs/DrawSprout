@@ -821,8 +821,20 @@ html:has(.pad) body {
 .doodle-flow__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.shell[data-layout^='phone'] .doodle-flow__actions,
+.shell[data-layout='tablet'] .doodle-flow__actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.shell[data-layout^='phone'] .doodle-flow__actions .button,
+.shell[data-layout='tablet'] .doodle-flow__actions .button {
+  width: 100%;
+  min-height: var(--tap);
 }
 
 .doodle-flow .target-preview {
@@ -2348,10 +2360,78 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 
 .lesson-edits {
   display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 8px 4px 4px;
+}
+
+.lesson-edits__step,
+.lesson-edits__lesson {
+  display: grid;
   gap: 8px;
   margin: 0;
   border: 0;
-  padding: 8px 4px 4px;
+  padding: 0;
+}
+
+.lesson-edits__lesson {
+  padding-top: 12px;
+  border-top: 2px solid var(--line);
+}
+
+.resume-choice {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+}
+
+.resume-choice__actions {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+.resume-choice__action {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 72px;
+  font-size: 1.35rem;
+  text-align: start;
+}
+
+.resume-choice__icon {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+}
+
+.artwork-card__more {
+  position: relative;
+}
+
+.artwork-card__more-button {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  font-size: 1.4rem;
+  letter-spacing: 0.08em;
+}
+
+.artwork-card__menu {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 180px;
+  padding: 8px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.16);
+}
+
+.artwork-card__menu .button {
+  width: 100%;
+  min-height: var(--tap);
 }
 
 .lesson-edits .button {
@@ -2580,9 +2660,20 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 .lesson-picker__photo {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
   margin: 8px 0 20px;
+}
+
+.lesson-picker__photo-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+}
+
+.shell[data-layout^='phone'] .lesson-picker__photo .button,
+.shell[data-layout='tablet'] .lesson-picker__photo .button {
+  min-height: var(--tap);
 }
 
 .lesson-picker__photo-card {

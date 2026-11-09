@@ -20,11 +20,13 @@ interface ArtworkGalleryProps {
   readonly store: SessionStore;
   readonly actionsDisabled: boolean;
   readonly onOpen: (sessionId: string) => void;
+  /** Bumped when an exit save finishes, so a new picture appears without a reload. */
+  readonly reloadToken?: number;
   /** Photo lessons are not in the bundled catalogue. */
   readonly extraLessons?: readonly LessonPackage[];
 }
 
-export function ArtworkGallery({ store, actionsDisabled, onOpen, extraLessons = [] }: ArtworkGalleryProps) {
+export function ArtworkGallery({ store, actionsDisabled, onOpen, reloadToken = 0, extraLessons = [] }: ArtworkGalleryProps) {
   const { t } = useI18n();
   const [artworks, setArtworks] = useState<readonly SavedArtworkSummary[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -42,7 +44,7 @@ export function ArtworkGallery({ store, actionsDisabled, onOpen, extraLessons = 
     return () => {
       cancelled = true;
     };
-  }, [store, revision]);
+  }, [store, revision, reloadToken]);
 
   return (
     <section className="artwork-gallery" aria-labelledby="artwork-gallery-title">
@@ -83,6 +85,7 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
   const shown = useMemo(() => (lesson ? presentLesson(lesson, locale) : null), [lesson, locale]);
   const title = shown?.title ?? t('oldLesson');
   const [confirming, setConfirming] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [exportName, setExportName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
@@ -158,17 +161,35 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
         >
           {t('savePng')}
         </button>
-        {!confirming && (
+        <div className="artwork-card__more">
           <button
             type="button"
-            className="button"
+            className="button artwork-card__more-button"
             disabled={actionsDisabled}
-            aria-label={t('deleteNamed', { title })}
-            onClick={() => setConfirming(true)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-label={t('moreFor', { title })}
+            onClick={() => setMenuOpen((open) => !open)}
           >
-            {t('delete')}
+            ···
           </button>
-        )}
+          {menuOpen && (
+            <div className="artwork-card__menu" role="menu">
+              <button
+                type="button"
+                className="button"
+                role="menuitem"
+                aria-label={t('deleteNamed', { title })}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setConfirming(true);
+                }}
+              >
+                {t('delete')}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       {confirming && (
         <div className="artwork-card__confirm" role="group" aria-label={t('deleteArtworkQuestion')}>
