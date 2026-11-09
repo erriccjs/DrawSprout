@@ -137,7 +137,21 @@ export interface Messages {
   readonly hintLength: string;
   readonly seconds: string;
   readonly thisStep: string;
+  readonly wholeLesson: string;
+  readonly restartQuestion: string;
   readonly repeatStep: string;
+  readonly continueLesson: string;
+  readonly seePicture: string;
+  readonly startFreshAttempt: string;
+  readonly resumeLeadProgress: string;
+  readonly resumeLeadDone: string;
+  readonly moreFor: string;
+  readonly traceStaysHere: string;
+  readonly doodleUsesServer: string;
+  readonly traceOpening: string;
+  readonly traceNone: string;
+  readonly traceLoading: string;
+  readonly traceBadType: string;
   readonly drawMode: string;
   readonly pencilMode: string;
   readonly pencil: string;
@@ -328,7 +342,21 @@ const id: Messages = {
   hintLength: 'Lama petunjuk',
   seconds: '{count} detik',
   thisStep: 'Langkah ini',
+  wholeLesson: 'Seluruh pelajaran',
+  restartQuestion: 'Mulai ulang gambar ini? Goresannya hilang. Karya lain tetap tersimpan.',
   repeatStep: 'Ulangi langkah ini',
+  continueLesson: 'Lanjutkan',
+  seePicture: 'Lihat karyamu',
+  startFreshAttempt: 'Gambar baru',
+  resumeLeadProgress: 'Kamu sudah mulai gambar ini.',
+  resumeLeadDone: 'Gambar ini sudah selesai.',
+  moreFor: 'Lainnya untuk {title}',
+  traceStaysHere: 'Jiplak foto tetap di perangkat ini.',
+  doodleUsesServer: 'Doodle dari foto dibuat di server.',
+  traceOpening: 'Pilih foto untuk dijiplak. Fotonya tetap di perangkat ini.',
+  traceNone: 'Tidak ada foto yang dipilih.',
+  traceLoading: 'Membuka foto…',
+  traceBadType: 'Pilih foto JPG atau PNG ya.',
   drawMode: 'Cara menggambar',
   pencilMode: 'Mode pensil',
   pencil: 'Pensil',
@@ -519,7 +547,21 @@ const en: Messages = {
   hintLength: 'How long the hint stays',
   seconds: '{count} seconds',
   thisStep: 'This step',
+  wholeLesson: 'The whole lesson',
+  restartQuestion: 'Start this picture over? Its strokes go away. Your other saved pictures stay.',
   repeatStep: 'Do this step again',
+  continueLesson: 'Continue',
+  seePicture: 'See your picture',
+  startFreshAttempt: 'Start new',
+  resumeLeadProgress: 'You already started this picture.',
+  resumeLeadDone: 'This picture is finished.',
+  moreFor: 'More for {title}',
+  traceStaysHere: 'Tracing a photo stays on this device.',
+  doodleUsesServer: 'Doodle from a photo is made on a server.',
+  traceOpening: 'Choose a photo to trace. It stays on this device.',
+  traceNone: 'No photo was chosen.',
+  traceLoading: 'Opening the photo…',
+  traceBadType: 'Please choose a JPG or PNG photo.',
   drawMode: 'How to draw',
   pencilMode: 'Pencil mode',
   pencil: 'Pencil',

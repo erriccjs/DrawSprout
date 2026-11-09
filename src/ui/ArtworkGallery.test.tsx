@@ -49,13 +49,17 @@ describe('Karyaku', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Buka Kucing Duduk' }));
     expect(onOpen).toHaveBeenCalledWith('gallery-cat');
+    expect(await store.loadSession('gallery-cat')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Hapus Kucing Duduk' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus Kucing Duduk' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lainnya untuk Kucing Duduk' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Hapus Kucing Duduk' }));
     expect(screen.getByRole('group', { name: 'Hapus karya ini?' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Batal' }));
     expect(await store.loadSession('gallery-cat')).not.toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus Kucing Duduk' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lainnya untuk Kucing Duduk' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Hapus Kucing Duduk' }));
     fireEvent.click(screen.getByRole('button', { name: 'Hapus' }));
     expect(await screen.findByText('Belum ada karya tersimpan.')).toBeTruthy();
     expect(await store.loadSession('gallery-cat')).toBeNull();
@@ -68,7 +72,8 @@ describe('Karyaku', () => {
     render(<ArtworkGallery store={store} actionsDisabled onOpen={() => {}} />);
     expect((await screen.findByRole('button', { name: 'Buka Kucing Duduk' })).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Simpan PNG Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Hapus Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Lainnya untuk Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Hapus Kucing Duduk' })).toBeNull();
   });
 
   it('names a saved category lesson and still names an older bundled id', async () => {

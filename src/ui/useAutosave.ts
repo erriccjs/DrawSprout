@@ -10,7 +10,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionState } from '../lesson-engine/types';
 import { toCheckpoint } from '../persistence/mapping';
-import { StorageFullError, type SessionStore } from '../persistence/types';
+import { StorageFullError, type SessionCheckpoint, type SessionStore } from '../persistence/types';
+
+/** The picture itself. Tool choices are not a new save. */
+function sameArtwork(checkpoint: SessionCheckpoint, state: SessionState): boolean {
+  if (checkpoint.currentStepIndex !== state.currentStepIndex) return false;
+  if (checkpoint.finished !== state.finished) return false;
+  if ((checkpoint.freeCreation === true) !== state.freeCreation) return false;
+  const committed = state.strokes.map((stroke) => stroke.id);
+  const redo = state.redoStack.map((stroke) => stroke.id);
+  if (committed.length !== checkpoint.committedStrokeIds.length || redo.length !== checkpoint.redoStrokeIds.length) {
+    return false;
+  }
+  return committed.every((id, index) => id === checkpoint.committedStrokeIds[index])
+    && redo.every((id, index) => id === checkpoint.redoStrokeIds[index]);
+}
 
 export const CHECKPOINT_INTERVAL_MS = 2000;
 
@@ -49,6 +63,11 @@ export function useAutosave(
     if (clearingRef.current) return false;
 
     const current = stateRef.current;
+    const stored = await store.loadSession(current.sessionId);
+    if (stored && sameArtwork(stored.checkpoint, current)) {
+      setStatus({ kind: 'idle' });
+      return true;
+    }
     revisionRef.current += 1;
     const checkpoint = toCheckpoint(current, revisionRef.current, Date.now());
     // The redo stack is persisted too, so a stroke that is currently undone

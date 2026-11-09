@@ -475,11 +475,14 @@ describe('in-lesson edits and free drawing', () => {
     const { canvas } = setup();
     act(() => drawStroke(canvas, [{ x: 80, y: 80 }, { x: 160, y: 140 }]));
     act(() => screen.getByRole('button', { name: 'Bantuan' }).click());
+    expect(screen.getByRole('group', { name: 'Langkah ini' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Seluruh pelajaran' })).toBeTruthy();
     act(() => screen.getByRole('button', { name: 'Mulai ulang karya' }).click());
-    expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Mulai ulang gambar ini/ })).toBeTruthy();
+    expect(screen.getByText(/Karya lain tetap tersimpan/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
     act(() => screen.getByRole('button', { name: 'Gambar lama tetap ada' }).click());
-    expect(screen.queryByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /Mulai ulang gambar ini/ })).toBeNull();
     expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
   });
 

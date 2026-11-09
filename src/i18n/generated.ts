@@ -99,6 +99,8 @@ export const PHRASES_EN: Readonly<Record<string, string>> = {
   'Gambar belum bisa dibuat. Coba lagi, atau pilih foto lain.': 'The drawing could not be made. Try again, or choose another photo.',
   'Belum bisa digambar. Coba salah satu ini.': 'We cannot draw that yet. Try one of these.',
   'Foto tidak dapat dibaca. Pilih gambar lain.': 'The photo could not be read. Choose another picture.',
+  'Tidak ada foto yang dipilih.': 'No photo was chosen.',
+  'Membuka foto…': 'Opening the photo…',
   'Pilih sebuah foto.': 'Choose a photo.',
   'Pelajaran belum tersimpan di perangkat ini.': 'The lesson is not saved on this device yet.',
   'Mode pensil: gambar dengan stylus, atau pindah ke mode jari.': 'Pencil mode: draw with a stylus, or switch to finger mode.',
