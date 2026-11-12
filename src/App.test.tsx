@@ -68,6 +68,11 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function openMore() {
+  const more = screen.getByRole('button', { name: 'Lainnya' });
+  if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+}
+
 function lessonChoice(title: string): HTMLElement {
   const choice = screen.getAllByRole('button', { name: new RegExp(title) })
     .find((button) => button.classList.contains('lesson-picker__choice'));
@@ -618,6 +623,7 @@ describe('resume notice', () => {
     await open('Kucing');
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+    openMore();
     fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
     expect(screen.getByRole('button', { name: /Mode pensil/ }).getAttribute('aria-pressed')).toBe('true');
     expect((await store.loadSession('saved-cat'))?.checkpoint.updatedAt).toBe(123);
@@ -730,6 +736,7 @@ describe('resume notice', () => {
     render(<App />);
     await open('Kucing');
     expect(await screen.findByText(/Karya sebelumnya tidak dapat dibuka/)).toBeTruthy();
+    openMore();
     fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
     await returnToPicker();
 
@@ -817,7 +824,8 @@ describe('resume notice', () => {
       await act(() => Promise.resolve(release(savedPreferences)));
       expect(savePreferences).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
+      openMore();
+    fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
       await waitFor(() => expect(savePreferences).toHaveBeenCalled());
       expect(savePreferences.mock.lastCall?.[0].inputMode).toBe('pencil');
     },
@@ -836,6 +844,7 @@ describe('resume notice', () => {
     await act(() => Promise.resolve(rejectPreferences(new Error('unavailable'))));
     expect(savePreferences).not.toHaveBeenCalled();
 
+    openMore();
     fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
     await waitFor(() => expect(savePreferences).toHaveBeenCalled());
     expect(savePreferences.mock.lastCall?.[0].inputMode).toBe('pencil');
@@ -849,11 +858,13 @@ describe('resume notice', () => {
     render(<App />);
     await open('Kucing');
     expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+    openMore();
     fireEvent.click(screen.getByRole('button', { name: /Mode pensil/ }));
     await waitFor(async () => expect((await store.loadPreferences())?.inputMode).toBe('pencil'));
 
     await returnToPicker();
     await open('Bunga');
+    openMore();
     expect(screen.getByRole('button', { name: /Mode pensil/ }).getAttribute('aria-pressed')).toBe('true');
     expect((await store.loadSession('saved-cat'))?.checkpoint.updatedAt).toBe(123);
   });

@@ -11,6 +11,7 @@
  */
 
 import type { CoordinateSpace, GuidePath } from '../lesson-data/schema';
+import type { MotionPreference } from './motion';
 
 interface GuideOverlayProps {
   readonly space: CoordinateSpace;
@@ -18,6 +19,9 @@ interface GuideOverlayProps {
   readonly visible: boolean;
   readonly widthCss: number;
   readonly heightCss: number;
+  /** Bumps to replay the red line. Reduced motion stays on the static dashes. */
+  readonly playId?: string | number;
+  readonly motion?: MotionPreference;
 }
 
 /**
@@ -30,9 +34,10 @@ const STYLE_BY_ROLE = {
   construction: { dash: '4 14', width: 3, opacity: 0.9, color: '#b5b5b5' },
 } as const;
 
-export function GuideOverlay({ space, paths, visible, widthCss, heightCss }: GuideOverlayProps) {
+export function GuideOverlay({ space, paths, visible, widthCss, heightCss, playId = 0, motion = 'full' }: GuideOverlayProps) {
   return (
     <svg
+      key={playId}
       className="guide-overlay"
       viewBox={`0 0 ${space.width} ${space.height}`}
       width={widthCss}
@@ -40,10 +45,12 @@ export function GuideOverlay({ space, paths, visible, widthCss, heightCss }: Gui
       // The instruction text carries the meaning; the dashes are a visual aid.
       aria-hidden="true"
       data-visible={visible}
+      data-motion={motion}
     >
       {visible &&
         paths.map((path) => {
           const style = STYLE_BY_ROLE[path.role];
+          const draw = motion === 'full' && path.role === 'final-outline';
           return (
             <path
               key={path.id}
@@ -51,9 +58,12 @@ export function GuideOverlay({ space, paths, visible, widthCss, heightCss }: Gui
               fill="none"
               stroke={style.color}
               strokeWidth={style.width}
-              strokeDasharray={style.dash}
               strokeLinecap="round"
               opacity={style.opacity}
+              data-draw={draw ? 'on' : 'off'}
+              {...(draw
+                ? { pathLength: 1, strokeDasharray: '1', className: 'guide-overlay__draw' }
+                : { strokeDasharray: style.dash })}
             />
           );
         })}

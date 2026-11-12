@@ -334,6 +334,17 @@ html:has(.pad) body {
   pointer-events: none;
 }
 
+.guide-overlay__draw {
+  stroke-dashoffset: 1;
+  animation: guide-draw 1.3s ease-out forwards;
+}
+
+@keyframes guide-draw {
+  0% { stroke-dashoffset: 1; opacity: 1; }
+  75% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
 /* Chrome sits over the paper. The layer itself ignores touches so a stroke
    can start in the gaps; each control opts back in. */
 .pad__chrome {
@@ -1347,9 +1358,132 @@ html:has(.pad) body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .celebration span {
+  .celebration span,
+  .guide-overlay__draw,
+  .step-cheer {
     animation: none;
   }
+
+  .guide-overlay__draw {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+.step-panel__listen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.speak-button,
+.child-help__card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 8px 12px;
+  border-radius: 14px;
+  border: 2px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.15rem;
+  line-height: 1.2;
+  text-align: start;
+  cursor: pointer;
+}
+
+.speak-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.speak-button__icon,
+.child-help__mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.child-help {
+  display: grid;
+  gap: 12px;
+  font-size: 1.2rem;
+  line-height: 1.3;
+}
+
+.child-help__lead {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.child-help__pictures {
+  display: grid;
+  gap: 8px;
+}
+
+.child-help__card--note {
+  margin: 0;
+}
+
+.grown-up {
+  border-top: 2px solid var(--line);
+  padding-top: 8px;
+  font-size: 1.05rem;
+}
+
+.grown-up summary {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.grown-up p {
+  margin: 8px 0 0;
+}
+
+.toolbar-more {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.toolbar__more {
+  width: 100%;
+}
+
+.step-cheer {
+  position: absolute;
+  top: 88px;
+  left: 50%;
+  z-index: 4;
+  margin-left: -28px;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  font-size: 42px;
+  color: #e0a23a;
+  pointer-events: none;
+  animation: cheer-pop 1s ease-out forwards;
+}
+
+.step-cheer[data-motion='reduce'] {
+  animation: none;
+}
+
+@keyframes cheer-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  30% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
 }
 
 .finish__title {
@@ -2285,6 +2419,24 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   max-height: none;
   overflow: visible;
   padding: 2px;
+}
+
+.shell[data-layout='phone-portrait'] .toolbar {
+  position: relative;
+}
+
+.shell[data-layout='phone-portrait'] .toolbar-more {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 6;
+  width: min(280px, 72vw);
+  max-height: 46vh;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.16);
 }
 
 .shell[data-layout='phone-portrait'] .float-dock .toolbar:not(.toolbar--settings) {

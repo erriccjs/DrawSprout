@@ -60,6 +60,11 @@ function setup(options?: { readonly notice?: string | null; readonly initialStat
   return { store, canvas, view };
 }
 
+function openMore() {
+  const more = screen.getByRole('button', { name: 'Lainnya' });
+  if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+}
+
 function stageCanvas(container: HTMLElement): HTMLCanvasElement {
   return container.querySelector<HTMLCanvasElement>('.stage__canvas')!;
 }
@@ -144,8 +149,8 @@ describe('starting a lesson', () => {
     act(() => help.click());
     expect(help.getAttribute('aria-expanded')).toBe('true');
     expect(sheet()?.getAttribute('data-active')).toBe('true');
-    expect(sheet()?.textContent).toMatch(/Tampilkan petunjuk/);
-    expect(sheet()?.textContent).toMatch(/Cara menggambar/);
+    expect(sheet()?.textContent).toMatch(/Ikuti garis merah/);
+    expect(sheet()?.textContent).toMatch(/Untuk orang tua/);
 
     act(() => help.click());
     expect(sheet()?.getAttribute('data-active')).toBe('false');
@@ -159,6 +164,7 @@ describe('starting a lesson', () => {
   it('switches pencil and finger from the toolbar while help is closed', () => {
     const { view } = setup();
     expect(view.container.querySelector('.float-help')?.getAttribute('data-active')).toBe('false');
+    openMore();
     const finger = screen.getByRole('button', { name: 'Mode jari' });
     const pencil = screen.getByRole('button', { name: 'Mode pensil' });
     expect(finger.getAttribute('aria-pressed')).toBe('true');
@@ -377,6 +383,7 @@ describe('drawing', () => {
     const observer = controllableResizeObserver();
     try {
       const { store, canvas } = setup();
+      openMore();
       act(() => screen.getByRole('button', { name: /Mode pensil/ }).click());
 
       act(() => {
@@ -425,6 +432,7 @@ describe('drawing', () => {
     const undo = screen.getByRole('button', { name: /Batalkan/ });
     expect(undo.hasAttribute('disabled')).toBe(false);
 
+    openMore();
     act(() => screen.getByRole('button', { name: /Mode pensil/ }).click());
 
     act(() =>
@@ -497,6 +505,7 @@ describe('in-lesson edits and free drawing', () => {
     act(() => screen.getByRole('button', { name: 'Gambar bebas' }).click());
     expect(screen.getByRole('heading', { name: 'Gambar bebas.' })).toBeTruthy();
     expect(document.querySelector('.guide-overlay')?.getAttribute('data-visible')).toBe('false');
+    openMore();
     expect(screen.getByRole('button', { name: 'Pen' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Kuas' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Penghapus' })).toBeTruthy();
@@ -570,6 +579,7 @@ describe('finger-mode edge and palm', () => {
 
   it('still explains a touch in pencil mode instead of treating it as a palm', () => {
     const { canvas } = setup();
+    openMore();
     act(() => screen.getByRole('button', { name: 'Mode pensil' }).click());
     act(() =>
       drawStroke(
@@ -620,6 +630,7 @@ describe('finger gestures', () => {
 
   it('lets a finger tap undo in pencil mode without ending the pen stroke', async () => {
     const { store, canvas } = setup();
+    openMore();
     act(() => screen.getByRole('button', { name: /Mode pensil/ }).click());
     act(() =>
       drawStroke(
@@ -761,6 +772,7 @@ describe('assistance modes', () => {
   it('keeps the guide off the canvas in independent mode until it is asked for (FR-08)', async () => {
     const { view } = setup();
 
+    openMore();
     act(() => screen.getByRole('radio', { name: /Mandiri/ }).click());
     await waitFor(() => expect(canvasGuides(view.container)).toHaveLength(0));
 
@@ -782,6 +794,7 @@ describe('assistance modes', () => {
     const undo = screen.getByRole('button', { name: /Batalkan/ });
     expect(undo.hasAttribute('disabled')).toBe(false);
 
+    openMore();
     act(() => screen.getByRole('radio', { name: /Petunjuk sementara/ }).click());
     act(() => screen.getByRole('button', { name: /Tampilkan petunjuk/ }).click());
 
@@ -891,6 +904,7 @@ describe('navigation and colouring', () => {
 
     expect(screen.getByText(`Tahap ${CAT_LESSON.steps.length} dari ${CAT_LESSON.steps.length}`, { exact: false })).toBeTruthy();
     // The colour-boundary control only exists on a colouring step (FR-11).
+    openMore();
     expect(screen.getByRole('button', { name: /Batas area/ })).toBeTruthy();
   });
 
@@ -900,6 +914,7 @@ describe('navigation and colouring', () => {
       act(() => screen.getByRole('button', { name: /Lanjut/ }).click());
     }
 
+    openMore();
     const toggle = screen.getByRole('button', { name: /Batas area/ });
     expect(toggle.textContent).toMatch(/aktif/);
     act(() => toggle.click());
@@ -940,6 +955,7 @@ describe('navigation and colouring', () => {
 
   it('draws at the slider width, then takes the next step\'s own width (FR-03)', async () => {
     const { store, canvas } = setup();
+    openMore();
     const slider = screen.getByRole('slider', { name: 'Ukuran kuas' });
     expect(slider.getAttribute('aria-valuetext')).toBe('Ukuran langkah');
     const dot = () => document.querySelector<HTMLElement>('.brush-slider__dot')!;
@@ -994,7 +1010,7 @@ describe('finishing', () => {
 
     expect(screen.getByRole('heading', { name: /Ini karyamu/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Simpan gambar/ })).toBeTruthy();
-    expect(screen.getByText(/Garis panduan dan contoh tidak ikut tersimpan/)).toBeTruthy();
+    expect(screen.getByText(/Garis panduan tidak ikut tersimpan/)).toBeTruthy();
 
     act(() => screen.getByRole('button', { name: /Gambar lagi/ }).click());
     expect(screen.getByRole('heading', { name: 'Mau mulai dengan gambar kosong?' })).toBeTruthy();
@@ -1264,7 +1280,8 @@ describe('finishing', () => {
     vi.useFakeTimers();
     try {
       const { view } = setup();
-      act(() => screen.getByRole('radio', { name: /Petunjuk sementara/ }).click());
+      openMore();
+    act(() => screen.getByRole('radio', { name: /Petunjuk sementara/ }).click());
       expect(canvasGuides(view.container).length).toBeGreaterThan(0);
       await act(() => vi.advanceTimersByTime(5000));
       expect(canvasGuides(view.container)).toHaveLength(0);
@@ -1311,6 +1328,7 @@ describe('autosave and resume', () => {
   it('remembers preferences outside the session (FR-04, FR-22)', async () => {
     const { store } = setup();
 
+    openMore();
     act(() => screen.getByRole('button', { name: /Mode pensil/ }).click());
     act(() => screen.getByRole('button', { name: 'Warna Hijau' }).click());
 
@@ -1364,7 +1382,10 @@ describe('autosave and resume', () => {
  * so it doubles as the readout for "the canvas is empty".
  */
 describe('clearing the whole drawing', () => {
-  const clearAll = () => screen.getByRole('button', { name: /Hapus semua/ });
+  const clearAll = () => {
+    openMore();
+    return screen.getByRole('button', { name: 'Spons' });
+  };
   const question = () => screen.queryByRole('heading', { name: 'Mau mulai dengan gambar kosong?' });
   const undoButton = () => screen.getByRole('button', { name: /Batalkan/ });
 
@@ -1377,20 +1398,18 @@ describe('clearing the whole drawing', () => {
     return restored?.checkpoint.committedStrokeIds ?? [];
   }
 
-  it('offers the clear with the eraser only, and not as a fourth tool', () => {
-    const { view } = setup();
-    expect(screen.queryByRole('button', { name: /Hapus semua/ })).toBeNull();
+  it('keeps the sponge under More, not in the default tool row', () => {
+    setup();
+    expect(screen.queryByRole('button', { name: 'Spons' })).toBeNull();
+    const tools = document.querySelector('.toolbar__group--tools');
+    expect(tools?.querySelectorAll('[aria-pressed]')).toHaveLength(2);
 
-    chooseEraser();
-    // Inside the tool group, below the three tools, so it reads as the
-    // eraser's own action rather than as another tool to choose.
-    const group = view.container.querySelector<HTMLFieldSetElement>('.toolbar__group--tools')!;
-    expect(group.contains(clearAll())).toBe(true);
-    expect(group.querySelectorAll('[aria-pressed]')).toHaveLength(3);
-    expect(clearAll().hasAttribute('aria-pressed')).toBe(false);
-
-    act(() => screen.getByRole('button', { name: /Pen$/ }).click());
-    expect(screen.queryByRole('button', { name: /Hapus semua/ })).toBeNull();
+    openMore();
+    const sponge = screen.getByRole('button', { name: 'Spons' });
+    expect(sponge.closest('.toolbar__group--tools')).toBeNull();
+    expect(sponge.hasAttribute('aria-pressed')).toBe(false);
+    expect(screen.getByRole('button', { name: /Pen$/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Kuas' })).toBeTruthy();
   });
 
   it('stays unavailable until there is something to clear', () => {
@@ -1418,7 +1437,8 @@ describe('clearing the whole drawing', () => {
 
     chooseEraser();
     expect(question()).toBeNull();
-    act(() => clearAll().click());
+    const sponge = clearAll();
+    act(() => sponge.click());
 
     // One tap only asks, and backing out is what the focus lands on, so a
     // stray tap keeps the drawing.
@@ -1447,7 +1467,8 @@ describe('clearing the whole drawing', () => {
     });
 
     chooseEraser();
-    act(() => clearAll().click());
+    const sponge = clearAll();
+    act(() => sponge.click());
     act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
 
     expect(question()).toBeNull();
@@ -1471,7 +1492,8 @@ describe('clearing the whole drawing', () => {
     await waitFor(async () => expect(await committedIds(store)).toHaveLength(1));
 
     chooseEraser();
-    act(() => clearAll().click());
+    const sponge = clearAll();
+    act(() => sponge.click());
     act(() => screen.getByRole('button', { name: 'Ya, mulai gambar baru' }).click());
 
     // Force the save the autosave would make on its own cadence.
@@ -1489,5 +1511,106 @@ describe('clearing the whole drawing', () => {
     // The store refuses an empty session over a saved drawing, so the work the
     // child can still undo to is also still on disk.
     expect(await committedIds(store)).toHaveLength(1);
+  });
+});
+
+describe('a child who cannot read yet', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.removeItem('drawsprout.cheer-muted');
+  });
+
+  it('disables read-aloud when this language has no voice, and does not speak by itself', () => {
+    setup();
+    const button = screen.getAllByRole('button', { name: 'Suara belum ada' })[0];
+    expect(button?.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('reads the step only after a tap when a matching voice exists', () => {
+    const speak = vi.fn();
+    const voice = { lang: 'id-ID', name: 'Damayanti' };
+    vi.stubGlobal('speechSynthesis', {
+      getVoices: () => [voice],
+      speak,
+      cancel: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    });
+    vi.stubGlobal('SpeechSynthesisUtterance', class {
+      lang = '';
+      voice: SpeechSynthesisVoice | null = null;
+      onend: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+    });
+    setup();
+    expect(speak).not.toHaveBeenCalled();
+    const button = screen.getAllByRole('button', { name: 'Dengarkan' })[0];
+    expect(button).toBeTruthy();
+    act(() => button?.click());
+    expect(speak).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the red line still when motion is reduced', () => {
+    const original = window.matchMedia;
+    window.matchMedia = (query: string): MediaQueryList => ({
+      matches: query.includes('reduce'),
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+    });
+    try {
+      const { view } = setup();
+      expect(view.container.querySelectorAll('[data-draw="on"]')).toHaveLength(0);
+      expect(view.container.querySelector('.guide-overlay')?.getAttribute('data-motion')).toBe('reduce');
+      expect(view.container.querySelectorAll('.guide-overlay path').length).toBeGreaterThan(0);
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
+  it('shows a star when the step changes and the canvas still accepts a stroke', () => {
+    const { canvas } = setup();
+    act(() => screen.getByRole('button', { name: /Lanjut/ }).click());
+    expect(screen.getByRole('status', { name: 'Bintang' }).className).toContain('step-cheer');
+    act(() => drawStroke(canvas, [{ x: 40, y: 40 }, { x: 90, y: 90 }]));
+    expect(screen.getByRole('button', { name: /Batalkan/ }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('stays quiet when the star is muted', () => {
+    const start = vi.fn();
+    vi.stubGlobal('AudioContext', class {
+      currentTime = 0;
+      destination = {};
+      createOscillator() {
+        return { type: 'sine', frequency: { value: 0 }, connect() {}, start, stop() {}, onended: null };
+      }
+      createGain() {
+        return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} };
+      }
+      close() { return Promise.resolve(); }
+    });
+    setup();
+    act(() => screen.getByRole('button', { name: 'Diamkan bintang' }).click());
+    act(() => screen.getByRole('button', { name: /Lanjut/ }).click());
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('keeps one drawing tool on the dock and still opens a saved step', () => {
+    const started = reduceSession(CAT_LESSON, createSession(CAT_LESSON, 'saved'), { type: 'next-step' });
+    setup({ initialState: started });
+    expect(screen.getByText('Tahap 2 dari 9', { exact: false })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pen' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Penghapus' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Mode pensil' })).toBeNull();
+    expect(screen.queryByRole('slider', { name: 'Ukuran kuas' })).toBeNull();
+    openMore();
+    expect(screen.getByRole('button', { name: 'Mode pensil' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Kuas' })).toBeTruthy();
+    expect(screen.getByRole('slider', { name: 'Ukuran kuas' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Spons' })).toBeTruthy();
   });
 });

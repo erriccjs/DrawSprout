@@ -55,11 +55,13 @@ import { exitDocumentFullscreen, isDocumentFullscreen, requestDocumentFullscreen
 import { RESUME_NOTICE, RESUME_TOAST_MS } from './resume-notice';
 import { FinishScreen } from './FinishScreen';
 import { GuideOverlay } from './GuideOverlay';
-import { LessonEdits, StepControls, StepNavigation, StepPanel } from './StepPanel';
+import { playCheer } from './cheer';
+import { useMotionPreference } from './useMotionPreference';
+import { ChildHelp, StepNavigation, StepPanel } from './StepPanel';
 import { StepReference } from './StepReference';
 import { BrushSlider } from './BrushSlider';
 import { ColorWell } from './ColorWell';
-import { Toolbar, ToolbarSettings } from './Toolbar';
+import { Toolbar } from './Toolbar';
 import { TABLET_REFERENCE_CARD_RIGHT, drawingChrome } from './drawing-chrome';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 import { useLayoutTier } from './useLayoutTier';
@@ -91,6 +93,8 @@ interface DrawingPadProps {
   readonly onTraceChange?: (patch: Partial<TraceSession>) => void;
 }
 
+const CHEER_MUTE_KEY = 'drawsprout.cheer-muted';
+
 /** What the pointer began drawing, frozen at pointer-down (FR-03). */
 interface PendingStroke {
   readonly spec: LiveStrokeSpec;
@@ -100,6 +104,7 @@ interface PendingStroke {
 
 export function DrawingPad({ lesson, store, initialState, durable, notice, restorePending, preferencesPending, pendingSave, surfaceRef, onActivity, onControlChange, onChoosePicture, tabletNoticeOpen = false, trace, onTraceChange }: DrawingPadProps) {
   const layout = useLayoutTier();
+  const motion = useMotionPreference();
   const { t, locale } = useI18n();
   const copy = useMemo(() => presentLesson(lesson, locale), [lesson, locale]);
   const traceUnderlay = useMemo(() => (
@@ -117,6 +122,16 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
   const [state, setState] = useState(initialState);
   const stateRef = useRef(state);
   const preferencesDirtyRef = useRef(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [playId, setPlayId] = useState(0);
+  const [cheerToken, setCheerToken] = useState(0);
+  const [cheerMuted, setCheerMuted] = useState(() => {
+    try {
+      return localStorage.getItem(CHEER_MUTE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const dispatch = useCallback(
     (action: SessionAction) => {
       const previous = stateRef.current;
@@ -129,9 +144,13 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
       } else {
         onActivity();
       }
+      if (action.type === 'next-step') {
+        setCheerToken((token) => token + 1);
+        playCheer(motion, cheerMuted);
+      }
       setState(next);
     },
-    [lesson, onActivity, onControlChange],
+    [cheerMuted, lesson, motion, onActivity, onControlChange],
   );
 
   const { status: saveStatus, flush, clearSession } = useAutosave(store, state, !restorePending, pendingSave);
@@ -589,6 +608,8 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
               visible={guidesVisible && !state.freeCreation}
               widthCss={viewport.cssWidth}
               heightCss={viewport.cssHeight}
+              playId={`${shownStep.id}:${playId}`}
+              motion={motion}
             />
           )}
         </div>
@@ -619,6 +640,12 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           </div>
         )}
 
+        {cheerToken > 0 && (
+          <div className="step-cheer" data-motion={motion} role="status" aria-label={t('cheer')}>
+            <span aria-hidden="true">★</span>
+          </div>
+        )}
+
         <div className="float-notices">
           {notice !== null && notice !== RESUME_NOTICE && <p className="banner">{say(locale, notice)}</p>}
           {!durable && (
@@ -636,12 +663,14 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           {rejection !== null && <p className="banner">{say(locale, rejection)}</p>}
         </div>
 
-        <BrushSlider
-          stepWidth={lesson.steps[state.currentStepIndex]?.toolPreset.widthViewbox ?? preset.widthViewbox}
-          tool={preset.tool}
-          preset={preset}
-          dispatch={dispatch}
-        />
+        {moreOpen && (
+          <BrushSlider
+            stepWidth={lesson.steps[state.currentStepIndex]?.toolPreset.widthViewbox ?? preset.widthViewbox}
+            tool={preset.tool}
+            preset={preset}
+            dispatch={dispatch}
+          />
+        )}
 
         {lesson.id !== TRACE_LESSON.id && <StepReference lesson={copy} step={shownStep} />}
         {trace && onTraceChange && (
@@ -653,7 +682,13 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           />
         )}
         <div className="step-card">
-          <StepPanel lesson={copy} state={state} step={shownStep} startCollapsed={layout !== 'tablet'} />
+          <StepPanel
+            lesson={copy}
+            state={state}
+            step={shownStep}
+            startCollapsed={layout !== 'tablet'}
+            onReplay={() => setPlayId((id) => id + 1)}
+          />
         </div>
         <div className="step-nav">
           <StepNavigation
@@ -671,6 +706,12 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
               canUndo={canUndo(lesson, state)}
               canRedo={canRedo(state)}
               dispatch={dispatch}
+              stepTool={state.freeCreation ? 'brush' : (lesson.steps[state.currentStepIndex]?.toolPreset.tool ?? 'brush')}
+              moreOpen={moreOpen}
+              onToggleMore={() => setMoreOpen((open) => !open)}
+              isColorStep={isColorStep}
+              guidesVisible={guidesVisible}
+              onShowHint={showHint}
             />
           </div>
           <button
@@ -695,20 +736,35 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
               <FitIcon />
             </button>
           )}
+          <button
+            type="button"
+            className="chip float-dock__mute"
+            aria-pressed={cheerMuted}
+            aria-label={cheerMuted ? t('unmuteCheer') : t('muteCheer')}
+            onClick={() => {
+              setCheerMuted((muted) => {
+                const next = !muted;
+                try {
+                  localStorage.setItem(CHEER_MUTE_KEY, next ? '1' : '0');
+                } catch {
+                  /* A private window can refuse the mute flag. The button still toggles. */
+                }
+                return next;
+              });
+            }}
+          >
+            <span aria-hidden="true">{cheerMuted ? '🔇' : '🔔'}</span>
+          </button>
           <div className="pad__control-panel float-help" data-active={controlTab === 'help'}>
             <LanguageSwitch />
-            <ToolbarSettings
+            <ChildHelp
+              lesson={lesson}
               state={state}
-              isColorStep={isColorStep}
+              step={shownStep}
               dispatch={dispatch}
+              onRestart={startOver}
+              onReplay={() => setPlayId((id) => id + 1)}
             />
-            <StepControls
-              state={state}
-              guidesVisible={guidesVisible}
-              onShowHint={showHint}
-              dispatch={dispatch}
-            />
-            <LessonEdits lesson={lesson} state={state} dispatch={dispatch} onRestart={startOver} />
           </div>
         </aside>
       </div>
