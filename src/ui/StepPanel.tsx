@@ -14,6 +14,7 @@ import type { LessonPackage, LessonStep } from '../lesson-data/schema';
 import { drawingStepId } from '../lesson-engine/session';
 import type { AssistanceMode, HintDurationMs, SessionAction, SessionState } from '../lesson-engine/types';
 import { ClearArtworkPrompt } from './ClearArtworkPrompt';
+import { SpeakButton } from './SpeakButton';
 
 const ASSISTANCE_CHOICES: readonly { mode: AssistanceMode; label: MessageKey; help: MessageKey }[] = [
   { mode: 'visible', label: 'guidesVisible', help: 'guidesVisibleHelp' },
@@ -29,6 +30,7 @@ interface StepPanelProps {
   readonly step: LessonStep;
   /** Phones open folded so the instruction does not cover the paper. */
   readonly startCollapsed?: boolean;
+  readonly onReplay?: () => void;
 }
 
 interface StepNavigationProps {
@@ -50,6 +52,7 @@ export function StepPanel({
   state,
   step,
   startCollapsed = false,
+  onReplay,
 }: StepPanelProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(startCollapsed);
@@ -76,6 +79,15 @@ export function StepPanel({
         </p>
         {!collapsed && <h2 className="step-panel__instruction">{step.instruction}</h2>}
         {!collapsed && step.hint !== undefined && <p className="step-panel__hint">{step.hint}</p>}
+        <div className="step-panel__listen">
+          <SpeakButton text={step.instruction} />
+          {onReplay && (
+            <button type="button" className="speak-button" onClick={onReplay}>
+              <span aria-hidden="true" className="speak-button__icon">✎</span>
+              <span className="speak-button__label">{t('replayLine')}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <button
@@ -232,6 +244,39 @@ export function LessonEdits({ lesson, state, dispatch, onRestart }: LessonEditsP
           </button>
         )}
       </fieldset>
+    </div>
+  );
+}
+
+export function ChildHelp({
+  lesson,
+  state,
+  step,
+  dispatch,
+  onRestart,
+  onReplay,
+}: LessonEditsProps & { readonly step: LessonStep; readonly onReplay: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="child-help">
+      <p className="child-help__lead">{t('helpLead')}</p>
+      <div className="child-help__pictures">
+        <SpeakButton text={step.instruction} className="child-help__card" />
+        <button type="button" className="child-help__card" onClick={onReplay}>
+          <span aria-hidden="true" className="child-help__mark">✎</span>
+          <span>{t('helpWatch')}</span>
+        </button>
+        <p className="child-help__card child-help__card--note">
+          <span aria-hidden="true" className="child-help__mark">★</span>
+          <span>{t('helpRepeat')}</span>
+        </p>
+      </div>
+      <LessonEdits lesson={lesson} state={state} dispatch={dispatch} onRestart={onRestart} />
+      <details className="grown-up">
+        <summary>{t('grownUp')}</summary>
+        <p>{t('grownUpPencil')}</p>
+        <p>{t('drawModeNote')}</p>
+      </details>
     </div>
   );
 }

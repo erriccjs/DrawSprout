@@ -164,6 +164,20 @@ export interface Messages {
   readonly history: string;
   readonly undo: string;
   readonly redo: string;
+  readonly speakStep: string;
+  readonly speakUnavailable: string;
+  readonly replayLine: string;
+  readonly helpLead: string;
+  readonly helpHear: string;
+  readonly helpWatch: string;
+  readonly helpRepeat: string;
+  readonly grownUp: string;
+  readonly grownUpPencil: string;
+  readonly moreTools: string;
+  readonly sponge: string;
+  readonly cheer: string;
+  readonly muteCheer: string;
+  readonly unmuteCheer: string;
   readonly drawModeNote: string;
   readonly colorHelp: string;
   readonly boundaryOn: string;
@@ -217,7 +231,7 @@ const id: Messages = {
   english: 'English',
   indonesian: 'Indonesia',
   pickerTitle: 'Mau gambar apa hari ini?',
-  pickerLead: 'Pilih gambar yang kamu suka, lalu ikuti langkahnya.',
+  pickerLead: 'Pilih satu gambar.',
   tracePhoto: 'Jiplak foto',
   tracePlace: 'Geser fotonya, atur besarnya, lalu mulai.',
   traceChoose: 'Pilih atau ambil foto',
@@ -305,7 +319,7 @@ const id: Messages = {
   photoToCrop: 'Foto untuk dipotong',
   resizePart: 'Ubah ukuran bagian',
   finishTitle: 'Selesai! Ini karyamu.',
-  finishLead: 'Gambar ini milikmu. Garis panduan dan contoh tidak ikut tersimpan.',
+  finishLead: 'Ini gambarmu. Garis panduan tidak ikut tersimpan.',
   savePicture: 'Simpan gambar (PNG)',
   freeDraw: 'Gambar bebas',
   chooseAnother: 'Pilih gambar lain',
@@ -331,12 +345,12 @@ const id: Messages = {
   done: 'Selesai ✓',
   next: 'Lanjut →',
   help: 'Bantuan',
-  guidesVisible: 'Garis terlihat',
-  guidesVisibleHelp: 'Garis tetap tampil.',
+  guidesVisible: 'Garis tetap',
+  guidesVisibleHelp: 'Garisnya tetap di kertas.',
   guidesTemporary: 'Petunjuk sementara',
-  guidesTemporaryHelp: 'Garis tampil sebentar.',
+  guidesTemporaryHelp: 'Garisnya hilang sendiri.',
   guidesIndependent: 'Mandiri',
-  guidesIndependentHelp: 'Tanpa garis di kanvas.',
+  guidesIndependentHelp: 'Tanpa garis. Minta kalau perlu.',
   showHintAgain: 'Tampilkan petunjuk lagi',
   showHint: 'Tampilkan petunjuk',
   hintLength: 'Lama petunjuk',
@@ -369,6 +383,20 @@ const id: Messages = {
   history: 'Riwayat',
   undo: 'Batalkan',
   redo: 'Ulangi',
+  speakStep: 'Dengarkan',
+  speakUnavailable: 'Suara belum ada',
+  replayLine: 'Lihat garisnya',
+  helpLead: 'Ikuti garis merah.',
+  helpHear: 'Dengar langkahnya.',
+  helpWatch: 'Garisnya bergerak.',
+  helpRepeat: 'Ulangi kalau mau.',
+  grownUp: 'Untuk orang tua',
+  grownUpPencil: 'Mode pensil hanya untuk stylus. Jari tidak menggambar.',
+  moreTools: 'Lainnya',
+  sponge: 'Spons',
+  cheer: 'Bintang',
+  muteCheer: 'Diamkan bintang',
+  unmuteCheer: 'Nyalakan suara',
   drawModeNote: 'Ganti mode di tombol Jari atau Pensil. Mode pensil hanya menerima stylus. Sentuhan yang sangat lebar diabaikan di mode jari, tetapi penolakan telapak tangan dari sistem tidak dijamin.',
   colorHelp: 'Bantuan warna',
   boundaryOn: 'Batas area: aktif',
@@ -393,7 +421,7 @@ const id: Messages = {
   enterFullscreen: 'Layar penuh',
   canvasLabel: 'Kanvas gambar. {instruction}',
   freeDrawInstruction: 'Gambar bebas.',
-  freeDrawHint: 'Semua alat dan warna bisa dipakai. Tidak ada garis panduan.',
+  freeDrawHint: 'Gambar apa saja.',
   notDurableShort: 'Tidak tersimpan permanen',
   ready: 'Siap',
   saving: 'Menyimpan…',
@@ -422,7 +450,7 @@ const en: Messages = {
   english: 'English',
   indonesian: 'Indonesia',
   pickerTitle: 'What shall we draw today?',
-  pickerLead: 'Pick a picture you like, then follow the steps.',
+  pickerLead: 'Pick one picture.',
   tracePhoto: 'Trace a photo',
   tracePlace: 'Move the photo, change its size, then start.',
   traceChoose: 'Choose or take a photo',
@@ -510,7 +538,7 @@ const en: Messages = {
   photoToCrop: 'Photo to crop',
   resizePart: 'Resize the part',
   finishTitle: 'Done! This is your picture.',
-  finishLead: 'This picture is yours. The guide lines and the example are not saved.',
+  finishLead: 'This is your picture. Guide lines are not saved.',
   savePicture: 'Save picture (PNG)',
   freeDraw: 'Draw freely',
   chooseAnother: 'Pick another picture',
@@ -537,11 +565,11 @@ const en: Messages = {
   next: 'Next →',
   help: 'Help',
   guidesVisible: 'Lines stay',
-  guidesVisibleHelp: 'The lines stay on the page.',
+  guidesVisibleHelp: 'The lines stay.',
   guidesTemporary: 'Lines for a moment',
-  guidesTemporaryHelp: 'The lines show for a little while.',
+  guidesTemporaryHelp: 'The lines go away.',
   guidesIndependent: 'On my own',
-  guidesIndependentHelp: 'No lines on the page.',
+  guidesIndependentHelp: 'No lines. Ask if you want them.',
   showHintAgain: 'Show the hint again',
   showHint: 'Show the hint',
   hintLength: 'How long the hint stays',
@@ -574,6 +602,20 @@ const en: Messages = {
   history: 'History',
   undo: 'Undo',
   redo: 'Redo',
+  speakStep: 'Listen',
+  speakUnavailable: 'No voice yet',
+  replayLine: 'Watch the line',
+  helpLead: 'Follow the red line.',
+  helpHear: 'Hear this step.',
+  helpWatch: 'The line moves.',
+  helpRepeat: 'Do it again if you want.',
+  grownUp: 'For grown-ups',
+  grownUpPencil: 'Pencil mode is for a stylus. A finger does not draw.',
+  moreTools: 'More',
+  sponge: 'Sponge',
+  cheer: 'Star',
+  muteCheer: 'Quiet the star',
+  unmuteCheer: 'Turn sound on',
   drawModeNote: 'Switch with the Finger or Pencil button. Pencil mode only accepts a stylus. A very wide touch is ignored in finger mode, but the device may not block a palm.',
   colorHelp: 'Colour help',
   boundaryOn: 'Stay inside: on',
@@ -598,7 +640,7 @@ const en: Messages = {
   enterFullscreen: 'Full screen',
   canvasLabel: 'Drawing canvas. {instruction}',
   freeDrawInstruction: 'Draw freely.',
-  freeDrawHint: 'Every tool and colour is yours. There are no guide lines.',
+  freeDrawHint: 'Draw anything you like.',
   notDurableShort: 'Not saved for later',
   ready: 'Ready',
   saving: 'Saving…',

@@ -12,6 +12,7 @@ import type { MessageKey } from '../i18n/messages';
 import { canClearAll } from '../lesson-engine/session';
 import type { SessionAction, SessionState, ToolKind } from '../lesson-engine/types';
 import { ClearArtworkPrompt } from './ClearArtworkPrompt';
+import { StepControls } from './StepPanel';
 
 const TOOLS: readonly { kind: ToolKind; label: MessageKey; icon: string }[] = [
   { kind: 'pen', label: 'pen', icon: '✏️' },
@@ -46,12 +47,13 @@ interface ToolbarProps {
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly dispatch: (action: SessionAction) => void;
-}
-
-interface ToolbarSettingsProps {
-  readonly state: SessionState;
+  /** The step's own tool. The dock shows one drawing tool; the other waits under More. */
+  readonly stepTool: ToolKind;
+  readonly moreOpen: boolean;
+  readonly onToggleMore: () => void;
   readonly isColorStep: boolean;
-  readonly dispatch: (action: SessionAction) => void;
+  readonly guidesVisible: boolean;
+  readonly onShowHint: () => void;
 }
 
 export function Toolbar({
@@ -59,57 +61,47 @@ export function Toolbar({
   canUndo,
   canRedo,
   dispatch,
+  stepTool,
+  moreOpen,
+  onToggleMore,
+  isColorStep,
+  guidesVisible,
+  onShowHint,
 }: ToolbarProps) {
   const { t } = useI18n();
   const { toolPreferences } = state;
+  const prepared: 'pen' | 'brush' = stepTool === 'pen' ? 'pen' : 'brush';
+  const dockTool: 'pen' | 'brush' = toolPreferences.activeTool === 'pen' || toolPreferences.activeTool === 'brush'
+    ? toolPreferences.activeTool
+    : prepared;
+  const otherTool: 'pen' | 'brush' = dockTool === 'pen' ? 'brush' : 'pen';
+  const dock = TOOLS.find((tool) => tool.kind === dockTool) ?? TOOLS[1]!;
+  const other = TOOLS.find((tool) => tool.kind === otherTool) ?? TOOLS[0]!;
 
   return (
     <div className="toolbar">
-      <fieldset className="toolbar__group toolbar__group--mode">
-        <legend>{t('drawMode')}</legend>
-        <button
-          type="button"
-          className="chip chip--mode"
-          aria-label={t('pencilMode')}
-          title={t('pencil')}
-          aria-pressed={state.inputMode === 'pencil'}
-          onClick={() => dispatch({ type: 'set-input-mode', mode: 'pencil' })}
-        >
-          <PencilIcon />
-        </button>
-        <button
-          type="button"
-          className="chip chip--mode"
-          aria-label={t('fingerMode')}
-          title={t('finger')}
-          aria-pressed={state.inputMode === 'finger'}
-          onClick={() => dispatch({ type: 'set-input-mode', mode: 'finger' })}
-        >
-          <FingerIcon />
-        </button>
-      </fieldset>
-
       <fieldset className="toolbar__group toolbar__group--tools">
-        <legend>{t('tools')}</legend>
-        {TOOLS.map((tool) => (
-          <button
-            key={tool.kind}
-            type="button"
-            className="chip"
-            aria-label={t(tool.label)}
-            aria-pressed={toolPreferences.activeTool === tool.kind}
-            onClick={() => dispatch({ type: 'set-tool', tool: tool.kind })}
-          >
-            <span aria-hidden="true">{tool.icon}</span>
-            <span className="chip__label">{t(tool.label)}</span>
-          </button>
-        ))}
-        {/* Inside the tool group, and only while the eraser is the chosen
-            tool, so it reads as the eraser's big version rather than as a
-            fourth tool. Unmounting it resets the question. */}
-        {toolPreferences.activeTool === 'eraser' && (
-          <EraserClearAll state={state} dispatch={dispatch} />
-        )}
+        <legend className="sr-only">{t('tools')}</legend>
+        <button
+          type="button"
+          className="chip"
+          aria-label={t(dock.label)}
+          aria-pressed={toolPreferences.activeTool === dock.kind}
+          onClick={() => dispatch({ type: 'set-tool', tool: dock.kind })}
+        >
+          <span aria-hidden="true">{dock.icon}</span>
+          <span className="chip__label">{t(dock.label)}</span>
+        </button>
+        <button
+          type="button"
+          className="chip"
+          aria-label={t('eraser')}
+          aria-pressed={toolPreferences.activeTool === 'eraser'}
+          onClick={() => dispatch({ type: 'set-tool', tool: 'eraser' })}
+        >
+          <span aria-hidden="true">🧽</span>
+          <span className="chip__label">{t('eraser')}</span>
+        </button>
       </fieldset>
 
       <fieldset className="toolbar__group toolbar__group--history">
@@ -133,6 +125,74 @@ export function Toolbar({
           <span aria-hidden="true">↷</span>
         </button>
       </fieldset>
+
+      <button
+        type="button"
+        className="chip toolbar__more"
+        aria-expanded={moreOpen}
+        aria-controls="more-tools"
+        onClick={onToggleMore}
+      >
+        {t('moreTools')}
+      </button>
+
+      {moreOpen && (
+        <div className="toolbar-more" id="more-tools" role="group" aria-label={t('moreTools')}>
+          <button
+            type="button"
+            className="chip"
+            aria-label={t(other.label)}
+            aria-pressed={toolPreferences.activeTool === other.kind}
+            onClick={() => dispatch({ type: 'set-tool', tool: other.kind })}
+          >
+            <span aria-hidden="true">{other.icon}</span>
+            <span className="chip__label">{t(other.label)}</span>
+          </button>
+          <fieldset className="toolbar__group toolbar__group--mode">
+            <legend>{t('drawMode')}</legend>
+            <button
+              type="button"
+              className="chip chip--mode"
+              aria-label={t('pencilMode')}
+              title={t('pencil')}
+              aria-pressed={state.inputMode === 'pencil'}
+              onClick={() => dispatch({ type: 'set-input-mode', mode: 'pencil' })}
+            >
+              <PencilIcon />
+            </button>
+            <button
+              type="button"
+              className="chip chip--mode"
+              aria-label={t('fingerMode')}
+              title={t('finger')}
+              aria-pressed={state.inputMode === 'finger'}
+              onClick={() => dispatch({ type: 'set-input-mode', mode: 'finger' })}
+            >
+              <FingerIcon />
+            </button>
+          </fieldset>
+          <EraserClearAll state={state} dispatch={dispatch} />
+          <StepControls state={state} guidesVisible={guidesVisible} onShowHint={onShowHint} dispatch={dispatch} />
+          {isColorStep && (
+            <fieldset className="toolbar__group">
+              <legend>{t('colorHelp')}</legend>
+              <button
+                type="button"
+                className="chip"
+                aria-pressed={toolPreferences.colorBoundaryAssist}
+                onClick={() =>
+                  dispatch({
+                    type: 'set-boundary-assist',
+                    enabled: !toolPreferences.colorBoundaryAssist,
+                  })
+                }
+              >
+                {toolPreferences.colorBoundaryAssist ? t('boundaryOn') : t('boundaryOff')}
+              </button>
+            </fieldset>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -175,44 +235,7 @@ function EraserClearAll({
       disabled={!canClearAll(state)}
       onClick={() => setAsking(true)}
     >
-      <span aria-hidden="true">🧽</span> {t('clearAll')}
+      <span aria-hidden="true">🧽</span> {t('sponge')}
     </button>
-  );
-}
-
-export function ToolbarSettings({ state, isColorStep, dispatch }: ToolbarSettingsProps) {
-  const { t } = useI18n();
-  const { toolPreferences } = state;
-  return (
-    <div className="toolbar toolbar--settings">
-      <fieldset className="toolbar__group">
-        <legend>{t('drawMode')}</legend>
-        <p className="toolbar__readout toolbar__readout--muted">
-          {t('drawModeNote')}
-        </p>
-      </fieldset>
-
-      {isColorStep && (
-        <fieldset className="toolbar__group">
-          <legend>{t('colorHelp')}</legend>
-          <button
-            type="button"
-            className="chip"
-            aria-pressed={toolPreferences.colorBoundaryAssist}
-            onClick={() =>
-              dispatch({
-                type: 'set-boundary-assist',
-                enabled: !toolPreferences.colorBoundaryAssist,
-              })
-            }
-          >
-            {toolPreferences.colorBoundaryAssist ? t('boundaryOn') : t('boundaryOff')}
-          </button>
-          <p className="toolbar__readout toolbar__readout--muted">
-            {t('boundaryNote')}
-          </p>
-        </fieldset>
-      )}
-    </div>
   );
 }
