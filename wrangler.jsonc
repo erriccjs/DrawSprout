@@ -52,5 +52,10 @@
   },
   "migrations": [
     { "tag": "v1-paid-rate-limit", "new_sqlite_classes": ["PaidRateLimit"] }
+  ],
+  // Anonymous counts only. The binding name is USAGE. The dataset is
+  // drawsprout_events. No token and no personal data live here.
+  "analytics_engine_datasets": [
+    { "binding": "USAGE", "dataset": "drawsprout_events" }
   ]
 }

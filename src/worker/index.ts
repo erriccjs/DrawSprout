@@ -19,6 +19,7 @@ import { handleDoodleRequest, DOODLE_API_PATH } from '../doodle/api';
 import { DOODLE_RATE_LIMIT } from './shared/limit';
 import { durableRateGate, PaidRateLimit } from './rate-limit';
 import { json } from './shared/http';
+import { handleUsageEvent, USAGE_PATH } from './usage';
 
 export { PaidRateLimit };
 
@@ -83,6 +84,11 @@ export default {
         status: response.status,
         ms: Date.now() - started,
       }));
+      return response;
+    }
+    if (url.pathname === USAGE_PATH) {
+      const response = await handleUsageEvent(request, env);
+      console.log(JSON.stringify({ route: 'event', status: response.status }));
       return response;
     }
     if (url.pathname === DOODLE_API_PATH) {
