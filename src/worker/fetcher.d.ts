@@ -25,6 +25,15 @@ interface PaidRateLimitStub {
   allow(now: number): Promise<boolean>;
 }
 
+/** Analytics Engine dataset `drawsprout_events`. The binding name is `USAGE`. */
+interface AnalyticsEngineDataset {
+  writeDataPoint(point: {
+    indexes?: string[];
+    blobs?: string[];
+    doubles?: number[];
+  }): void;
+}
+
 /**
  * `cloudflare:workers` is the workerd runtime. Only the Durable Object base
  * used by PaidRateLimit is declared here, so the DOM types the photo code

@@ -31,6 +31,7 @@ import { newId } from './ui/ids';
 import { dismissTabletNotice, isTabletNoticeDismissed } from './ui/tablet-notice';
 import { useLayoutTier } from './ui/useLayoutTier';
 import { useSessionBootstrap } from './ui/useSessionBootstrap';
+import { recordUsage } from './usage/client';
 
 interface OpenLesson {
   readonly lesson: LessonPackage;
@@ -285,6 +286,7 @@ export function App() {
       pendingSave,
       revision: 0,
     });
+    recordUsage('lesson_start', lesson.id);
   };
 
   const startLesson = (lesson: LessonPackage, resume: boolean, failureNotice: string | null = null) => {
@@ -303,6 +305,7 @@ export function App() {
     const initialState = handoff?.state ?? createSession(lesson, newId(), DEFAULT_PREFERENCES);
     setOpenLesson({ lesson, initialState, notice: failureNotice, restorePending: resume && handoff === null, preferencesPending: true,
       pendingSave: handoff?.saved ?? null, revision: 0 });
+    recordUsage('lesson_start', lesson.id);
 
     void bootstrap.store.loadPreferences().then((preferences) => {
       if (selectionRef.current !== selection) return;
@@ -429,6 +432,7 @@ export function App() {
           pendingSave: null,
           revision: 0,
         });
+        recordUsage('lesson_start', lesson.id);
         return;
       }
       try {
@@ -442,6 +446,7 @@ export function App() {
           pendingSave: null,
           revision: 0,
         });
+        recordUsage('lesson_start', lesson.id);
       } catch {
         setExitNotice(LOAD_FAILURE_NOTICE);
       }
@@ -536,6 +541,7 @@ export function App() {
               includeInExport: false,
             });
             setTraceDraft(null);
+            recordUsage('trace_photo_start', TRACE_LESSON.id);
             startLesson(TRACE_LESSON, false);
           }}
           onCancel={releaseTrace}
@@ -545,6 +551,7 @@ export function App() {
           onCancel={() => setDoodleOpen(false)}
           onFollow={(lesson, png) => {
             rememberDoodle(lesson, png, false);
+            recordUsage('doodle_success', lesson.id);
             setDoodleOpen(false);
             startLesson(lesson, false);
           }}
@@ -563,6 +570,7 @@ export function App() {
                 includeInExport: false,
                 source: 'doodle',
               });
+              recordUsage('doodle_success', lesson.id);
               setDoodleOpen(false);
               startLesson(lesson, false);
             };

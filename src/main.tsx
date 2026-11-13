@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { LocaleProvider } from './i18n/context';
 import { requestPersistentStorage } from './persistence/indexeddb-store';
+import { installWebAnalytics, recordUsage } from './usage/client';
 import './styles.css';
 
 const host = document.getElementById('root');
@@ -16,6 +17,8 @@ if (import.meta.env.DEV && window.location.pathname === '/author') {
   // Best effort, and nothing waits on the answer: PRD section 13 says not to
   // assume the permission is granted.
   void requestPersistentStorage();
+  recordUsage('app_open');
+  installWebAnalytics(import.meta.env.VITE_CF_WEB_ANALYTICS_TOKEN);
 
   createRoot(host).render(
     <StrictMode>

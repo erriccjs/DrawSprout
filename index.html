@@ -21,5 +21,11 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!--
+      Public Cloudflare Web Analytics token. Auto-install does not inject this
+      into Worker HTML. A failed load is ignored: the service worker does not
+      cache this host, and this module does not gate the app script above.
+    -->
+    <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "cb6310f59ba7426f889af8febe77676c"}'></script>
   </body>
 </html>

@@ -16,7 +16,8 @@ describe('security headers', () => {
     }
     expect(text).toContain('camera=(self)');
     expect(CONTENT_SECURITY_POLICY).not.toContain('unsafe-eval');
-    expect(CONTENT_SECURITY_POLICY).toContain("script-src 'self'");
+    expect(CONTENT_SECURITY_POLICY).toContain("script-src 'self' https://static.cloudflareinsights.com");
+    expect(CONTENT_SECURITY_POLICY).toContain("connect-src 'self' https://cloudflareinsights.com");
     expect(CONTENT_SECURITY_POLICY).toContain("style-src 'self' 'unsafe-inline'");
   });
 });

@@ -9,6 +9,8 @@
 export const RATE_LIMIT = 6;
 /** A doodle is cheap, and it no longer shares the category-photo window. */
 export const DOODLE_RATE_LIMIT = 12;
+/** Usage counts are tiny writes. They do not share the paid photo window. */
+export const USAGE_RATE_LIMIT = 40;
 export const RATE_WINDOW_MS = 10 * 60 * 1000;
 
 export type RateDenial = 'limited' | 'unavailable';

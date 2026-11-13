@@ -57,6 +57,7 @@ import { FinishScreen } from './FinishScreen';
 import { GuideOverlay } from './GuideOverlay';
 import { playCheer } from './cheer';
 import { useMotionPreference } from './useMotionPreference';
+import { recordUsage } from '../usage/client';
 import { ChildHelp, StepNavigation, StepPanel } from './StepPanel';
 import { StepReference } from './StepReference';
 import { BrushSlider } from './BrushSlider';
@@ -148,6 +149,8 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         setCheerToken((token) => token + 1);
         playCheer(motion, cheerMuted);
       }
+      if (action.type === 'finish' && !previous.finished) recordUsage('lesson_complete', lesson.id);
+      if (action.type === 'enter-free-creation' && !previous.freeCreation) recordUsage('free_draw_start', lesson.id);
       setState(next);
     },
     [cheerMuted, lesson, motion, onActivity, onControlChange],

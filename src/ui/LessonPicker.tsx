@@ -87,6 +87,7 @@ export function LessonPicker({
       {offlineReady && (
         <p className="lesson-picker__offline">{t('offlineReady')}</p>
       )}
+      <p className="lesson-picker__privacy">{t('usageNote')}</p>
       {updatePhase !== 'hidden' && (
         <div className="banner update-prompt" role="status" aria-busy={updatePhase === 'applying'}>
           {updatePhase === 'applying' ? (
