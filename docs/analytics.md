@@ -137,8 +137,17 @@ ORDER BY up + down DESC
 
 ## Cloudflare Web Analytics
 
-The zone can enable Web Analytics on its own. A Worker custom domain may not
-inject the beacon. The app adds the beacon only when the build has
-`VITE_CF_WEB_ANALYTICS_TOKEN`. That value is empty unless it is set. Do not
-commit a token. The content security policy already allows
-`https://static.cloudflareinsights.com` and `https://cloudflareinsights.com`.
+The zone `erriccjs.cloud` already has Web Analytics with auto-install on.
+That injection does not reach HTML served by this Worker, so `index.html`
+includes the beacon itself, before `</body>`:
+
+```html
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "cb6310f59ba7426f889af8febe77676c"}'></script>
+```
+
+The token is the public site token, not a secret. The app script is a separate
+module above it. If the beacon fails to load, drawing, the service worker, and
+offline use continue. The service worker does not precache that host: a
+cross-origin request is left to the browser. The content security policy
+allows `https://static.cloudflareinsights.com` in `script-src` and
+`https://cloudflareinsights.com` in `connect-src`.
