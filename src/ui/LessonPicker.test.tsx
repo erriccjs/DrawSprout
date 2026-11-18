@@ -100,6 +100,8 @@ describe('lesson picker', () => {
     fireEvent.change(input, { target: { files: [again] } });
     expect(onTrace).toHaveBeenLastCalledWith(again);
     expect(css).toMatch(/\.shell\[data-layout\^='phone'\] \.doodle-flow__actions[\s\S]*flex-direction:\s*column/);
+    expect(css).toMatch(/\.button-row,[\s\S]*?align-items:\s*stretch;\s*gap:\s*12px/);
+    expect(css).toMatch(/\.button,\s*\.chip\s*\{[^}]*align-items:\s*center;/);
     expect(css).toMatch(/\.lesson-edits__lesson[\s\S]*border-top:/);
   });
 

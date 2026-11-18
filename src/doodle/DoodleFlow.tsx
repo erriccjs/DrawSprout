@@ -100,25 +100,28 @@ export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
       <h1>{t('doodlePhoto')}</h1>
       <p>{t('doodleLead')}</p>
       {phase === 'choose' && (
-        <label className="button button--primary doodle-flow__pick">
-          {t('traceChoose')}
-          <input
-            className="sr-only"
-            type="file"
-            accept="image/*"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = '';
-              if (file) choose(file);
-            }}
-          />
-        </label>
+        <div className="button-row">
+          <label className="button button--primary doodle-flow__pick">
+            {t('traceChoose')}
+            <input
+              className="sr-only"
+              type="file"
+              accept="image/*"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) choose(file);
+              }}
+            />
+          </label>
+          <button type="button" className="button" onClick={onCancel}>{t('back')}</button>
+        </div>
       )}
       {phase === 'crop' && picked && (
         <>
           <p>{t('cropLead')}</p>
           <CropBox crop={crop} imageUrl={picked.url} onChange={setCrop} />
-          <div className="doodle-flow__actions">
+          <div className="button-row doodle-flow__actions">
             <button
               type="button"
               className="button button--primary"
@@ -147,7 +150,7 @@ export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
         <>
           <p className="banner banner--warning" role="alert">{say(locale, error)}</p>
           {picked && (
-            <div className="doodle-flow__actions">
+            <div className="button-row doodle-flow__actions">
               <button type="button" className="button button--primary" onClick={() => setPhase('crop')}>
                 {t('tryAgain')}
               </button>
@@ -165,7 +168,7 @@ export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
             steps={ready.lesson.steps}
             colorRegions={ready.lesson.colorRegions}
           />
-          <div className="doodle-flow__actions">
+          <div className="button-row doodle-flow__actions">
             <button type="button" className="button button--primary" onClick={() => onFollow(ready.lesson, ready.png)}>
               {t('doodleFollow')}
             </button>
@@ -175,7 +178,11 @@ export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
           </div>
         </>
       )}
-      <button type="button" className="button" onClick={onCancel}>{t('doodleBack')}</button>
+      {phase !== 'choose' && (
+        <div className="button-row">
+          <button type="button" className="button" onClick={onCancel}>{t('back')}</button>
+        </div>
+      )}
     </section>
   );
 }
