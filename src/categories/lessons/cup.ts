@@ -2,40 +2,49 @@
  * A cup you can recognise: an open elliptical rim, a tapered body,
  * a C-shaped handle, a saucer, and the drink inside.
  *
+ * The canvas is 1000×750. The cup sits in the middle so the lesson
+ * tile, which shows the whole canvas, reads as a cup and not a sliver.
+ *
  * Line steps go top, middle, bottom, then the handle on its own.
- * Each filled part has one colour step. The steam is only a line.
+ * The body line is an open U. The rim ellipse is the opening, and the
+ * body's fill closes along that same front lip so the colour stays
+ * inside the line. Each filled part has one colour step. Steam is only a line.
  */
 
 import { ellipse } from '../shapes';
 import { colorStep, detail, guide, outline, packageLesson, region } from '../author';
 import type { CategoryLesson } from '../types';
 
-const CERAMIC = '#f4efe6';
-const DRINK = '#6f3b24';
-const SAUCER = '#e7e0d4';
+const CERAMIC = '#f6efe4';
+const DRINK = '#6b3416';
+const SAUCER = '#e4d3b4';
 
-/** Open lip. Two arcs, drawn as a line, not a fill. */
-const RIM = ellipse(400, 228, 150, 42);
-/** Tapered wall: wide at the rim, narrower at the foot. One closed shape. */
-const BODY = [
-  'M 262 258',
-  'L 292 478',
-  'Q 400 548 508 478',
-  'L 538 258',
-  'Q 400 292 262 258',
-  'Z',
+/** Open mouth. The lower arc is also the top of the body fill. */
+const RIM = ellipse(500, 250, 160, 44);
+/**
+ * Tapered wall, wide at the rim and narrower at the foot.
+ * The line the child draws stops at the rim. The fill continues
+ * along the front lip so the colour meets the opening.
+ */
+const BODY_LINE = [
+  'M 340 250',
+  'L 388 515',
+  'Q 500 578 612 515',
+  'L 660 250',
 ].join(' ');
-/** Thick C, opening toward the cup. Outer curve, then the inner curve home. */
+const BODY_FILL = `${BODY_LINE} A 160 44 0 1 1 340 250 Z`;
+/** Thick C on the right, opening toward the cup. Outer curve, then the inner curve home. */
 const HANDLE = [
-  'M 528 312',
-  'C 690 286 712 468 522 452',
-  'C 630 428 624 348 528 312',
+  'M 646 328',
+  'C 870 292 892 512 622 458',
+  'C 792 438 776 358 646 328',
   'Z',
 ].join(' ');
-const SAUCER_SHAPE = ellipse(400, 592, 236, 34);
-const DRINK_SURFACE = ellipse(400, 286, 108, 22);
-const STEAM_LEFT = 'M 348 168 C 328 142 372 118 346 86';
-const STEAM_RIGHT = 'M 438 158 C 462 128 414 108 446 74';
+const SAUCER_SHAPE = ellipse(500, 590, 300, 42);
+/** Coffee surface, inside the rim and sitting on the front lip. */
+const DRINK_SURFACE = ellipse(500, 262, 115, 32);
+const STEAM_LEFT = 'M 430 188 C 392 148 458 116 418 66';
+const STEAM_RIGHT = 'M 558 182 C 612 140 548 106 598 60';
 
 export const CUP_CATEGORY: CategoryLesson = {
   id: 'cup',
@@ -55,7 +64,7 @@ export const CUP_CATEGORY: CategoryLesson = {
     contentVersion: '1.1.0',
     colorRegions: [
       region('saucer', 'Tatakan', `${SAUCER_SHAPE} Z`, SAUCER),
-      region('body', 'Badan', BODY, CERAMIC),
+      region('body', 'Badan', BODY_FILL, CERAMIC),
       region('handle', 'Pegangan', HANDLE, CERAMIC),
       region('drink', 'Minuman', `${DRINK_SURFACE} Z`, DRINK),
     ],
@@ -64,7 +73,7 @@ export const CUP_CATEGORY: CategoryLesson = {
         guide('rim', RIM),
       ], 'Lonjong di atas. Ini mulut cangkir.'),
       outline('body', 'Gambar badan cangkir.', [
-        guide('body', BODY),
+        guide('body', BODY_LINE),
       ], 'Lebar di atas, lebih sempit di bawah.'),
       outline('saucer', 'Gambar tatakan.', [
         guide('saucer', SAUCER_SHAPE),

@@ -1190,7 +1190,8 @@ html:has(.pad) body {
   justify-content: center;
   gap: 8px;
   min-height: var(--tap);
-  padding: 0 14px;
+  margin: 0;
+  padding: 0 16px;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--paper);
@@ -1198,7 +1199,18 @@ html:has(.pad) body {
   font: inherit;
   line-height: 1.2;
   text-align: center;
+  white-space: normal;
+  max-width: 100%;
   cursor: pointer;
+  /* iOS draws its own button padding and sits the label on the baseline.
+     Clearing that is what centres the words inside the blue photo button. */
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* A file input styled as a button. The input is clipped; the label is the target. */
+.doodle-flow__pick {
+  position: relative;
 }
 
 /* Shared row for every pair of actions: equal height, a real gap, and wrap
@@ -1224,10 +1236,9 @@ html:has(.pad) body {
 .finish__actions > .button,
 .update-prompt__actions > .button,
 .trace-setup__actions > .button,
-.artwork-card__actions > .button,
-.lesson-picker__photo > .button {
-  flex: 1 1 12rem;
-  min-width: min(100%, 12rem);
+.lesson-picker__photo-confirm > .button {
+  flex: 1 1 10rem;
+  min-width: min(100%, 10rem);
   min-height: var(--tap);
 }
 
@@ -2636,10 +2647,32 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 }
 
 .shell[data-layout='phone-landscape'] .float-dock {
-  top: 116px;
-  bottom: 68px;
-  transform: none;
+  top: max(64px, calc(env(safe-area-inset-top, 0px) + 56px));
+  right: max(8px, env(safe-area-inset-right, 0px));
+  bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  justify-content: flex-start;
+  gap: 6px;
+  overflow: auto;
+  overscroll-behavior: contain;
   max-height: none;
+}
+
+.shell[data-layout='phone-landscape'] .float-dock .pad__control-panel {
+  max-height: none;
+  overflow: visible;
+  flex: 0 0 auto;
+}
+
+.shell[data-layout='phone-landscape'] .float-dock__help,
+.shell[data-layout='phone-landscape'] .float-dock__fullscreen,
+.shell[data-layout='phone-landscape'] .float-dock__fit,
+.shell[data-layout='phone-landscape'] .float-dock__mute {
+  width: var(--tap);
+  min-width: var(--tap);
+  max-width: var(--tap);
+  height: var(--tap);
+  min-height: var(--tap);
+  padding: 0;
 }
 
 .shell[data-layout='phone-landscape'] .brush-slider {
@@ -2732,6 +2765,11 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   left: 80px;
   transform: none;
   width: calc(100% - 88px);
+}
+
+.shell[data-layout='phone-landscape'] .step-card {
+  left: max(80px, calc(env(safe-area-inset-left, 0px) + 72px));
+  width: calc(100% - 80px - 96px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
 }
 
 .shell[data-layout^='phone'][data-tablet-notice='open'] .step-reference--thumb {
@@ -2837,7 +2875,7 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items: center;
+  align-items: stretch;
   margin: 8px 0 20px;
 }
 

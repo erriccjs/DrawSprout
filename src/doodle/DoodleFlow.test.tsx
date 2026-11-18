@@ -48,8 +48,11 @@ describe('doodle flow', () => {
     render(<DoodleFlow onCancel={() => undefined} onFollow={() => undefined} onTrace={() => undefined} />);
     expect(screen.getByRole('button', { name: 'Kembali' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Pilih gambar lain' })).toBeNull();
+    expect(screen.queryByText('Pilih gambar lain')).toBeNull();
 
     pick();
+    expect(screen.queryByText('Pilih gambar lain')).toBeNull();
+    expect(screen.getByText('Ganti foto')).toBeTruthy();
     expect(await screen.findByRole('button', { name: 'Ubah ukuran bagian' })).toBeTruthy();
     // The crop is a decision point: nothing has left the device yet.
     expect(prepare).not.toHaveBeenCalled();

@@ -178,7 +178,7 @@ export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
       )}
       {phase !== 'choose' && (
         <div className="button-row">
-          <button type="button" className="button" onClick={onCancel}>{t('doodleBack')}</button>
+          <button type="button" className="button" onClick={onCancel}>{t('back')}</button>
         </div>
       )}
     </section>

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BUNDLED_LESSONS, assertValidLessons } from '../lesson-data';
+import { pathBounds } from '../ui/preview-frame';
 import { contactSheetHtml } from './sheet';
 import { CATEGORY_CATALOGUE, CATEGORY_LESSONS, getPlayableLesson } from './library';
 import { isDone } from './types';
@@ -69,10 +70,43 @@ describe('category catalogue', () => {
     for (const region of cup.colorRegions) {
       expect(region.d.trim().endsWith('Z')).toBe(true);
     }
-    const handle = cup.steps.find((step) => step.id === 'handle')?.guidePaths[0]?.d ?? '';
-    expect(handle).toMatch(/C /);
-    expect(handle).toContain('712');
+    const handlePath = cup.steps.find((step) => step.id === 'handle')?.guidePaths[0]?.d ?? '';
+    expect(handlePath).toMatch(/C /);
+    expect(handlePath.trim().endsWith('Z')).toBe(true);
     expect(cup.steps.map((step) => step.id).slice(0, 4)).toEqual(['rim', 'body', 'saucer', 'handle']);
+    const bounds = (id: string) => {
+      const region = cup.colorRegions.find((item) => item.id === id);
+      const box = region ? pathBounds(region.d) : null;
+      expect(box).not.toBeNull();
+      return box!;
+    };
+    const rim = pathBounds(cup.steps.find((step) => step.id === 'rim')!.guidePaths[0]!.d)!;
+    const body = bounds('body');
+    const handle = bounds('handle');
+    const saucer = bounds('saucer');
+    const drink = bounds('drink');
+    expect(rim.maxX - rim.minX).toBeGreaterThan((rim.maxY - rim.minY) * 2);
+    const bodyLine = cup.steps.find((step) => step.id === 'body')!.guidePaths[0]!.d;
+    const bodyNumbers = bodyLine.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    const topWidth = bodyNumbers[8]! - bodyNumbers[0]!;
+    const footWidth = bodyNumbers[6]! - bodyNumbers[2]!;
+    expect(topWidth).toBeGreaterThan(footWidth);
+    expect(bodyNumbers[3]!).toBeGreaterThan(bodyNumbers[1]!);
+    expect(handle.minX).toBeGreaterThan((body.minX + body.maxX) / 2);
+    expect(handle.maxX).toBeGreaterThan(body.maxX);
+    expect(saucer.maxX - saucer.minX).toBeGreaterThan(body.maxX - body.minX);
+    expect(saucer.maxY).toBeGreaterThan(body.maxY - 30);
+    expect(drink.minX).toBeGreaterThan(rim.minX + 8);
+    expect(drink.maxX).toBeLessThan(rim.maxX - 8);
+    expect(drink.minY).toBeGreaterThan(rim.minY);
+    expect(drink.maxY).toBeLessThanOrEqual(rim.maxY + 1);
+    const seen = new Set<string>();
+    for (const step of cup.steps.filter((item) => item.phase === 'color')) {
+      for (const id of step.colorRegionIds) {
+        expect(seen.has(id)).toBe(false);
+        seen.add(id);
+      }
+    }
   });
 
   it('renders a contact sheet that names every step', () => {
