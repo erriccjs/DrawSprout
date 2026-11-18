@@ -216,5 +216,11 @@ describe('precache validation', () => {
       method: 'GET', sameOrigin: false, pathname: '/index.html', mode: 'navigate',
       cacheMode: 'default', precachedUrls,
     })).toBe('passthrough');
+    // The Web Analytics beacon is another origin. A failed load stays outside
+    // the precache, so offline mode and the service worker keep working.
+    expect(resolveFetch({
+      method: 'GET', sameOrigin: false, pathname: '/beacon.min.js', mode: 'cors',
+      cacheMode: 'default', precachedUrls,
+    })).toBe('passthrough');
   });
 });

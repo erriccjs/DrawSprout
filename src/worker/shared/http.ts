@@ -6,10 +6,10 @@
 /** Same policy string as `public/_headers`. Kept here so /api responses match the shell. */
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' blob: data:",
-  "connect-src 'self'",
+  "connect-src 'self' https://cloudflareinsights.com https://static.cloudflareinsights.com",
   "font-src 'self'",
   "worker-src 'self'",
   "manifest-src 'self'",

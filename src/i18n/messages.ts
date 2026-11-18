@@ -39,6 +39,11 @@ export interface Messages {
   readonly doodleTraceScale: string;
   readonly doodleTraceInclude: string;
   readonly offlineReady: string;
+  readonly usageNote: string;
+  readonly feedbackAsk: string;
+  readonly feedbackUp: string;
+  readonly feedbackDown: string;
+  readonly feedbackThanks: string;
   readonly updateLoading: string;
   readonly updateReady: string;
   readonly later: string;
@@ -258,6 +263,11 @@ const id: Messages = {
   doodleTraceScale: 'Ukuran doodle',
   doodleTraceInclude: 'Simpan bersama doodle',
   offlineReady: 'Bisa dibuka tanpa internet.',
+  usageNote: 'Hitungan pemakaian tanpa nama. Tidak ada data pribadi dan tidak ada foto.',
+  feedbackAsk: 'Untuk orang tua',
+  feedbackUp: 'Suka',
+  feedbackDown: 'Kurang',
+  feedbackThanks: 'Terima kasih.',
   updateLoading: 'Memuat versi baru…',
   updateReady: 'Ada versi baru. Gambar yang sudah tersimpan tetap ada.',
   later: 'Nanti saja',
@@ -302,7 +312,7 @@ const id: Messages = {
   useThisPart: 'Pakai bagian ini',
   changePhoto: 'Ganti foto',
   beforeSendTitle: 'Sebelum foto dikirim',
-  beforeSendBody: 'Foto ini dikirim ke server DrawSprout dan ke OpenAI supaya bisa dibuat menjadi gambar garis. Foto tidak disimpan setelah diproses. Pelajaran yang dihasilkan tersimpan di perangkat ini, dan menghapusnya menghapus gambar turunan itu juga.',
+  beforeSendBody: 'Foto ini dikirim ke server DrawSprout dan ke OpenAI supaya bisa dibuat menjadi gambar garis. Foto tidak disimpan setelah diproses, dan tidak masuk hitungan pemakaian. Pelajaran yang dihasilkan tersimpan di perangkat ini, dan menghapusnya menghapus gambar turunan itu juga.',
   photoToSend: 'Foto yang akan dikirim',
   makingLines: 'Membuat garis…',
   tryAgain: 'Coba lagi',
@@ -477,6 +487,11 @@ const en: Messages = {
   doodleTraceScale: 'Doodle size',
   doodleTraceInclude: 'Save with the doodle',
   offlineReady: 'Works without the internet.',
+  usageNote: 'Anonymous usage counts. No personal data and no photos.',
+  feedbackAsk: 'For a parent',
+  feedbackUp: 'Like',
+  feedbackDown: 'Not for us',
+  feedbackThanks: 'Thank you.',
   updateLoading: 'Loading the new version…',
   updateReady: 'A new version is ready. Your saved pictures stay here.',
   later: 'Not now',
@@ -521,7 +536,7 @@ const en: Messages = {
   useThisPart: 'Use this part',
   changePhoto: 'Change photo',
   beforeSendTitle: 'Before the photo is sent',
-  beforeSendBody: 'This photo is sent to the DrawSprout server and to OpenAI so it can become a line drawing. The photo is not kept after that. The lesson is saved on this device, and deleting it deletes that drawing too.',
+  beforeSendBody: 'This photo is sent to the DrawSprout server and to OpenAI so it can become a line drawing. The photo is not kept after that, and it is not part of the usage counts. The lesson is saved on this device, and deleting it deletes that drawing too.',
   photoToSend: 'Photo that will be sent',
   makingLines: 'Making the lines…',
   tryAgain: 'Try again',

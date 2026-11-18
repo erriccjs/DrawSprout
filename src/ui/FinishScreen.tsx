@@ -16,6 +16,7 @@ import type { SessionState } from '../lesson-engine/types';
 import { artworkFileName, exportArtworkPng, renderArtworkToCanvas, type ExportUnderlay } from '../renderer/export';
 import { ClearArtworkPrompt } from './ClearArtworkPrompt';
 import { toRenderStrokes } from './render-adapter';
+import { feedbackAlreadySent, rememberFeedback, recordUsage } from '../usage/client';
 
 interface FinishScreenProps {
   readonly lesson: LessonPackage;
@@ -44,6 +45,7 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
   const [exportError, setExportError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
   const [askingToClear, setAskingToClear] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(() => feedbackAlreadySent(lesson.id));
   const [motion, setMotion] = useState<MotionPreference>('full');
 
   useEffect(() => {
@@ -155,6 +157,29 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
         <p className="banner banner--warning">{t('saveImageFailed', { detail: exportError })}</p>
       )}
       {restartError !== null && <p className="banner banner--warning" role="alert">{t('restartFailed')}</p>}
+
+      <div className="finish__feedback">
+        {feedbackSent ? (
+          <p role="status">{t('feedbackThanks')}</p>
+        ) : (
+          <>
+            <p>{t('feedbackAsk')}</p>
+            <button type="button" className="finish__feedback-button" aria-label={t('feedbackUp')} onClick={() => sendFeedback(true)}>
+              👍
+            </button>
+            <button type="button" className="finish__feedback-button" aria-label={t('feedbackDown')} onClick={() => sendFeedback(false)}>
+              👎
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
+
+  function sendFeedback(up: boolean): void {
+    if (feedbackSent) return;
+    setFeedbackSent(true);
+    rememberFeedback(lesson.id);
+    recordUsage(up ? 'feedback_up' : 'feedback_down', lesson.id);
+  }
 }

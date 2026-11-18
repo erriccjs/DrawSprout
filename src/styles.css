@@ -105,6 +105,13 @@ body {
   color: var(--muted);
 }
 
+.lesson-picker__privacy {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
 .update-prompt {
   display: grid;
   gap: 12px;
@@ -1493,6 +1500,32 @@ html:has(.pad) body {
 .finish__lead {
   margin: 0;
   color: var(--muted);
+}
+
+.finish__feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.finish__feedback p {
+  margin: 0;
+}
+
+.finish__feedback-button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
 }
 
 .finish__preview {

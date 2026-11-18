@@ -3,6 +3,7 @@
 interface __BaseEnv_Env {
 	ASSETS: Fetcher;
 	PAID_RATE_LIMIT: PaidRateLimitNamespace;
+	USAGE?: AnalyticsEngineDataset;
 }
 declare namespace Cloudflare {
 	interface Env extends __BaseEnv_Env {}

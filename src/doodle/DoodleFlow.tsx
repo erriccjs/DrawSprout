@@ -16,6 +16,7 @@ import { encodePng } from '../photo/png';
 import { CropBox } from '../ui/CropBox';
 import { clampCrop, DEFAULT_CROP, type NormalizedCrop } from '../photo/prepare';
 import { TargetPreview } from '../ui/TargetPreview';
+import { recordUsage } from '../usage/client';
 import { requestDoodle } from './client';
 import { prepareDoodlePhoto } from './prepare';
 import { buildDoodleLesson } from './steps';
@@ -67,6 +68,7 @@ export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
   };
 
   const start = async (file: File, frame: NormalizedCrop) => {
+    recordUsage('doodle_start');
     setPhase('working');
     setError('');
     const controller = new AbortController();
