@@ -63,6 +63,16 @@ describe('category catalogue', () => {
     expect(getPlayableLesson('butterfly').id).toBe('butterfly');
     expect(getPlayableLesson('butterfly-front').title).toBe('Kupu-kupu');
     expect(getPlayableLesson('tree').id).toBe('tree');
+    const cup = getPlayableLesson('cup');
+    const coloured = new Set(cup.steps.filter((step) => step.phase === 'color').flatMap((step) => step.colorRegionIds));
+    expect([...coloured].sort()).toEqual(['body', 'drink', 'handle', 'saucer']);
+    for (const region of cup.colorRegions) {
+      expect(region.d.trim().endsWith('Z')).toBe(true);
+    }
+    const handle = cup.steps.find((step) => step.id === 'handle')?.guidePaths[0]?.d ?? '';
+    expect(handle).toMatch(/C /);
+    expect(handle).toContain('712');
+    expect(cup.steps.map((step) => step.id).slice(0, 4)).toEqual(['rim', 'body', 'saucer', 'handle']);
   });
 
   it('renders a contact sheet that names every step', () => {

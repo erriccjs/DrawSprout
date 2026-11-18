@@ -46,6 +46,8 @@ function pick() {
 describe('doodle flow', () => {
   it('lets the parent frame the subject before anything is sent', async () => {
     render(<DoodleFlow onCancel={() => undefined} onFollow={() => undefined} onTrace={() => undefined} />);
+    expect(screen.getByRole('button', { name: 'Kembali' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Pilih gambar lain' })).toBeNull();
 
     pick();
     expect(await screen.findByRole('button', { name: 'Ubah ukuran bagian' })).toBeTruthy();

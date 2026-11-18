@@ -1,6 +1,9 @@
 /**
- * A cup with a handle on the right. Step 1 is the tall oval of the cup.
- * The rim ellipse crosses the top of that oval, which reads as the lip.
+ * A cup you can recognise: an open elliptical rim, a tapered body,
+ * a C-shaped handle, a saucer, and the drink inside.
+ *
+ * Line steps go top, middle, bottom, then the handle on its own.
+ * Each filled part has one colour step. The steam is only a line.
  */
 
 import { ellipse } from '../shapes';
@@ -11,11 +14,28 @@ const CERAMIC = '#f4efe6';
 const DRINK = '#6f3b24';
 const SAUCER = '#e7e0d4';
 
-const BODY = ellipse(500, 400, 155, 175);
-const RIM = ellipse(500, 250, 155, 42);
-const DRINK_SURFACE = ellipse(500, 292, 112, 26);
-const HANDLE = 'M 640 345 C 800 320 815 530 640 505 C 725 485 735 385 640 365 Z';
-const SAUCER_SHAPE = ellipse(500, 590, 250, 38);
+/** Open lip. Two arcs, drawn as a line, not a fill. */
+const RIM = ellipse(400, 228, 150, 42);
+/** Tapered wall: wide at the rim, narrower at the foot. One closed shape. */
+const BODY = [
+  'M 262 258',
+  'L 292 478',
+  'Q 400 548 508 478',
+  'L 538 258',
+  'Q 400 292 262 258',
+  'Z',
+].join(' ');
+/** Thick C, opening toward the cup. Outer curve, then the inner curve home. */
+const HANDLE = [
+  'M 528 312',
+  'C 690 286 712 468 522 452',
+  'C 630 428 624 348 528 312',
+  'Z',
+].join(' ');
+const SAUCER_SHAPE = ellipse(400, 592, 236, 34);
+const DRINK_SURFACE = ellipse(400, 286, 108, 22);
+const STEAM_LEFT = 'M 348 168 C 328 142 372 118 346 86';
+const STEAM_RIGHT = 'M 438 158 C 462 128 414 108 446 74';
 
 export const CUP_CATEGORY: CategoryLesson = {
   id: 'cup',
@@ -31,32 +51,37 @@ export const CUP_CATEGORY: CategoryLesson = {
   lesson: packageLesson({
     id: 'cup',
     title: 'Cangkir',
-    subtitle: 'Badan lonjong, bibir, lalu pegangan',
+    subtitle: 'Bibir, badan, tatakan, lalu pegangan',
+    contentVersion: '1.1.0',
     colorRegions: [
       region('saucer', 'Tatakan', `${SAUCER_SHAPE} Z`, SAUCER),
-      region('body', 'Badan', `${BODY} Z`, CERAMIC),
+      region('body', 'Badan', BODY, CERAMIC),
       region('handle', 'Pegangan', HANDLE, CERAMIC),
       region('drink', 'Minuman', `${DRINK_SURFACE} Z`, DRINK),
     ],
     steps: [
-      outline('body', 'Gambar bentuk lonjong besar untuk badan cangkir.', [
-        guide('body', BODY),
-      ], 'Lebih tinggi daripada lebarnya.'),
-      outline('rim', 'Gambar bibir cangkir di atas badan.', [
+      outline('rim', 'Gambar bibir cangkir.', [
         guide('rim', RIM),
-      ], 'Lonjong pipih yang memotong bagian atas.'),
-      outline('handle', 'Gambar pegangan di samping kanan.', [
-        guide('handle', HANDLE),
-      ], 'Seperti telinga kecil di luar cangkir.'),
-      outline('saucer', 'Gambar tatakan di bawah cangkir.', [
+      ], 'Lonjong di atas. Ini mulut cangkir.'),
+      outline('body', 'Gambar badan cangkir.', [
+        guide('body', BODY),
+      ], 'Lebar di atas, lebih sempit di bawah.'),
+      outline('saucer', 'Gambar tatakan.', [
         guide('saucer', SAUCER_SHAPE),
-      ], 'Lonjong pipih, lebih lebar dari cangkir.'),
-      detail('drink', 'Gambar permukaan minuman di dalam cangkir.', [
+      ], 'Piring kecil di bawah cangkir.'),
+      outline('handle', 'Gambar pegangan.', [
+        guide('handle', HANDLE),
+      ], 'Huruf C di samping kanan.'),
+      detail('drink', 'Gambar minuman di dalam.', [
         guide('drink', DRINK_SURFACE),
-      ], 'Lonjong kecil di bawah bibir cangkir.'),
-      colorStep('color-saucer', 'Warnai tatakan.', ['saucer'], SAUCER, 'Isi lonjong di bawah cangkir.', 40),
-      colorStep('color-cup', 'Warnai cangkir dan pegangan.', ['body', 'handle'], CERAMIC, 'Badan dulu, lalu pegangan.', 48),
-      colorStep('color-drink', 'Warnai minuman.', ['drink'], DRINK, 'Isi lonjong di dalam cangkir.', 28),
+      ], 'Lonjong kecil di bawah bibir.'),
+      detail('steam', 'Gambar uap.', [
+        guide('steam-left', STEAM_LEFT),
+        guide('steam-right', STEAM_RIGHT),
+      ], 'Dua garis melengkung di atas cangkir.'),
+      colorStep('color-saucer', 'Warnai tatakan.', ['saucer'], SAUCER, 'Isi piring di bawah.', 40),
+      colorStep('color-cup', 'Warnai cangkir.', ['body', 'handle'], CERAMIC, 'Badan dulu, lalu pegangan.', 48),
+      colorStep('color-drink', 'Warnai minuman.', ['drink'], DRINK, 'Isi lonjong di dalam.', 28),
     ],
   }),
 };

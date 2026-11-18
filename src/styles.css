@@ -44,7 +44,11 @@ body {
 .shell {
   position: relative;
   height: 100%;
-  padding: 12px;
+  padding:
+    max(12px, env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
 }
 
 /* The picture-choosing screen holds the ten-lesson grid and Karyaku, and
@@ -116,9 +120,7 @@ body {
 }
 
 .update-prompt__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  margin-top: 0;
 }
 
 .lesson-picker__choices {
@@ -229,9 +231,7 @@ body {
 }
 
 .artwork-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  margin-top: 4px;
 }
 
 .artwork-card__actions .button {
@@ -744,7 +744,7 @@ html:has(.pad) body {
   bottom: max(8px, env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 4;
-  width: min(420px, calc(100% - 24px));
+  width: min(420px, calc(100% - max(12px, env(safe-area-inset-left, 0px)) - max(12px, env(safe-area-inset-right, 0px))));
 }
 
 .step-nav .step-panel__nav {
@@ -825,14 +825,8 @@ html:has(.pad) body {
   padding: 24px 16px 48px;
 }
 
-.doodle-flow__pick {
-  display: inline-flex;
-}
-
-.doodle-flow__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+.doodle-flow__actions,
+.button-row {
   margin: 16px 0;
 }
 
@@ -1003,7 +997,7 @@ html:has(.pad) body {
 .step-panel__nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   flex: 0 0 auto;
 }
 
@@ -1191,6 +1185,10 @@ html:has(.pad) body {
 
 .button,
 .chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   min-height: var(--tap);
   padding: 0 14px;
   border-radius: 10px;
@@ -1198,7 +1196,39 @@ html:has(.pad) body {
   background: var(--paper);
   color: var(--ink);
   font: inherit;
+  line-height: 1.2;
+  text-align: center;
   cursor: pointer;
+}
+
+/* Shared row for every pair of actions: equal height, a real gap, and wrap
+   before the labels collide. Phone landscape and a short tablet use it too. */
+.button-row,
+.doodle-flow__actions,
+.photo-flow__actions,
+.finish__actions,
+.update-prompt__actions,
+.trace-setup__actions,
+.artwork-card__actions,
+.lesson-picker__photo-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.button-row > .button,
+.doodle-flow__actions > .button,
+.doodle-flow__actions > .doodle-flow__pick,
+.photo-flow__actions > .button,
+.finish__actions > .button,
+.update-prompt__actions > .button,
+.trace-setup__actions > .button,
+.artwork-card__actions > .button,
+.lesson-picker__photo > .button {
+  flex: 1 1 12rem;
+  min-width: min(100%, 12rem);
+  min-height: var(--tap);
 }
 
 .button--primary {
@@ -1515,9 +1545,6 @@ html:has(.pad) body {
 }
 
 .finish__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
   justify-content: center;
 }
 
@@ -2731,9 +2758,6 @@ html:has(.shell[data-layout^='phone'] > .finish) body {
 
 .photo-flow__actions,
 .lesson-picker__photo-confirm {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
   margin-top: 12px;
 }
 
