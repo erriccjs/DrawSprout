@@ -227,6 +227,23 @@ export interface Messages {
   readonly photoUnreadable: string;
   readonly lessonNotSaved: string;
   readonly photoUnusable: string;
+  readonly startHere: string;
+  readonly startHereLead: string;
+  readonly freeDrawHome: string;
+  readonly albumJump: string;
+  readonly stampsTitle: string;
+  readonly stampsEmpty: string;
+  readonly stampsCount: string;
+  readonly difficultyEasy: string;
+  readonly difficultyMedium: string;
+  readonly difficultyHard: string;
+  readonly themeNature: string;
+  readonly themeAnimals: string;
+  readonly themeThings: string;
+  readonly themePeople: string;
+  readonly pathStep: string;
+  readonly stillDrawing: string;
+  readonly stampMark: string;
 }
 
 const id: Messages = {
@@ -281,7 +298,7 @@ const id: Messages = {
   deleteLesson: 'Hapus pelajaran {title}',
   pictureOf: 'Gambar {title}',
   createFromPhoto: 'Buat dari foto',
-  galleryTitle: 'Karyaku',
+  galleryTitle: 'Buku Gambarku',
   galleryLoadError: 'Daftar karya belum bisa dibuka.',
   galleryEmpty: 'Belum ada karya tersimpan.',
   oldLesson: 'Pelajaran lama',
@@ -451,6 +468,23 @@ const id: Messages = {
   photoUnreadable: 'Foto tidak dapat dibaca. Pilih gambar lain.',
   lessonNotSaved: 'Pelajaran belum tersimpan di perangkat ini.',
   photoUnusable: 'Foto ini belum bisa dipakai. Coba lagi ya.',
+  startHere: 'Mulai di sini',
+  startHereLead: 'Delapan gambar mudah, berurutan.',
+  freeDrawHome: 'Gambar bebas',
+  albumJump: 'Buku Gambarku',
+  stampsTitle: 'Stempelku',
+  stampsEmpty: 'Selesaikan satu gambar untuk dapat stempel.',
+  stampsCount: '{count} stempel',
+  difficultyEasy: 'Mudah',
+  difficultyMedium: 'Sedang',
+  difficultyHard: 'Sulit',
+  themeNature: 'Alam',
+  themeAnimals: 'Hewan',
+  themeThings: 'Benda',
+  themePeople: 'Orang',
+  pathStep: 'Langkah {n}',
+  stillDrawing: 'Masih digambar',
+  stampMark: 'Stempel',
 };
 
 const en: Messages = {
@@ -505,7 +539,7 @@ const en: Messages = {
   deleteLesson: 'Delete the {title} lesson',
   pictureOf: 'Picture of {title}',
   createFromPhoto: 'Make from a photo',
-  galleryTitle: 'My pictures',
+  galleryTitle: 'My picture book',
   galleryLoadError: 'Your pictures could not be opened.',
   galleryEmpty: 'No saved pictures yet.',
   oldLesson: 'Older lesson',
@@ -675,6 +709,23 @@ const en: Messages = {
   photoUnreadable: 'The photo could not be read. Choose another picture.',
   lessonNotSaved: 'The lesson is not saved on this device yet.',
   photoUnusable: 'This photo cannot be used right now. Please try again.',
+  startHere: 'Start here',
+  startHereLead: 'Eight easy pictures, in order.',
+  freeDrawHome: 'Draw freely',
+  albumJump: 'My picture book',
+  stampsTitle: 'My stamps',
+  stampsEmpty: 'Finish a picture to earn a stamp.',
+  stampsCount: '{count} stamps',
+  difficultyEasy: 'Easy',
+  difficultyMedium: 'Medium',
+  difficultyHard: 'Hard',
+  themeNature: 'Nature',
+  themeAnimals: 'Animals',
+  themeThings: 'Things',
+  themePeople: 'People',
+  pathStep: 'Step {n}',
+  stillDrawing: 'Still drawing',
+  stampMark: 'Stamp',
 };
 
 export const messages: Record<Locale, Messages> = { id, en };

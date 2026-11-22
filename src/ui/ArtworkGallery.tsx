@@ -1,5 +1,5 @@
 /**
- * Karyaku: saved drawings on the picture-choosing screen (FR-14).
+ * Buku Gambarku: saved drawings on the picture-choosing screen (FR-14).
  *
  * The list comes from the session store. Each card paints the committed
  * strokes only, then offers open, PNG export, and delete-with-confirmation.
@@ -47,13 +47,13 @@ export function ArtworkGallery({ store, actionsDisabled, onOpen, reloadToken = 0
   }, [store, revision, reloadToken]);
 
   return (
-    <section className="artwork-gallery" aria-labelledby="artwork-gallery-title">
+    <section className="artwork-gallery" id="buku-gambarku" aria-labelledby="artwork-gallery-title">
       <h2 id="artwork-gallery-title">{t('galleryTitle')}</h2>
       {loadError && <p className="banner banner--warning">{t('galleryLoadError')}</p>}
       {artworks?.length === 0 && <p className="artwork-gallery__empty">{t('galleryEmpty')}</p>}
-      {artworks && artworks.length > 0 && (
+      {artworks && artworks.some((artwork) => artwork.finished) && (
         <ul className="artwork-gallery__list">
-          {artworks.map((artwork) => (
+          {artworks.filter((artwork) => artwork.finished).map((artwork) => (
             <ArtworkCard
               key={artwork.sessionId}
               store={store}
@@ -65,6 +65,24 @@ export function ArtworkGallery({ store, actionsDisabled, onOpen, reloadToken = 0
             />
           ))}
         </ul>
+      )}
+      {artworks && artworks.some((artwork) => !artwork.finished) && (
+        <>
+          <h2>{t('stillDrawing')}</h2>
+          <ul className="artwork-gallery__list">
+            {artworks.filter((artwork) => !artwork.finished).map((artwork) => (
+              <ArtworkCard
+                key={artwork.sessionId}
+                store={store}
+                artwork={artwork}
+                actionsDisabled={actionsDisabled}
+                onOpen={onOpen}
+                extraLessons={extraLessons}
+                onDeleted={() => setRevision((current) => current + 1)}
+              />
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );

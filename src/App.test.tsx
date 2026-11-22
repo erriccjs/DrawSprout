@@ -282,7 +282,7 @@ describe('lesson picker', () => {
     await store.saveProgress({ checkpoint: toCheckpoint(finished, 1, 123), newStrokes: [] });
 
     render(<App />);
-    await screen.findByRole('heading', { name: 'Karyaku' });
+    await screen.findByRole('heading', { name: 'Buku Gambarku' });
     fireEvent.click(lessonChoice('Kucing'));
     fireEvent.click(await screen.findByRole('button', { name: 'Lihat karyamu' }));
     await screen.findByRole('heading', { name: 'Selesai! Ini karyamu.' });
@@ -304,7 +304,7 @@ describe('lesson picker', () => {
     await store.saveProgress({ checkpoint: toCheckpoint(finished, 1, 123), newStrokes: [...finished.strokes] });
 
     render(<App />);
-    await screen.findByRole('heading', { name: 'Karyaku' });
+    await screen.findByRole('heading', { name: 'Buku Gambarku' });
     fireEvent.click(lessonChoice('Kucing'));
     fireEvent.click(await screen.findByRole('button', { name: 'Lihat karyamu' }));
     await screen.findByRole('heading', { name: 'Selesai! Ini karyamu.' });
@@ -317,7 +317,7 @@ describe('lesson picker', () => {
     expect(saved?.strokes.map((stroke) => stroke.id)).toEqual(['saved-stroke']);
   });
 
-  it('opens a saved artwork from Karyaku and deletes it after confirmation', async () => {
+  it('opens a saved artwork from Buku Gambarku and deletes it after confirmation', async () => {
     const cat = lessonData.CAT_LESSON;
     const drawn = reduceSession(cat, createSession(cat, 'gallery-cat'), {
       type: 'commit-stroke',
@@ -329,11 +329,11 @@ describe('lesson picker', () => {
     });
 
     render(<App />);
-    expect(await screen.findByRole('heading', { name: 'Karyaku' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Buku Gambarku' })).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Kucing Duduk', level: 3 })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Buka Kucing Duduk' }));
     await screen.findByRole('heading', { name: 'Kucing Duduk', level: 1 });
-    expect(screen.queryByRole('heading', { name: 'Karyaku' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Buku Gambarku' })).toBeNull();
     await returnToPicker();
     expect((await store.loadSession('gallery-cat'))?.checkpoint.updatedAt).toBe(Date.UTC(2026, 9, 21, 9, 5));
 
@@ -350,7 +350,7 @@ describe('lesson picker', () => {
     expect(await store.loadSession('gallery-cat')).toBeNull();
   });
 
-  it('lists a free-drawing session in Karyaku and reopens it without the guide', async () => {
+  it('lists a free-drawing session in Buku Gambarku and reopens it without the guide', async () => {
     const cat = lessonData.CAT_LESSON;
     const lastStepId = cat.steps[cat.steps.length - 1]!.id;
     let state = createSession(cat, 'free-cat');
@@ -390,7 +390,7 @@ describe('lesson picker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Buka Kucing Duduk' }));
     expect(await screen.findByRole('heading', { name: 'Gambar bebas.' })).toBeTruthy();
     expect(document.querySelector('.guide-overlay')?.getAttribute('data-visible')).toBe('false');
-    expect(screen.queryByRole('heading', { name: 'Karyaku' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Buku Gambarku' })).toBeNull();
     paint.mockRestore();
   });
 

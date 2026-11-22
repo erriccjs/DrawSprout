@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ArtworkSurface } from './renderer/artwork-surface';
 import { getPlayableLesson } from './categories/library';
+import { FREE_DRAW_LESSON } from './lesson-data/free-draw-lesson';
 import type { LessonPackage } from './lesson-data/schema';
 import { readPhotoBeta } from './photo/beta';
 import { DoodleFlow } from './doodle/DoodleFlow';
@@ -12,7 +13,7 @@ import type { DoodleLessonRecord } from './persistence/doodle-lesson-store';
 import { IndexedDbDoodleLessonStore } from './persistence/doodle-lesson-store';
 import type { PhotoLessonRecord } from './persistence/photo-lesson-store';
 import { IndexedDbPhotoLessonStore } from './persistence/photo-lesson-store';
-import { DEFAULT_PREFERENCES, createSession } from './lesson-engine/session';
+import { DEFAULT_PREFERENCES, createSession, reduceSession } from './lesson-engine/session';
 import type { SessionPreferences, SessionState, ToolPreferences } from './lesson-engine/types';
 import { fromRestoredSession } from './persistence/mapping';
 import type { SessionCheckpoint } from './persistence/types';
@@ -71,6 +72,7 @@ export function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [saveInFlight, setSaveInFlight] = useState(false);
   const [galleryReload, setGalleryReload] = useState(0);
+  const [stamps, setStamps] = useState<readonly string[]>([]);
   const [tabletNoticeDismissed, setTabletNoticeDismissed] = useState(isTabletNoticeDismissed);
   const [photoBeta] = useState(() => readPhotoBeta());
   const photoStoreRef = useRef<IndexedDbPhotoLessonStore | null>(null);
@@ -126,6 +128,17 @@ export function App() {
   }, [photoBeta]);
 
   useEffect(() => {
+    if (bootstrap.status !== 'ready') return;
+    let cancelled = false;
+    void bootstrap.store.listStamps().then((rows) => {
+      if (!cancelled) setStamps(rows.map((stamp) => stamp.lessonId));
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [bootstrap, galleryReload]);
+
+  useEffect(() => {
     const store = new IndexedDbDoodleLessonStore();
     doodleStoreRef.current = store;
     let cancelled = false;
@@ -167,6 +180,7 @@ export function App() {
 
   const resolveLesson = (lessonId: string): LessonPackage => {
     if (lessonId === TRACE_LESSON.id) return TRACE_LESSON;
+    if (lessonId === FREE_DRAW_LESSON.id) return FREE_DRAW_LESSON;
     const doodle = doodleRecordsRef.current.find((row) => row.lesson.id === lessonId);
     if (doodle) return doodle.lesson;
     const photo = photoLessonsRef.current.find((row) => row.lesson.id === lessonId);
@@ -286,7 +300,20 @@ export function App() {
       pendingSave,
       revision: 0,
     });
-    recordUsage('lesson_start', lesson.id);
+    if (lesson.id === FREE_DRAW_LESSON.id) recordUsage('free_draw_start', lesson.id);
+    else recordUsage('lesson_start', lesson.id);
+  };
+
+  const startFreeDraw = () => {
+    const fresh = createSession(FREE_DRAW_LESSON, newId(), DEFAULT_PREFERENCES);
+    const drawing = reduceSession(FREE_DRAW_LESSON, fresh, { type: 'enter-free-creation' });
+    openPrepared(FREE_DRAW_LESSON, drawing, null);
+  };
+
+  const openAlbum = () => {
+    recordUsage('album_open');
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.getElementById('buku-gambarku')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
   };
 
   const startLesson = (lesson: LessonPackage, resume: boolean, failureNotice: string | null = null) => {
@@ -618,6 +645,9 @@ export function App() {
             onSelect={selectLesson}
             onTrace={chooseTrace}
             onDoodle={() => setDoodleOpen(true)}
+            stamps={stamps}
+            onFreeDraw={startFreeDraw}
+            onOpenAlbum={openAlbum}
             notice={exitNotice}
             offlineReady={offlineReady}
             updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}

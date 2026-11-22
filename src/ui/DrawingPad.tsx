@@ -149,11 +149,18 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
         setCheerToken((token) => token + 1);
         playCheer(motion, cheerMuted);
       }
-      if (action.type === 'finish' && !previous.finished) recordUsage('lesson_complete', lesson.id);
+      if (action.type === 'finish' && !previous.finished) {
+        recordUsage('lesson_complete', lesson.id);
+        if (lesson.id !== 'free-draw') {
+          void store.awardStamp(lesson.id, Date.now()).then((earned) => {
+            if (earned) recordUsage('stamp_earned', lesson.id);
+          }).catch(() => undefined);
+        }
+      }
       if (action.type === 'enter-free-creation' && !previous.freeCreation) recordUsage('free_draw_start', lesson.id);
       setState(next);
     },
-    [cheerMuted, lesson, motion, onActivity, onControlChange],
+    [cheerMuted, lesson, motion, onActivity, onControlChange, store],
   );
 
   const { status: saveStatus, flush, clearSession } = useAutosave(store, state, !restorePending, pendingSave);
