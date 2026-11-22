@@ -13,6 +13,8 @@ export const USAGE_EVENTS = [
   'doodle_start',
   'doodle_success',
   'free_draw_start',
+  'stamp_earned',
+  'album_open',
   'feedback_up',
   'feedback_down',
 ] as const;
@@ -34,6 +36,7 @@ const LESSON_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const LESSON_REQUIRED = new Set<UsageEventName>([
   'lesson_start',
   'lesson_complete',
+  'stamp_earned',
   'feedback_up',
   'feedback_down',
 ]);

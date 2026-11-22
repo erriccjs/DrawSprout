@@ -9,8 +9,20 @@
 
 import type { SessionPreferences, SessionState, Stroke } from '../lesson-engine/types';
 
-/** Bumped when the stored shapes change incompatibly (FR-25). */
+/**
+ * Checkpoint shape. Stays at 1 so drawings saved before the stamp book
+ * still open. Stamps live in their own store; see `STAMP_SCHEMA_VERSION`.
+ */
 export const PERSISTENCE_SCHEMA_VERSION = 1;
+
+/** Shape of one row in the stamp store. */
+export const STAMP_SCHEMA_VERSION = 1;
+
+export interface LessonStamp {
+  readonly schemaVersion: typeof STAMP_SCHEMA_VERSION;
+  readonly lessonId: string;
+  readonly earnedAt: number;
+}
 
 /**
  * Everything about a session except the strokes themselves.
@@ -115,6 +127,13 @@ export interface SessionStore {
    * An untouched session (no strokes, still on step 1, not finished) is omitted.
    */
   listSavedArtworks(): Promise<readonly SavedArtworkSummary[]>;
+  /** One stamp per lesson. A second finish does not move the date. */
+  listStamps(): Promise<readonly LessonStamp[]>;
+  /**
+   * Records a stamp the first time a lesson is finished.
+   * Returns false when that lesson already has one.
+   */
+  awardStamp(lessonId: string, earnedAt: number): Promise<boolean>;
   loadPreferences(): Promise<SessionPreferences | null>;
   savePreferences(preferences: SessionPreferences): Promise<void>;
   close(): void;

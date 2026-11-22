@@ -9,8 +9,10 @@
 
 import type { SessionPreferences, Stroke } from '../lesson-engine/types';
 import {
+  STAMP_SCHEMA_VERSION,
   isGalleryArtwork,
   toSavedArtworkSummary,
+  type LessonStamp,
   type RestoredSession,
   type SaveProgressInput,
   type SavedArtworkSummary,
@@ -22,6 +24,7 @@ export class MemorySessionStore implements SessionStore {
   private readonly checkpoints = new Map<string, SessionCheckpoint>();
   private readonly strokes = new Map<string, Map<string, Stroke>>();
   private preferences: SessionPreferences | null = null;
+  private readonly stamps = new Map<string, LessonStamp>();
 
   saveProgress({ checkpoint, newStrokes }: SaveProgressInput): Promise<boolean> {
     if (checkpoint.committedStrokeIds.length === 0 && checkpoint.redoStrokeIds.length === 0) {
@@ -90,6 +93,18 @@ export class MemorySessionStore implements SessionStore {
       .sort((a, b) => b.updatedAt - a.updatedAt || (a.sessionId < b.sessionId ? 1 : -1))
       .map(toSavedArtworkSummary);
     return Promise.resolve(saved);
+  }
+
+  listStamps(): Promise<readonly LessonStamp[]> {
+    return Promise.resolve(
+      [...this.stamps.values()].sort((a, b) => a.earnedAt - b.earnedAt || (a.lessonId < b.lessonId ? -1 : 1)),
+    );
+  }
+
+  awardStamp(lessonId: string, earnedAt: number): Promise<boolean> {
+    if (this.stamps.has(lessonId)) return Promise.resolve(false);
+    this.stamps.set(lessonId, { schemaVersion: STAMP_SCHEMA_VERSION, lessonId, earnedAt });
+    return Promise.resolve(true);
   }
 
   loadPreferences(): Promise<SessionPreferences | null> {

@@ -134,7 +134,120 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
   gap: 16px;
-  margin-top: 24px;
+  margin-top: 12px;
+}
+
+.home-actions {
+  margin: 16px 0;
+}
+
+.beginner-path__steps {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px 2px 12px;
+}
+
+.beginner-path__step {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 9.5rem;
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 2px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.beginner-path__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.beginner-path__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+.lesson-picker__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.difficulty-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.lesson-picker__stamp {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.stamp-book__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stamp-book__list li {
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+
+.lesson-group h2,
+.beginner-path h2 {
+  margin: 28px 0 8px;
+  font-size: 1.4rem;
+}
+
+.shell[data-layout='phone-landscape'] .beginner-path h2,
+.shell[data-layout='phone-landscape'] .beginner-path p {
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.shell[data-layout='phone-landscape'] .beginner-path__step {
+  flex-direction: row;
+  min-height: var(--tap);
+  padding: 8px 12px;
+}
+
+.shell[data-layout='phone-landscape'] .beginner-path__number {
+  width: 36px;
+  height: 36px;
 }
 
 .lesson-picker__choice {

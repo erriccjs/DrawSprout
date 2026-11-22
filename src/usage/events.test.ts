@@ -16,10 +16,17 @@ describe('usage event allowlist', () => {
       name: 'lesson_complete',
       lesson: 'cat-sitting',
     });
+    expect(parseUsageEvent({ ...ok, name: 'stamp_earned', lesson: 'cup' })).toMatchObject({
+      name: 'stamp_earned',
+      lesson: 'cup',
+    });
+    expect(parseUsageEvent({ ...ok, name: 'album_open' })).toMatchObject({ name: 'album_open' });
   });
 
   it('rejects an unknown name, an extra field, and a sentence used as a lesson', () => {
     expect(parseUsageEvent({ ...ok, name: 'page_view' })).toBe('bad_name');
+    expect(parseUsageEvent({ ...ok, name: 'stamp_earned' })).toBe('lesson_required');
+    expect(parseUsageEvent({ ...ok, name: 'album_open', lesson: 'cup' })).toBe('lesson_forbidden');
     expect(parseUsageEvent({ ...ok, note: 'hello from a child' })).toBe('unknown_field');
     expect(parseUsageEvent({ ...ok, name: 'feedback_up', lesson: 'the cat was cute' })).toBe('lesson_required');
     expect(parseUsageEvent({ ...ok, name: 'feedback_down' })).toBe('lesson_required');

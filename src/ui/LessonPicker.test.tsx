@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { BEGINNER_PATH } from '../categories/growth';
 import { CATEGORY_LESSONS, getPlayableLesson, lessonsForPicker } from '../categories/library';
 import { LessonPicker } from './LessonPicker';
 
@@ -44,7 +45,14 @@ describe('lesson picker', () => {
     expect(traceInput.hasAttribute('capture')).toBe(false);
     expect(screen.getByRole('button', { name: 'English' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Indonesia' })).toBeTruthy();
-    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 4);
+    expect(screen.getByRole('button', { name: 'Mulai di sini' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Gambar bebas' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Buku Gambarku' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'Hewan' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Alam' })).toBeTruthy();
+    expect(document.querySelectorAll('.difficulty-badge').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('.beginner-path__step')).toHaveLength(BEGINNER_PATH.length);
+    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 8 + BEGINNER_PATH.length);
 
     const names = [...document.querySelectorAll('.lesson-picker__name')].map((node) => node.textContent);
     expect(new Set(names).size).toBe(names.length);

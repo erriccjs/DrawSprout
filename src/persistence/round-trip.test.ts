@@ -10,6 +10,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { createSession, reduceSession } from '../lesson-engine/session';
 import type { SessionState } from '../lesson-engine/types';
 import { IndexedDbSessionStore } from './indexeddb-store';
+import type { SessionCheckpoint } from './types';
 import { MemorySessionStore } from './memory-store';
 import { IncompatibleCheckpointError, fromRestoredSession, toCheckpoint } from './mapping';
 import { PERSISTENCE_SCHEMA_VERSION, type SessionStore } from './types';
@@ -252,3 +253,45 @@ describe('IndexedDB specifics', () => {
     expect(reopened.strokes).toHaveLength(1);
   });
 });
+
+describe('stamp store migration', () => {
+  it('keeps a version-1 drawing and gives a finished lesson its stamp', async () => {
+    const factory = new IDBFactory();
+    const finished = reduceSession(lesson, createSession(lesson, 'kept-picture'), { type: 'finish' });
+    const checkpoint = toCheckpoint(finished, 3, 1_700_000_000_000);
+    await openVersion1(factory, checkpoint);
+
+    const store = new IndexedDbSessionStore(factory);
+    const restored = await store.loadSession('kept-picture');
+    expect(restored?.checkpoint.revision).toBe(3);
+    expect(restored?.checkpoint.finished).toBe(true);
+    expect(restored?.checkpoint.schemaVersion).toBe(1);
+
+    const stamps = await store.listStamps();
+    expect(stamps).toEqual([
+      { schemaVersion: 1, lessonId: lesson.id, earnedAt: 1_700_000_000_000 },
+    ]);
+    expect(await store.awardStamp(lesson.id, Date.now())).toBe(false);
+    expect(await store.awardStamp('cup', 1_700_000_100_000)).toBe(true);
+    expect((await store.listStamps()).map((stamp) => stamp.lessonId)).toEqual([lesson.id, 'cup']);
+  });
+});
+
+function openVersion1(factory: IDBFactory, checkpoint: SessionCheckpoint): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = factory.open('drawsprout', 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      const checkpoints = db.createObjectStore('checkpoints', { keyPath: 'sessionId' });
+      checkpoints.createIndex('byUpdatedAt', 'updatedAt');
+      db.createObjectStore('strokes', { keyPath: ['sessionId', 'strokeId'] });
+      db.createObjectStore('preferences');
+      request.transaction?.objectStore('checkpoints').put(checkpoint);
+    };
+    request.onsuccess = () => {
+      request.result.close();
+      resolve();
+    };
+    request.onerror = () => reject(request.error ?? new Error('Could not open the old database'));
+  });
+}

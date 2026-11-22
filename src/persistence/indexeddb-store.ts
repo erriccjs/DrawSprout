@@ -5,14 +5,17 @@
  * IndexedDB transactions, and PRD section 11 forbids keeping drawing data in
  * localStorage. This is the only file in the project that knows IndexedDB
  * exists for session data. Photo lessons use a separate database so this
- * version stays 1.
+ * version is 2: version 1 holds drawings, version 2 adds the stamp store
+ * without rewriting those drawings.
  */
 
 import type { SessionPreferences, Stroke } from '../lesson-engine/types';
 import {
+  STAMP_SCHEMA_VERSION,
   isGalleryArtwork,
   StorageFullError,
   toSavedArtworkSummary,
+  type LessonStamp,
   type RestoredSession,
   type SaveProgressInput,
   type SavedArtworkSummary,
@@ -21,11 +24,12 @@ import {
 } from './types';
 
 const DB_NAME = 'drawsprout';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const CHECKPOINTS = 'checkpoints';
 const STROKES = 'strokes';
 const PREFERENCES = 'preferences';
+const STAMPS = 'stamps';
 
 const PREFERENCES_KEY = 'default';
 
@@ -42,6 +46,7 @@ export function openDatabase(indexedDb: IDBFactory = indexedDB): Promise<IDBData
 
     request.onupgradeneeded = () => {
       const db = request.result;
+      const tx = request.transaction;
       if (!db.objectStoreNames.contains(CHECKPOINTS)) {
         const store = db.createObjectStore(CHECKPOINTS, { keyPath: 'sessionId' });
         store.createIndex('byUpdatedAt', 'updatedAt');
@@ -51,6 +56,28 @@ export function openDatabase(indexedDb: IDBFactory = indexedDB): Promise<IDBData
       }
       if (!db.objectStoreNames.contains(PREFERENCES)) {
         db.createObjectStore(PREFERENCES);
+      }
+      const stampsAreNew = !db.objectStoreNames.contains(STAMPS);
+      if (stampsAreNew) db.createObjectStore(STAMPS, { keyPath: 'lessonId' });
+      // Existing finished lessons earn a stamp. Drawings themselves are not rewritten.
+      if (stampsAreNew && tx && db.objectStoreNames.contains(CHECKPOINTS)) {
+        const checkpoints = tx.objectStore(CHECKPOINTS);
+        const stamps = tx.objectStore(STAMPS);
+        const read = checkpoints.getAll();
+        read.onsuccess = () => {
+          const earliest = new Map<string, number>();
+          for (const checkpoint of read.result as SessionCheckpoint[]) {
+            if (!checkpoint.finished) continue;
+            const current = earliest.get(checkpoint.lessonId);
+            if (current === undefined || checkpoint.updatedAt < current) {
+              earliest.set(checkpoint.lessonId, checkpoint.updatedAt);
+            }
+          }
+          for (const [lessonId, earnedAt] of earliest) {
+            const stamp: LessonStamp = { schemaVersion: STAMP_SCHEMA_VERSION, lessonId, earnedAt };
+            stamps.put(stamp);
+          }
+        };
       }
     };
 
@@ -173,6 +200,26 @@ export class IndexedDbSessionStore implements SessionStore {
         tx.objectStore(CHECKPOINTS).delete(id);
         tx.objectStore(STROKES).delete(sessionRange(id));
       }
+    });
+  }
+
+  async listStamps(): Promise<readonly LessonStamp[]> {
+    const db = await this.dbPromise;
+    const stamps = await runTransaction(db, [STAMPS], 'readonly', async (tx) =>
+      request<LessonStamp[]>(tx.objectStore(STAMPS).getAll()),
+    );
+    return stamps.sort((a, b) => a.earnedAt - b.earnedAt || (a.lessonId < b.lessonId ? -1 : 1));
+  }
+
+  async awardStamp(lessonId: string, earnedAt: number): Promise<boolean> {
+    const db = await this.dbPromise;
+    return await runTransaction(db, [STAMPS], 'readwrite', async (tx) => {
+      const store = tx.objectStore(STAMPS);
+      const existing = await request<LessonStamp | undefined>(store.get(lessonId));
+      if (existing) return false;
+      const stamp: LessonStamp = { schemaVersion: STAMP_SCHEMA_VERSION, lessonId, earnedAt };
+      store.put(stamp);
+      return true;
     });
   }
 

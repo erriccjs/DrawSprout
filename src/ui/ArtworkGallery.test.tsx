@@ -35,7 +35,7 @@ describe('Karyaku', () => {
     const renderSpy = vi.spyOn(exportApi, 'renderArtworkToCanvas');
     render(<ArtworkGallery store={store} actionsDisabled={false} onOpen={onOpen} />);
 
-    expect(await screen.findByRole('heading', { name: 'Karyaku' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Buku Gambarku' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Kucing Duduk' })).toBeTruthy();
     expect(screen.getByRole('time').getAttribute('dateTime')).toBe('2026-10-21T09:05:00.000Z');
     expect(document.querySelector('.artwork-gallery svg')).toBeNull();
@@ -93,6 +93,17 @@ describe('Karyaku', () => {
     expect(await screen.findByRole('heading', { name: 'Pohon' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Rumah' })).toBeTruthy();
     expect(screen.queryByText('Pelajaran lama')).toBeNull();
+  });
+
+  it('lists two finished pictures of the same lesson', async () => {
+    const store = new MemorySessionStore();
+    for (const [id, at] of [['first-cat', 10], ['second-cat', 20]] as const) {
+      const finished = reduceSession(CAT_LESSON, createSession(CAT_LESSON, id), { type: 'finish' });
+      await store.saveProgress({ checkpoint: toCheckpoint(finished, 1, at), newStrokes: [] });
+    }
+    render(<ArtworkGallery store={store} actionsDisabled={false} onOpen={() => {}} />);
+    expect(await screen.findAllByRole('heading', { name: 'Kucing Duduk' })).toHaveLength(2);
+    expect(await store.listStamps()).toEqual([]);
   });
 
   it('says when nothing is saved', async () => {
