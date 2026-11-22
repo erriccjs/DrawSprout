@@ -10,7 +10,7 @@ const WALLS = 'M 250 340 L 750 340 L 750 640 L 250 640 Z';
 const ROOF = 'M 200 350 L 500 140 L 800 350 Z';
 const DOOR = 'M 455 640 L 455 450 L 575 450 L 575 640 Z';
 const WINDOW = 'M 310 400 L 420 400 L 420 510 L 310 510 Z';
-const WINDOW_CROSS = 'M 365 400 L 365 510 M 310 455 L 420 455';
+const WINDOW_CROSS = 'M 365 400 L 365 455 M 365 455 L 365 510 M 310 455 L 365 455 M 365 455 L 420 455';
 
 const WALLS_GUIDE = { id: 'walls', d: WALLS, role: 'final-outline' as const };
 const ROOF_GUIDE = { id: 'roof', d: ROOF, role: 'final-outline' as const };
