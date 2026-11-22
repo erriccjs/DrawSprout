@@ -57,6 +57,8 @@ import { FinishScreen } from './FinishScreen';
 import { GuideOverlay } from './GuideOverlay';
 import { playCheer } from './cheer';
 import { useMotionPreference } from './useMotionPreference';
+import { lessonsForPicker } from '../categories/library';
+import { completeDaily, dailyChallengeId, loadDaily, localDayNumber, saveDaily } from '../daily/challenge';
 import { recordUsage } from '../usage/client';
 import { ChildHelp, StepNavigation, StepPanel } from './StepPanel';
 import { StepReference } from './StepReference';
@@ -155,6 +157,15 @@ export function DrawingPad({ lesson, store, initialState, durable, notice, resto
           void store.awardStamp(lesson.id, Date.now()).then((earned) => {
             if (earned) recordUsage('stamp_earned', lesson.id);
           }).catch(() => undefined);
+          const today = new Date();
+          const challenge = dailyChallengeId(today, lessonsForPicker().map((item) => item.id));
+          if (challenge === lesson.id) {
+            const result = completeDaily(loadDaily(), localDayNumber(today));
+            if (result.fresh) {
+              saveDaily(result.progress);
+              recordUsage('daily_challenge_complete', lesson.id);
+            }
+          }
         }
       }
       if (action.type === 'enter-free-creation' && !previous.freeCreation) recordUsage('free_draw_start', lesson.id);

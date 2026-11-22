@@ -244,6 +244,11 @@ export interface Messages {
   readonly pathStep: string;
   readonly stillDrawing: string;
   readonly stampMark: string;
+  readonly dailyTitle: string;
+  readonly dailyDraw: string;
+  readonly dailyDone: string;
+  readonly dailyStreak: string;
+  readonly mascotTalk: string;
 }
 
 const id: Messages = {
@@ -485,6 +490,11 @@ const id: Messages = {
   pathStep: 'Langkah {n}',
   stillDrawing: 'Masih digambar',
   stampMark: 'Stempel',
+  dailyTitle: 'Tantangan hari ini',
+  dailyDraw: 'Gambar ini',
+  dailyDone: 'Stempel hari ini',
+  dailyStreak: '{count} hari berturut-turut',
+  mascotTalk: 'Dengar Tunas',
 };
 
 const en: Messages = {
@@ -726,6 +736,11 @@ const en: Messages = {
   pathStep: 'Step {n}',
   stillDrawing: 'Still drawing',
   stampMark: 'Stamp',
+  dailyTitle: 'Today\'s challenge',
+  dailyDraw: 'Draw this',
+  dailyDone: 'Today\'s stamp',
+  dailyStreak: '{count} days in a row',
+  mascotTalk: 'Hear Tunas',
 };
 
 export const messages: Record<Locale, Messages> = { id, en };

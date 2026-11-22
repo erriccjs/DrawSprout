@@ -648,6 +648,10 @@ export function App() {
             stamps={stamps}
             onFreeDraw={startFreeDraw}
             onOpenAlbum={openAlbum}
+            onStartChallenge={(lessonId) => {
+              recordUsage('daily_challenge_start', lessonId);
+              selectLesson(lessonId);
+            }}
             notice={exitNotice}
             offlineReady={offlineReady}
             updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}

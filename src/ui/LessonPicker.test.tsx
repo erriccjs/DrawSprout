@@ -52,7 +52,9 @@ describe('lesson picker', () => {
     expect(screen.getByRole('heading', { name: 'Alam' })).toBeTruthy();
     expect(document.querySelectorAll('.difficulty-badge').length).toBeGreaterThan(0);
     expect(document.querySelectorAll('.beginner-path__step')).toHaveLength(BEGINNER_PATH.length);
-    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 8 + BEGINNER_PATH.length);
+    expect(screen.getByRole('button', { name: 'Gambar ini' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Tantangan hari ini' })).toBeTruthy();
+    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 10 + BEGINNER_PATH.length);
 
     const names = [...document.querySelectorAll('.lesson-picker__name')].map((node) => node.textContent);
     expect(new Set(names).size).toBe(names.length);

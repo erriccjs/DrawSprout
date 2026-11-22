@@ -9,6 +9,8 @@ import {
   type ThemeId,
 } from '../categories/growth';
 import { lessonsForPicker } from '../categories/library';
+import { dailyChallengeId, loadDaily, localDayNumber, visibleStreak } from '../daily/challenge';
+import { Mascot } from './Mascot';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { useI18n } from '../i18n/context';
 import { say } from '../i18n/generated';
@@ -38,6 +40,7 @@ interface LessonPickerProps {
   readonly stamps?: readonly string[];
   readonly onFreeDraw?: () => void;
   readonly onOpenAlbum?: () => void;
+  readonly onStartChallenge?: (lessonId: string) => void;
 }
 
 export function LessonPicker({
@@ -56,6 +59,7 @@ export function LessonPicker({
   stamps = [],
   onFreeDraw,
   onOpenAlbum,
+  onStartChallenge,
 }: LessonPickerProps) {
   const traceInput = useRef<HTMLInputElement>(null);
   const { t, locale } = useI18n();
@@ -71,6 +75,10 @@ export function LessonPicker({
     const lesson = lessons.find((item) => item.id === id);
     return lesson ? [lesson] : [];
   });
+  const today = new Date();
+  const challengeId = dailyChallengeId(today, lessons.map((lesson) => lesson.id));
+  const challenge = lessons.find((lesson) => lesson.id === challengeId) ?? null;
+  const streak = visibleStreak(loadDaily(), localDayNumber(today));
   const groups = THEME_ORDER.flatMap((theme) => {
     const items = lessons.filter((lesson) => lessonTheme(lesson.id) === theme);
     return items.length > 0 ? [{ theme, items }] : [];
@@ -80,6 +88,25 @@ export function LessonPicker({
       <LanguageSwitch />
       <h1 id="lesson-picker-title">{t('pickerTitle')}</h1>
       <p>{t('pickerLead')}</p>
+      {challenge && (
+        <section className="daily-card" aria-labelledby="daily-title">
+          <Mascot mood={streak > 0 ? 'cheer' : 'idle'} size="home" />
+          <div className="daily-card__copy">
+            <h2 id="daily-title">{t('dailyTitle')}</h2>
+            <p className="daily-card__name">{presentLesson(challenge, locale).title}</p>
+            {streak > 0 && <p className="daily-card__streak">{t('dailyStreak', { count: streak })}</p>}
+            {streak > 0 && <p className="lesson-picker__stamp">{t('dailyDone')}</p>}
+            <button
+              type="button"
+              className="button button--primary"
+              disabled={applying}
+              onClick={() => onStartChallenge?.(challenge.id)}
+            >
+              {t('dailyDraw')}
+            </button>
+          </div>
+        </section>
+      )}
       <div className="button-row home-actions">
         {nextId && (
           <button type="button" className="button button--primary" disabled={applying} onClick={() => onSelect(nextId)}>
