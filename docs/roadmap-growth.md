@@ -4,11 +4,6 @@ English notes for sequencing. The app stays Indonesian-first. Do not turn on
 payments until retention is real: Phase A, Phase B, and the anonymous counts,
 with about 10–20 families, come first.
 
-Production builds currently fail with Wrangler error 10089 until Workers
-Analytics Engine is enabled on the account. That binding arrived with the
-usage-counts work. Leave the binding in place. Eric enables it in the
-dashboard and retries the build.
-
 Counts used below are the anonymous events in `docs/analytics.md`
 (`lesson_start`, `lesson_complete`, `free_draw_start`, `stamp_earned`,
 `album_open`, and the weekly returning flag). They are not a list of people.
@@ -60,10 +55,10 @@ browser voice. No paid or server voice.
 **Success.** `lesson_start` on the featured lesson on days with an `app_open`,
 and returning-this-week opens over a few weeks.
 
-**Effort.** Small to medium.
+**Effort.** Small to medium. This phase is in the app: one lesson per local
+day, a quiet streak, and Tunas, who speaks only after a tap.
 
-**Depends on.** Phase A path (so the featured lesson can prefer an unfinished
-easy one) and the current read-aloud.
+**Depends on.** The lesson list and the current read-aloud.
 
 ## Phase C — Parent trust
 

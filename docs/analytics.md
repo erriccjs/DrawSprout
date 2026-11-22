@@ -32,10 +32,12 @@ That means the weekly query counts returning opens, not a list of people.
 
 `app_open`, `lesson_start`, `lesson_complete`, `trace_photo_start`,
 `doodle_start`, `doodle_success`, `free_draw_start`, `stamp_earned`,
-`album_open`, `feedback_up`, `feedback_down`.
+`album_open`, `daily_challenge_start`, `daily_challenge_complete`,
+`mascot_tap`, `feedback_up`, `feedback_down`.
 
-`lesson_start`, `lesson_complete`, `stamp_earned`, `feedback_up`, and
-`feedback_down` require a lesson id. `album_open` must not carry one. The id
+`lesson_start`, `lesson_complete`, `stamp_earned`, `daily_challenge_start`,
+`daily_challenge_complete`, `feedback_up`, and `feedback_down` require a
+lesson id. `album_open` and `mascot_tap` must not carry one. The id
 must match `[a-z0-9-]`. Anything else is rejected. The client drops a bad
 event and never throws. Offline events are dropped.
 

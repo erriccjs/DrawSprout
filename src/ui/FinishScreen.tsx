@@ -15,6 +15,7 @@ import type { LessonPackage } from '../lesson-data/schema';
 import type { SessionState } from '../lesson-engine/types';
 import { artworkFileName, exportArtworkPng, renderArtworkToCanvas, type ExportUnderlay } from '../renderer/export';
 import { ClearArtworkPrompt } from './ClearArtworkPrompt';
+import { Mascot } from './Mascot';
 import { toRenderStrokes } from './render-adapter';
 import { feedbackAlreadySent, rememberFeedback, recordUsage } from '../usage/client';
 
@@ -105,6 +106,7 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
         <span /><span /><span />
       </div>
       <LanguageSwitch />
+      <Mascot mood="cheer" />
       <h1 className="finish__title">{t('finishTitle')}</h1>
       <p className="finish__lead">
         {t('finishLead')}

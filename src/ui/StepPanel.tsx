@@ -14,6 +14,7 @@ import type { LessonPackage, LessonStep } from '../lesson-data/schema';
 import { drawingStepId } from '../lesson-engine/session';
 import type { AssistanceMode, HintDurationMs, SessionAction, SessionState } from '../lesson-engine/types';
 import { ClearArtworkPrompt } from './ClearArtworkPrompt';
+import { Mascot } from './Mascot';
 import { SpeakButton } from './SpeakButton';
 
 const ASSISTANCE_CHOICES: readonly { mode: AssistanceMode; label: MessageKey; help: MessageKey }[] = [
@@ -80,6 +81,7 @@ export function StepPanel({
         {!collapsed && <h2 className="step-panel__instruction">{step.instruction}</h2>}
         {!collapsed && step.hint !== undefined && <p className="step-panel__hint">{step.hint}</p>}
         <div className="step-panel__listen">
+          <Mascot />
           <SpeakButton text={step.instruction} />
           {onReplay && (
             <button type="button" className="speak-button" onClick={onReplay}>

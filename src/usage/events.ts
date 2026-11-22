@@ -15,6 +15,9 @@ export const USAGE_EVENTS = [
   'free_draw_start',
   'stamp_earned',
   'album_open',
+  'daily_challenge_start',
+  'daily_challenge_complete',
+  'mascot_tap',
   'feedback_up',
   'feedback_down',
 ] as const;
@@ -37,6 +40,8 @@ const LESSON_REQUIRED = new Set<UsageEventName>([
   'lesson_start',
   'lesson_complete',
   'stamp_earned',
+  'daily_challenge_start',
+  'daily_challenge_complete',
   'feedback_up',
   'feedback_down',
 ]);
