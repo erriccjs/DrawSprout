@@ -75,7 +75,7 @@ and no photo).
 **Success.** `doodle_start` only after the gate; delete still requires the
 confirm; parent page reads the same events as the analytics queries.
 
-**Effort.** Medium.
+**Effort.** Medium. This phase is in the app: a sum before photos, delete, and the parent page; a preview before a photo is used; a local read-only page.
 
 **Depends on.** Phase A album, and the usage events. Not on payments.
 

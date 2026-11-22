@@ -8,6 +8,7 @@ import { fromRestoredSession, toCheckpoint } from '../persistence/mapping';
 import { MemorySessionStore } from '../persistence/memory-store';
 import * as exportApi from '../renderer/export';
 import { strokeInput } from '../test/factories';
+import { answerParentGate } from '../test/parent-gate';
 import { ArtworkGallery } from './ArtworkGallery';
 
 async function savedCat(store: MemorySessionStore): Promise<void> {
@@ -54,6 +55,7 @@ describe('Karyaku', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Lainnya untuk Kucing Duduk' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Hapus Kucing Duduk' }));
+    answerParentGate();
     expect(screen.getByRole('group', { name: 'Hapus karya ini?' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Batal' }));
     expect(await store.loadSession('gallery-cat')).not.toBeNull();

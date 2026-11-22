@@ -141,6 +141,54 @@ body {
   margin: 16px 0;
 }
 
+.parent-gate,
+.parent-dash,
+.trace-preview {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.parent-gate {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  max-width: none;
+  background: var(--page);
+  overflow: auto;
+}
+
+.parent-gate,
+.trace-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.parent-gate input {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  margin-top: 6px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font: inherit;
+  font-size: 1.25rem;
+}
+
+.parent-dash__counts {
+  padding-left: 1.2rem;
+  font-size: 1.15rem;
+}
+
+.photo-preview {
+  display: block;
+  width: min(100%, 420px);
+  height: auto;
+  border-radius: 16px;
+  background: white;
+}
+
 .daily-card {
   display: flex;
   align-items: center;

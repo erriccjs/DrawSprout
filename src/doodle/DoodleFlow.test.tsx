@@ -59,6 +59,9 @@ describe('doodle flow', () => {
     expect(request).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Pakai bagian ini' }));
+    expect(await screen.findByText(/Replicate/)).toBeTruthy();
+    expect(request).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Kirim' }));
     await screen.findByRole('button', { name: 'Ikuti langkahnya' });
     expect(request).toHaveBeenCalledTimes(1);
     const crop = prepare.mock.calls[0]?.[1] as NormalizedCrop;
@@ -71,6 +74,7 @@ describe('doodle flow', () => {
 
     pick();
     fireEvent.click(await screen.findByRole('button', { name: 'Pakai bagian ini' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Kirim' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Coba lagi' }));

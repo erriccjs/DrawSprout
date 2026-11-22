@@ -15,6 +15,8 @@ import type { Stroke } from '../lesson-engine/types';
 import { fromRestoredSession } from '../persistence/mapping';
 import type { SavedArtworkSummary, SessionStore } from '../persistence/types';
 import { downloadArtwork, formatArtworkWhen, paintArtworkThumbnail } from './artwork-files';
+import { ParentGate } from './ParentGate';
+import { parentUnlocked } from './parent-session';
 
 interface ArtworkGalleryProps {
   readonly store: SessionStore;
@@ -103,6 +105,7 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
   const shown = useMemo(() => (lesson ? presentLesson(lesson, locale) : null), [lesson, locale]);
   const title = shown?.title ?? t('oldLesson');
   const [confirming, setConfirming] = useState(false);
+  const [gating, setGating] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [exportName, setExportName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -200,7 +203,8 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
                 aria-label={t('deleteNamed', { title })}
                 onClick={() => {
                   setMenuOpen(false);
-                  setConfirming(true);
+                  if (parentUnlocked()) setConfirming(true);
+                  else setGating(true);
                 }}
               >
                 {t('delete')}
@@ -209,6 +213,15 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
           )}
         </div>
       </div>
+      {gating && (
+        <ParentGate
+          onPass={() => {
+            setGating(false);
+            setConfirming(true);
+          }}
+          onCancel={() => setGating(false)}
+        />
+      )}
       {confirming && (
         <div className="artwork-card__confirm" role="group" aria-label={t('deleteArtworkQuestion')}>
           <p>{t('deleteArtworkQuestion')}</p>

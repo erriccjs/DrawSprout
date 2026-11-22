@@ -12,6 +12,8 @@ import { markOfflineReady, markUpdateWaiting, resetOfflineStatus } from './offli
 import * as exportApi from './renderer/export';
 import { strokeInput } from './test/factories';
 import { drawStroke, stubLayoutBox } from './test/pointer';
+import { answerParentGate } from './test/parent-gate';
+import { clearParentUnlock } from './ui/parent-session';
 import { App } from './App';
 import { TABLET_NOTICE_KEY } from './ui/tablet-notice';
 
@@ -339,6 +341,7 @@ describe('lesson picker', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Lainnya untuk Kucing Duduk' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Hapus Kucing Duduk' }));
+    answerParentGate();
     expect(screen.getByText('Hapus karya ini?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Batal' }));
     expect(await store.loadSession('gallery-cat')).not.toBeNull();
@@ -399,7 +402,9 @@ describe('lesson picker', () => {
     await screen.findByRole('heading', { name: 'Mau gambar apa hari ini?' });
     const input = screen.getByLabelText('Pilih atau ambil foto');
 
+    clearParentUnlock();
     fireEvent.click(screen.getByRole('button', { name: 'Jiplak foto' }));
+    answerParentGate();
     expect(screen.getByText(/Pilih foto untuk dijiplak/)).toBeTruthy();
 
     fireEvent.change(input, { target: { files: [] } });

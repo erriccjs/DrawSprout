@@ -11,6 +11,8 @@ import {
 import { lessonsForPicker } from '../categories/library';
 import { dailyChallengeId, loadDaily, localDayNumber, visibleStreak } from '../daily/challenge';
 import { Mascot } from './Mascot';
+import { ParentGate } from './ParentGate';
+import { parentUnlocked } from './parent-session';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { useI18n } from '../i18n/context';
 import { say } from '../i18n/generated';
@@ -41,6 +43,7 @@ interface LessonPickerProps {
   readonly onFreeDraw?: () => void;
   readonly onOpenAlbum?: () => void;
   readonly onStartChallenge?: (lessonId: string) => void;
+  readonly onOpenParent?: () => void;
 }
 
 export function LessonPicker({
@@ -60,6 +63,7 @@ export function LessonPicker({
   onFreeDraw,
   onOpenAlbum,
   onStartChallenge,
+  onOpenParent,
 }: LessonPickerProps) {
   const traceInput = useRef<HTMLInputElement>(null);
   const { t, locale } = useI18n();
@@ -67,6 +71,11 @@ export function LessonPicker({
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [stampsOpen, setStampsOpen] = useState(false);
+  const [guarded, setGuarded] = useState<(() => void) | null>(null);
+  const guard = (action: () => void) => {
+    if (parentUnlocked()) action();
+    else setGuarded(() => action);
+  };
   const applying = updatePhase === 'applying';
   const lessons = lessonsForPicker();
   const stamped = new Set(stamps);
@@ -119,6 +128,9 @@ export function LessonPicker({
         <button type="button" className="button" onClick={() => onOpenAlbum?.()}>
           {t('albumJump')}
         </button>
+        <button type="button" className="button" onClick={() => guard(() => onOpenParent?.())}>
+          {t('parentDash')}
+        </button>
         <button
           type="button"
           className="button"
@@ -169,17 +181,17 @@ export function LessonPicker({
         </section>
       )}
       <div className="lesson-picker__photo">
-        <button type="button" className="button button--primary" onClick={onDoodle}>
+        <button type="button" className="button button--primary" onClick={() => guard(onDoodle)}>
           {t('doodlePhoto')}
         </button>
         <button
           type="button"
           className="button"
           aria-describedby="trace-photo-note"
-          onClick={() => {
+          onClick={() => guard(() => {
             setTraceHint(t('traceOpening'));
             traceInput.current?.click();
-          }}
+          })}
         >
           {t('tracePhoto')}
         </button>
@@ -240,7 +252,7 @@ export function LessonPicker({
       ))}
       {photoBeta && onCreatePhoto && (
         <div className="lesson-picker__photo">
-          <button type="button" className="button" disabled={applying} onClick={onCreatePhoto}>
+          <button type="button" className="button" disabled={applying} onClick={() => guard(() => onCreatePhoto())}>
             {t('createFromPhoto')}
           </button>
         </div>
@@ -290,7 +302,7 @@ export function LessonPicker({
                       className="button"
                       disabled={applying}
                       aria-label={t('deleteLesson', { title: shown.title })}
-                      onClick={() => setConfirmingId(record.id)}
+                      onClick={() => guard(() => setConfirmingId(record.id))}
                     >
                       {t('delete')}
                     </button>
@@ -301,6 +313,16 @@ export function LessonPicker({
             </div>
           )}
         </div>
+      )}
+      {guarded && (
+        <ParentGate
+          onPass={() => {
+            const action = guarded;
+            setGuarded(null);
+            action();
+          }}
+          onCancel={() => setGuarded(null)}
+        />
       )}
     </section>
   );

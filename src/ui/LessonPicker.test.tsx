@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { BEGINNER_PATH } from '../categories/growth';
 import { CATEGORY_LESSONS, getPlayableLesson, lessonsForPicker } from '../categories/library';
+import { answerParentGate } from '../test/parent-gate';
 import { LessonPicker } from './LessonPicker';
 
 const css = readFileSync(path.join(process.cwd(), 'src/styles.css'), 'utf8');
@@ -54,7 +55,8 @@ describe('lesson picker', () => {
     expect(document.querySelectorAll('.beginner-path__step')).toHaveLength(BEGINNER_PATH.length);
     expect(screen.getByRole('button', { name: 'Gambar ini' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Tantangan hari ini' })).toBeTruthy();
-    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 10 + BEGINNER_PATH.length);
+    expect(screen.getByRole('button', { name: 'Orang tua' })).toBeTruthy();
+    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 11 + BEGINNER_PATH.length);
 
     const names = [...document.querySelectorAll('.lesson-picker__name')].map((node) => node.textContent);
     expect(new Set(names).size).toBe(names.length);
@@ -101,6 +103,7 @@ describe('lesson picker', () => {
     expect(screen.getByText('Jiplak foto tetap di perangkat ini.')).toBeTruthy();
     expect(screen.getByText('Doodle dari foto dibuat di server.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Jiplak foto' }));
+    answerParentGate();
     expect(screen.getByRole('status').textContent).toMatch(/tetap di perangkat/);
     const input = screen.getByLabelText<HTMLInputElement>('Pilih atau ambil foto');
     fireEvent.change(input, { target: { files: [] } });

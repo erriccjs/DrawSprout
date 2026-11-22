@@ -35,7 +35,7 @@ interface DoodleFlowProps {
 
 export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
   const { t, locale } = useI18n();
-  const [phase, setPhase] = useState<'choose' | 'crop' | 'working' | 'ready' | 'error'>('choose');
+  const [phase, setPhase] = useState<'choose' | 'crop' | 'confirm' | 'working' | 'ready' | 'error'>('choose');
   const [picked, setPicked] = useState<{ file: File; url: string } | null>(null);
   const [crop, setCrop] = useState<NormalizedCrop>(DEFAULT_CROP);
   const [error, setError] = useState('');
@@ -125,7 +125,7 @@ export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
             <button
               type="button"
               className="button button--primary"
-              onClick={() => void start(picked.file, crop)}
+              onClick={() => setPhase('confirm')}
             >
               {t('useThisPart')}
             </button>
@@ -142,6 +142,19 @@ export function DoodleFlow({ onCancel, onFollow, onTrace }: DoodleFlowProps) {
                 }}
               />
             </label>
+          </div>
+        </>
+      )}
+      {phase === 'confirm' && picked && (
+        <>
+          <h2>{t('doodleSendTitle')}</h2>
+          <p>{t('doodleSendBody')}</p>
+          <img className="photo-preview" src={picked.url} alt={t('photoChosen')} />
+          <div className="button-row doodle-flow__actions">
+            <button type="button" className="button button--primary" onClick={() => void start(picked.file, crop)}>
+              {t('doodleSend')}
+            </button>
+            <button type="button" className="button" onClick={() => setPhase('crop')}>{t('cancel')}</button>
           </div>
         </>
       )}
