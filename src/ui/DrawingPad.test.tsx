@@ -188,9 +188,12 @@ describe('starting a lesson', () => {
 
   it('shows the dashed guide for the active step only', () => {
     const { view } = setup();
-    const paths = canvasGuides(view.container);
-    expect(paths).toHaveLength(CAT_LESSON.steps[0]!.guidePaths.length);
-    expect(paths[0]!.getAttribute('d')).toBe(CAT_LESSON.steps[0]!.guidePaths[0]!.d);
+    const dashed = [...view.container.querySelectorAll<SVGPathElement>('.guide-overlay [data-guide="dashed"]')];
+    expect(dashed).toHaveLength(CAT_LESSON.steps[0]!.guidePaths.length);
+    expect(dashed[0]!.getAttribute('d')).toBe(CAT_LESSON.steps[0]!.guidePaths[0]!.d);
+    expect(dashed[0]!.getAttribute('stroke-dasharray')).toBe('20 14');
+    // The self-drawing line is extra. It must not replace the dashes.
+    expect(view.container.querySelectorAll('[data-draw="on"]')).toHaveLength(dashed.length);
   });
 
   it('starts with nothing to undo or redo', () => {
@@ -1566,7 +1569,8 @@ describe('a child who cannot read yet', () => {
       const { view } = setup();
       expect(view.container.querySelectorAll('[data-draw="on"]')).toHaveLength(0);
       expect(view.container.querySelector('.guide-overlay')?.getAttribute('data-motion')).toBe('reduce');
-      expect(view.container.querySelectorAll('.guide-overlay path').length).toBeGreaterThan(0);
+      const dashed = view.container.querySelector<SVGPathElement>('.guide-overlay [data-guide="dashed"]');
+      expect(dashed?.getAttribute('stroke-dasharray')).toBe('20 14');
     } finally {
       window.matchMedia = original;
     }

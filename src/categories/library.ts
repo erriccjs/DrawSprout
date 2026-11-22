@@ -4,6 +4,7 @@
  */
 
 import { BUNDLED_LESSONS, getLesson } from '../lesson-data';
+import { cleanLessonOutlines } from '../lesson-data/outline-crossings';
 import type { LessonPackage } from '../lesson-data/schema';
 import { APPLE_CATEGORY } from './lessons/apple';
 import { BIRD_CATEGORY } from './lessons/bird';
@@ -117,7 +118,7 @@ export function lessonsForPicker(): readonly LessonPackage[] {
   return [
     ...categoryLessons,
     ...BUNDLED_LESSONS.filter((lesson) => !taken.has(lesson.title)),
-  ];
+  ].map(cleanLessonOutlines);
 }
 
 /**
@@ -128,10 +129,10 @@ export function lessonsForPicker(): readonly LessonPackage[] {
  */
 export function getPlayableLesson(id: string): LessonPackage {
   const bundled = BUNDLED_LESSONS.find((lesson) => lesson.id === id);
-  if (bundled) return bundled;
+  if (bundled) return cleanLessonOutlines(bundled);
   const category = CATEGORY_LESSONS.find((entry) => entry.lesson.id === id || entry.id === id);
-  if (category) return category.lesson;
-  return getLesson(id);
+  if (category) return cleanLessonOutlines(category.lesson);
+  return cleanLessonOutlines(getLesson(id));
 }
 
 function planned(id: string, title: string, hint: string): PlannedCategory {

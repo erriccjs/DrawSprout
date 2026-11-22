@@ -542,6 +542,8 @@ html:has(.pad) body {
   animation: guide-draw 1.3s ease-out forwards;
 }
 
+/* The moving stroke fades out. The dashed path underneath is a separate
+   element, so the hint of where to draw stays after the demo. */
 @keyframes guide-draw {
   0% { stroke-dashoffset: 1; opacity: 1; }
   75% { stroke-dashoffset: 0; opacity: 1; }

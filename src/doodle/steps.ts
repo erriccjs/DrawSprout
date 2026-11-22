@@ -9,6 +9,7 @@
 
 import { packageLesson } from '../categories/author';
 import { ellipse } from '../categories/shapes';
+import { trimOvershoots } from '../lesson-data/outline-crossings';
 import type { GuidePath, LessonPackage, LessonStep } from '../lesson-data/schema';
 import { fitPhoto, type TracePlacement } from '../trace/placement';
 import { coverByColour, regionsColouredBy, type FlatRegion } from '../photo/flat-colour';
@@ -60,9 +61,10 @@ export function buildDoodleLesson(doodle: RgbaImage, photo: RgbaImage): LessonPa
   const steps: LessonStep[] = [];
   sections.parts.forEach((part, index) => {
     const guidePaths: GuidePath[] = [];
-    part.chains.forEach((chain, chainIndex) => {
+    const trimmed = trimOvershoots(part.chains.map((chain) => chain.map(([x, y]) => ({ x, y }))));
+    trimmed.forEach((chain, chainIndex) => {
       const d = pathFrom(chain.map((point) => toSpace(
-        [point[0] * (width / doodle.width), point[1] * (height / doodle.height)],
+        [point.x * (width / doodle.width), point.y * (height / doodle.height)],
         frame,
         scale,
       )), true);

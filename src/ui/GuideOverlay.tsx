@@ -52,19 +52,33 @@ export function GuideOverlay({ space, paths, visible, widthCss, heightCss, playI
           const style = STYLE_BY_ROLE[path.role];
           const draw = motion === 'full' && path.role === 'final-outline';
           return (
-            <path
-              key={path.id}
-              d={path.d}
-              fill="none"
-              stroke={style.color}
-              strokeWidth={style.width}
-              strokeLinecap="round"
-              opacity={style.opacity}
-              data-draw={draw ? 'on' : 'off'}
-              {...(draw
-                ? { pathLength: 1, strokeDasharray: '1', className: 'guide-overlay__draw' }
-                : { strokeDasharray: style.dash })}
-            />
+            <g key={path.id}>
+              {/* The dashed trace stays after the demo. The animation used to
+                  replace this stroke and fade it to nothing. */}
+              <path
+                d={path.d}
+                fill="none"
+                stroke={style.color}
+                strokeWidth={style.width}
+                strokeLinecap="round"
+                opacity={style.opacity}
+                strokeDasharray={style.dash}
+                data-guide="dashed"
+              />
+              {draw && (
+                <path
+                  d={path.d}
+                  fill="none"
+                  stroke={style.color}
+                  strokeWidth={style.width}
+                  strokeLinecap="round"
+                  data-draw="on"
+                  pathLength={1}
+                  strokeDasharray="1"
+                  className="guide-overlay__draw"
+                />
+              )}
+            </g>
           );
         })}
     </svg>
