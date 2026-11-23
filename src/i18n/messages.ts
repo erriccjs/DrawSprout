@@ -270,6 +270,24 @@ export interface Messages {
   readonly tracePreviewTitle: string;
   readonly tracePreviewBody: string;
   readonly tracePreviewUse: string;
+  readonly share: string;
+  readonly shareNamed: string;
+  readonly shareSent: string;
+  readonly shareDownloaded: string;
+  readonly shareFailed: string;
+  readonly print: string;
+  readonly printNamed: string;
+  readonly printTitle: string;
+  readonly printPicture: string;
+  readonly printPractice: string;
+  readonly printColouring: string;
+  readonly printDownload: string;
+  readonly printNow: string;
+  readonly printClose: string;
+  readonly printLocal: string;
+  readonly printNoLines: string;
+  readonly printDownloaded: string;
+  readonly printFailed: string;
 }
 
 const id: Messages = {
@@ -530,13 +548,31 @@ const id: Messages = {
   parentNoPictures: 'Belum ada gambar selesai.',
   parentTime: 'Waktu memakai aplikasi tidak disimpan di perangkat ini.',
   parentPrivacyTitle: 'Privasi',
-  parentPrivacyBody: 'Di perangkat ini tersimpan gambar, goresan, stempel, bahasa, dan hari tantangan. Tidak ada akun dan tidak ada nama. Kalau ada internet, aplikasi mengirim hitungan tanpa nama: pelajaran yang dibuka, ponsel atau tablet, bahasa, dan apakah aplikasi sudah dibuka minggu ini. Tidak ada foto di hitungan itu. Cloudflare Web Analytics dapat menghitung kunjungan halaman, juga tanpa nama dan tanpa foto. Jiplak foto tidak meninggalkan perangkat. Doodle dari foto mengunggah foto ke server DrawSprout, yang mengirimnya ke Replicate untuk membuat gambar garis. Foto tidak disimpan setelah itu. Aplikasi ini tidak membuka tautan ke situs lain.',
+  parentPrivacyBody: 'Di perangkat ini tersimpan gambar, goresan, stempel, bahasa, dan hari tantangan. Tidak ada akun dan tidak ada nama. Kalau ada internet, aplikasi mengirim hitungan tanpa nama: pelajaran yang dibuka, ponsel atau tablet, bahasa, dan apakah aplikasi sudah dibuka minggu ini. Tidak ada foto di hitungan itu. Cloudflare Web Analytics dapat menghitung kunjungan halaman, juga tanpa nama dan tanpa foto. Jiplak foto tidak meninggalkan perangkat. Doodle dari foto mengunggah foto ke server DrawSprout, yang mengirimnya ke Replicate untuk membuat gambar garis. Foto tidak disimpan setelah itu. Membagikan atau mencetak gambar dilakukan di perangkat ini. Aplikasi tidak mengunggah gambar itu. Lembar berbagi menyerahkan file ke aplikasi yang dipilih orang tua, misalnya WhatsApp. Aplikasi ini tidak membuka tautan ke situs lain.',
   doodleSendTitle: 'Kirim foto ini?',
   doodleSendBody: 'Bagian yang dipilih diunggah ke server DrawSprout, lalu ke Replicate, untuk dibuat gambar garis. Fotonya tidak disimpan. Hitungan pemakaian tidak berisi foto.',
   doodleSend: 'Kirim',
   tracePreviewTitle: 'Jiplak foto ini?',
   tracePreviewBody: 'Foto ini tetap di perangkat ini. Tidak ada yang diunggah.',
   tracePreviewUse: 'Jiplak',
+  share: 'Bagikan',
+  shareNamed: 'Bagikan {title}',
+  shareSent: 'Lembar berbagi terbuka. WhatsApp ada di sana kalau sudah terpasang.',
+  shareDownloaded: 'Browser ini tidak bisa membagikan file. File {name} diunduh.',
+  shareFailed: 'Gambar belum bisa dibagikan.',
+  print: 'Cetak',
+  printNamed: 'Cetak {title}',
+  printTitle: 'Cetak lembar',
+  printPicture: 'Gambar jadi',
+  printPractice: 'Lembar latihan',
+  printColouring: 'Halaman mewarnai',
+  printDownload: 'Unduh PDF',
+  printNow: 'Cetak sekarang',
+  printClose: 'Tutup',
+  printLocal: 'Dibuat di perangkat ini. Tidak ada yang diunggah.',
+  printNoLines: 'Pelajaran ini tidak punya garis untuk dijiplak.',
+  printDownloaded: 'File {name} diunduh. Tidak ada yang diunggah.',
+  printFailed: 'Lembar belum bisa dibuat.',
 };
 
 const en: Messages = {
@@ -797,13 +833,31 @@ const en: Messages = {
   parentNoPictures: 'No finished pictures yet.',
   parentTime: 'Time spent in the app is not stored on this device.',
   parentPrivacyTitle: 'Privacy',
-  parentPrivacyBody: 'This device stores pictures, strokes, stamps, the language, and the challenge day. There is no account and no name. When online, the app sends anonymous counts: which lesson was opened, phone or tablet, language, and whether the app was already opened this week. Those counts include no photo. Cloudflare Web Analytics may count page visits, also with no name and no photo. Tracing a photo does not leave this device. Doodle from a photo uploads the photo to the DrawSprout server, which sends it to Replicate to make the line drawing. The photo is not kept after that. This app does not open links to other sites.',
+  parentPrivacyBody: 'This device stores pictures, strokes, stamps, the language, and the challenge day. There is no account and no name. When online, the app sends anonymous counts: which lesson was opened, phone or tablet, language, and whether the app was already opened this week. Those counts include no photo. Cloudflare Web Analytics may count page visits, also with no name and no photo. Tracing a photo does not leave this device. Doodle from a photo uploads the photo to the DrawSprout server, which sends it to Replicate to make the line drawing. The photo is not kept after that. Sharing or printing a picture happens on this device. The app does not upload that picture. The share sheet hands the file to the app a grown-up picks, such as WhatsApp. This app does not open links to other sites.',
   doodleSendTitle: 'Send this photo?',
   doodleSendBody: 'The framed part is uploaded to the DrawSprout server, then to Replicate, to make a line drawing. The photo is not kept. Usage counts include no photo.',
   doodleSend: 'Send',
   tracePreviewTitle: 'Trace this photo?',
   tracePreviewBody: 'This photo stays on this device. Nothing is uploaded.',
   tracePreviewUse: 'Trace',
+  share: 'Share',
+  shareNamed: 'Share {title}',
+  shareSent: 'The share sheet is open. WhatsApp is there if it is installed.',
+  shareDownloaded: 'This browser cannot share a file. File {name} was downloaded.',
+  shareFailed: 'The picture could not be shared.',
+  print: 'Print',
+  printNamed: 'Print {title}',
+  printTitle: 'Print a sheet',
+  printPicture: 'Finished picture',
+  printPractice: 'Practice sheet',
+  printColouring: 'Colouring page',
+  printDownload: 'Download PDF',
+  printNow: 'Print now',
+  printClose: 'Close',
+  printLocal: 'Made on this device. Nothing is uploaded.',
+  printNoLines: 'This lesson has no lines to trace.',
+  printDownloaded: 'File {name} was downloaded. Nothing was uploaded.',
+  printFailed: 'The sheet could not be made.',
 };
 
 export const messages: Record<Locale, Messages> = { id, en };

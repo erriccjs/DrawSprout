@@ -14,8 +14,14 @@ import { motionPreference, type MotionPreference } from './motion';
 import type { LessonPackage } from '../lesson-data/schema';
 import type { SessionState } from '../lesson-engine/types';
 import { artworkFileName, exportArtworkPng, renderArtworkToCanvas, type ExportUnderlay } from '../renderer/export';
+import { formatShareDate } from '../share/date';
+import { shareOrDownload } from '../share/file';
+import { shareArtworkFile } from '../share/frame';
 import { ClearArtworkPrompt } from './ClearArtworkPrompt';
 import { Mascot } from './Mascot';
+import { ParentGate } from './ParentGate';
+import { parentUnlocked } from './parent-session';
+import { PrintBook } from './PrintBook';
 import { toRenderStrokes } from './render-adapter';
 import { feedbackAlreadySent, rememberFeedback, recordUsage } from '../usage/client';
 
@@ -48,6 +54,9 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
   const [askingToClear, setAskingToClear] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(() => feedbackAlreadySent(lesson.id));
   const [motion, setMotion] = useState<MotionPreference>('full');
+  const [shareGate, setShareGate] = useState(false);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
+  const [printArt, setPrintArt] = useState<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const query = window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -73,6 +82,30 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
     canvas.setAttribute('aria-label', t('yourArtwork', { title: shown.title }));
     host.replaceChildren(canvas);
   }, [lesson, state.strokes, clipPaths, shown.title, t, underlay]);
+
+  const artworkCanvas = () => renderArtworkToCanvas({
+    space: lesson.coordinateSpace,
+    strokes: toRenderStrokes(state.strokes),
+    clipPaths,
+    ...(underlay ? { underlay } : {}),
+  });
+
+  const shareNow = () => {
+    setExportError(null);
+    setShareStatus(null);
+    try {
+      const dateLabel = formatShareDate(new Date(), locale);
+      const fileName = artworkFileName(shown.title);
+      const file = shareArtworkFile(artworkCanvas(), shown.title, dateLabel, fileName);
+      void shareOrDownload(file, shown.title, `${shown.title} — ${dateLabel}`).then((result) => {
+        if (result === 'cancelled') return;
+        recordUsage('share_picture', lesson.id);
+        setShareStatus(result === 'shared' ? t('shareSent') : t('shareDownloaded', { name: fileName }));
+      });
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : t('shareFailed'));
+    }
+  };
 
   const save = async () => {
     setExportError(null);
@@ -129,6 +162,19 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
         <button type="button" className="button button--primary" onClick={() => void save()}>
           {t('savePicture')}
         </button>
+        <button
+          type="button"
+          className="button"
+          onClick={() => {
+            if (parentUnlocked()) shareNow();
+            else setShareGate(true);
+          }}
+        >
+          {t('share')}
+        </button>
+        <button type="button" className="button" onClick={() => setPrintArt(artworkCanvas())}>
+          {t('print')}
+        </button>
         <button type="button" className="button" onClick={onDrawFreely}>
           {t('freeDraw')}
         </button>
@@ -150,6 +196,25 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
         />
       )}
 
+      {shareGate && (
+        <ParentGate
+          onPass={() => {
+            setShareGate(false);
+            shareNow();
+          }}
+          onCancel={() => setShareGate(false)}
+        />
+      )}
+      {printArt !== null && (
+        <PrintBook
+          lesson={lesson}
+          artwork={printArt}
+          onClose={() => setPrintArt(null)}
+          onExported={() => recordUsage('print_sheet', lesson.id)}
+        />
+      )}
+
+      {shareStatus !== null && <p className="banner" role="status">{shareStatus}</p>}
       {savedName !== null && (
         <p className="banner" role="status">
           {t('downloadSent', { name: savedName })}

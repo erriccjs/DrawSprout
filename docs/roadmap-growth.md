@@ -6,7 +6,8 @@ with about 10–20 families, come first.
 
 Counts used below are the anonymous events in `docs/analytics.md`
 (`lesson_start`, `lesson_complete`, `free_draw_start`, `stamp_earned`,
-`album_open`, and the weekly returning flag). They are not a list of people.
+`album_open`, `share_picture`, `print_sheet`, and the weekly returning flag).
+They are not a list of people.
 
 ## Phase A — Habit and learning structure
 
@@ -88,8 +89,8 @@ how to send.
 colouring-sheet PDF of a lesson’s outlines. Web Share API, aimed at
 WhatsApp. One greeting-card template.
 
-**Success.** A share or export event, added when this phase is built, next
-to `lesson_complete`. Until then, do not invent the count.
+**Success.** `share_picture` and `print_sheet`, next to `lesson_complete`.
+The greeting-card template is still open.
 
 **Effort.** Medium.
 

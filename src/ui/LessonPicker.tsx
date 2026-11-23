@@ -13,6 +13,7 @@ import { dailyChallengeId, loadDaily, localDayNumber, visibleStreak } from '../d
 import { Mascot } from './Mascot';
 import { ParentGate } from './ParentGate';
 import { parentUnlocked } from './parent-session';
+import { PrintBook } from './PrintBook';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { useI18n } from '../i18n/context';
 import { say } from '../i18n/generated';
@@ -21,6 +22,7 @@ import { PREVIEW_INK, stepPreview } from '../lesson-data/step-preview';
 import type { LessonPackage } from '../lesson-data/schema';
 import type { MessageKey } from '../i18n/messages';
 import type { PhotoLessonRecord } from '../persistence/photo-lesson-store';
+import { recordUsage } from '../usage/client';
 
 interface LessonPickerProps {
   readonly onSelect: (lessonId: string) => void;
@@ -72,6 +74,7 @@ export function LessonPicker({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [stampsOpen, setStampsOpen] = useState(false);
   const [guarded, setGuarded] = useState<(() => void) | null>(null);
+  const [printLesson, setPrintLesson] = useState<LessonPackage | null>(null);
   const guard = (action: () => void) => {
     if (parentUnlocked()) action();
     else setGuarded(() => action);
@@ -245,6 +248,7 @@ export function LessonPicker({
                 stamped={stamped.has(lesson.id)}
                 disabled={applying}
                 onSelect={onSelect}
+                onPrint={setPrintLesson}
               />
             ))}
           </div>
@@ -297,15 +301,26 @@ export function LessonPicker({
                       </button>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      className="button"
-                      disabled={applying}
-                      aria-label={t('deleteLesson', { title: shown.title })}
-                      onClick={() => guard(() => setConfirmingId(record.id))}
-                    >
-                      {t('delete')}
-                    </button>
+                    <div className="button-row">
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={applying}
+                        aria-label={t('printNamed', { title: shown.title })}
+                        onClick={() => setPrintLesson(record.lesson)}
+                      >
+                        {t('print')}
+                      </button>
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={applying}
+                        aria-label={t('deleteLesson', { title: shown.title })}
+                        onClick={() => guard(() => setConfirmingId(record.id))}
+                      >
+                        {t('delete')}
+                      </button>
+                    </div>
                   )}
                 </div>
                 );
@@ -313,6 +328,14 @@ export function LessonPicker({
             </div>
           )}
         </div>
+      )}
+      {printLesson && (
+        <PrintBook
+          lesson={printLesson}
+          artwork={null}
+          onClose={() => setPrintLesson(null)}
+          onExported={() => recordPrint(printLesson.id)}
+        />
       )}
       {guarded && (
         <ParentGate
@@ -328,35 +351,52 @@ export function LessonPicker({
   );
 }
 
+function recordPrint(lessonId: string): void {
+  recordUsage('print_sheet', lessonId);
+}
+
 function LessonChoice({
   lesson,
   stamped,
   disabled,
   onSelect,
+  onPrint,
 }: {
   readonly lesson: LessonPackage;
   readonly stamped: boolean;
   readonly disabled: boolean;
   readonly onSelect: (lessonId: string) => void;
+  readonly onPrint: (lesson: LessonPackage) => void;
 }) {
   const { t, locale } = useI18n();
   const shown = presentLesson(lesson, locale);
   const difficulty = lessonDifficulty(lesson.id);
   return (
-    <button
-      className="lesson-picker__choice"
-      type="button"
-      disabled={disabled}
-      onClick={() => onSelect(lesson.id)}
-    >
-      <LessonPicture lesson={shown} />
-      <span className="lesson-picker__name">{shown.title}</span>
-      <span className="lesson-picker__meta">
-        <span className={`difficulty-badge difficulty-badge--${difficulty}`}>{t(difficultyKey(difficulty))}</span>
-        {stamped && <span className="lesson-picker__stamp">{t('stampMark')}</span>}
-      </span>
-      <span className="lesson-picker__subtitle">{shown.subtitle}</span>
-    </button>
+    <div className="lesson-picker__tile">
+      <button
+        className="lesson-picker__choice"
+        type="button"
+        disabled={disabled}
+        onClick={() => onSelect(lesson.id)}
+      >
+        <LessonPicture lesson={shown} />
+        <span className="lesson-picker__name">{shown.title}</span>
+        <span className="lesson-picker__meta">
+          <span className={`difficulty-badge difficulty-badge--${difficulty}`}>{t(difficultyKey(difficulty))}</span>
+          {stamped && <span className="lesson-picker__stamp">{t('stampMark')}</span>}
+        </span>
+        <span className="lesson-picker__subtitle">{shown.subtitle}</span>
+      </button>
+      <button
+        type="button"
+        className="button"
+        disabled={disabled}
+        aria-label={t('printNamed', { title: shown.title })}
+        onClick={() => onPrint(lesson)}
+      >
+        {t('print')}
+      </button>
+    </div>
   );
 }
 

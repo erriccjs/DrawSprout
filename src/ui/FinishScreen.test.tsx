@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { CAT_LESSON } from '../lesson-data/cat-lesson';
 import { createSession } from '../lesson-engine/session';
+import { answerParentGate } from '../test/parent-gate';
+import { clearParentUnlock, grantParent } from './parent-session';
 import { FinishScreen } from './FinishScreen';
 
 function media(matches: boolean): MediaQueryList {
@@ -51,6 +53,64 @@ describe('the finish celebration', () => {
     window.matchMedia = () => media(true);
     const reduced = renderFinish();
     expect(reduced.container.querySelector('.celebration')?.getAttribute('data-motion')).toBe('reduce');
+  });
+
+  it('shares the framed picture only after the parent gate, and prints the three sheets', async () => {
+    clearParentUnlock();
+    const bodies: string[] = [];
+    vi.stubGlobal('fetch', (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(typeof init?.body === 'string' ? init.body : '');
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    const share = vi.fn((_data: { files: File[]; title: string; text: string }) => Promise.resolve());
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    const originalCreate = URL.createObjectURL;
+    URL.createObjectURL = () => 'blob:sheet';
+    const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
+
+    renderFinish();
+    fireEvent.click(screen.getByRole('button', { name: 'Bagikan' }));
+    expect(share).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Untuk orang tua' })).toBeTruthy();
+    answerParentGate();
+    expect(share).toHaveBeenCalledTimes(1);
+    const shared = share.mock.calls[0]?.[0];
+    if (!shared) throw new Error('share was not called');
+    expect(shared.files[0]?.type).toBe('image/png');
+    expect(shared.files[0]?.name.endsWith('.png')).toBe(true);
+    expect(shared.title).toBe('Kucing Duduk');
+    expect(await screen.findByText(/Lembar berbagi terbuka/)).toBeTruthy();
+    expect(bodies.some((body) => body.includes('"name":"share_picture"') && body.includes('"lesson":"cat-sitting"'))).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cetak' }));
+    expect(screen.getByRole('article', { name: 'Gambar jadi' })).toBeTruthy();
+    const practice = screen.getAllByRole('article', { name: 'Lembar latihan' });
+    expect(practice.length).toBeGreaterThan(0);
+    expect(practice[0]?.querySelector('[data-ink="dashed"]')?.getAttribute('stroke-dasharray')).toBe('20 14');
+    const colouring = screen.getByRole('article', { name: 'Halaman mewarnai' });
+    const outline = colouring.querySelector('[data-ink="outline"]');
+    expect(outline?.getAttribute('fill')).toBe('none');
+    expect(outline?.hasAttribute('stroke-dasharray')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Unduh PDF' }));
+    expect(await screen.findByText(/diunduh/)).toBeTruthy();
+    expect(bodies.some((body) => body.includes('"name":"print_sheet"'))).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Cetak sekarang' }));
+    expect(print).toHaveBeenCalledTimes(1);
+
+    URL.createObjectURL = originalCreate;
+    print.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the plain PNG save available without the parent gate', () => {
+    clearParentUnlock();
+    renderFinish();
+    expect(screen.getByRole('button', { name: 'Simpan gambar (PNG)' })).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    grantParent();
+    clearParentUnlock();
   });
 
   it('lets a parent answer once for a finished lesson', () => {
