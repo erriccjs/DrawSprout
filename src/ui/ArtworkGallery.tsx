@@ -14,9 +14,16 @@ import type { LessonPackage } from '../lesson-data/schema';
 import type { Stroke } from '../lesson-engine/types';
 import { fromRestoredSession } from '../persistence/mapping';
 import type { SavedArtworkSummary, SessionStore } from '../persistence/types';
+import { artworkFileName, renderArtworkToCanvas } from '../renderer/export';
+import { formatShareDate } from '../share/date';
+import { shareOrDownload } from '../share/file';
+import { shareArtworkFile } from '../share/frame';
+import { recordUsage } from '../usage/client';
 import { downloadArtwork, formatArtworkWhen, paintArtworkThumbnail } from './artwork-files';
 import { ParentGate } from './ParentGate';
 import { parentUnlocked } from './parent-session';
+import { PrintBook } from './PrintBook';
+import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 
 interface ArtworkGalleryProps {
   readonly store: SessionStore;
@@ -101,15 +108,26 @@ interface ArtworkCardProps {
 
 function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, onDeleted }: ArtworkCardProps) {
   const { t, locale } = useI18n();
-  const lesson = lookupLesson(artwork.lessonId, extraLessons);
+  const extraKey = extraLessons.map((item) => `${item.id}:${item.contentVersion}`).join(',');
+  const lesson = useMemo(
+    () => lookupLesson(artwork.lessonId, extraLessons),
+    // The parent passes a fresh array when there are no photo lessons.
+    // extraKey is the part that actually changes which package we show.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [artwork.lessonId, extraKey],
+  );
   const shown = useMemo(() => (lesson ? presentLesson(lesson, locale) : null), [lesson, locale]);
   const title = shown?.title ?? t('oldLesson');
   const [confirming, setConfirming] = useState(false);
-  const [gating, setGating] = useState(false);
+  const [pending, setPending] = useState<'delete' | 'share' | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [exportName, setExportName] = useState<string | null>(null);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
+  const [strokes, setStrokes] = useState<readonly Stroke[] | null>(null);
+  const [printArt, setPrintArt] = useState<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     if (!pictureHost || !lesson) return;
@@ -117,8 +135,9 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
     void store.loadSession(artwork.sessionId).then((restored) => {
       if (cancelled || !restored) return;
       try {
-        const strokes = fromRestoredSession(restored).strokes;
-        paintArtworkThumbnail(pictureHost, lesson, strokes, t('artworkNamed', { title }));
+        const restoredStrokes = fromRestoredSession(restored).strokes;
+        setStrokes(restoredStrokes);
+        paintArtworkThumbnail(pictureHost, lesson, restoredStrokes, t('artworkNamed', { title }));
       } catch {
         /* A broken log leaves the card usable for delete. */
       }
@@ -127,6 +146,35 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
       cancelled = true;
     };
   }, [pictureHost, lesson, store, artwork.sessionId, t, title]);
+
+  const painted = () => {
+    if (!lesson || !strokes) return null;
+    return renderArtworkToCanvas({
+      space: lesson.coordinateSpace,
+      strokes: toRenderStrokes(strokes),
+      clipPaths: clipPathsFromLesson(lesson),
+    });
+  };
+
+  const shareNow = () => {
+    const artwork = painted();
+    if (!lesson || !artwork || !shown) return;
+    setError(null);
+    setShareError(null);
+    setShareStatus(null);
+    try {
+      const dateLabel = formatShareDate(new Date(), locale);
+      const fileName = artworkFileName(shown.title);
+      const file = shareArtworkFile(artwork, shown.title, dateLabel, fileName);
+      void shareOrDownload(file, shown.title, `${shown.title} — ${dateLabel}`).then((result) => {
+        if (result === 'cancelled') return;
+        recordUsage('share_picture', lesson.id);
+        setShareStatus(result === 'shared' ? t('shareSent') : t('shareDownloaded', { name: fileName }));
+      });
+    } catch (cause) {
+      setShareError(cause instanceof Error ? cause.message : t('shareFailed'));
+    }
+  };
 
   const savePng = async () => {
     if (!lesson) return;
@@ -176,6 +224,30 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
         <button
           type="button"
           className="button"
+          disabled={actionsDisabled || lesson === null || strokes === null}
+          aria-label={t('shareNamed', { title })}
+          onClick={() => {
+            if (parentUnlocked()) shareNow();
+            else setPending('share');
+          }}
+        >
+          {t('share')}
+        </button>
+        <button
+          type="button"
+          className="button"
+          disabled={actionsDisabled || lesson === null || strokes === null}
+          aria-label={t('printNamed', { title })}
+          onClick={() => {
+            const artwork = painted();
+            if (artwork) setPrintArt(artwork);
+          }}
+        >
+          {t('print')}
+        </button>
+        <button
+          type="button"
+          className="button"
           disabled={actionsDisabled || lesson === null}
           aria-label={t('savePngNamed', { title })}
           onClick={() => void savePng()}
@@ -204,7 +276,7 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
                 onClick={() => {
                   setMenuOpen(false);
                   if (parentUnlocked()) setConfirming(true);
-                  else setGating(true);
+                  else setPending('delete');
                 }}
               >
                 {t('delete')}
@@ -213,13 +285,23 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
           )}
         </div>
       </div>
-      {gating && (
+      {pending !== null && (
         <ParentGate
           onPass={() => {
-            setGating(false);
-            setConfirming(true);
+            const action = pending;
+            setPending(null);
+            if (action === 'delete') setConfirming(true);
+            else shareNow();
           }}
-          onCancel={() => setGating(false)}
+          onCancel={() => setPending(null)}
+        />
+      )}
+      {printArt !== null && lesson !== null && (
+        <PrintBook
+          lesson={lesson}
+          artwork={printArt}
+          onClose={() => setPrintArt(null)}
+          onExported={() => recordUsage('print_sheet', lesson.id)}
         />
       )}
       {confirming && (
@@ -231,6 +313,8 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
           </div>
         </div>
       )}
+      {shareStatus !== null && <p className="banner" role="status">{shareStatus}</p>}
+      {shareError !== null && <p className="banner banner--warning" role="alert">{shareError}</p>}
       {exportName !== null && (
         <p className="banner" role="status">
           {t('downloadSentShort', { name: exportName })}

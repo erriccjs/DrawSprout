@@ -9,6 +9,7 @@ import { MemorySessionStore } from '../persistence/memory-store';
 import * as exportApi from '../renderer/export';
 import { strokeInput } from '../test/factories';
 import { answerParentGate } from '../test/parent-gate';
+import { clearParentUnlock } from './parent-session';
 import { ArtworkGallery } from './ArtworkGallery';
 
 async function savedCat(store: MemorySessionStore): Promise<void> {
@@ -68,12 +69,33 @@ describe('Karyaku', () => {
     renderSpy.mockRestore();
   });
 
+  it('asks a grown-up before sharing a saved picture', async () => {
+    clearParentUnlock();
+    const store = new MemorySessionStore();
+    await savedCat(store);
+    const share = vi.fn((_data: { files: File[] }) => Promise.resolve());
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    render(<ArtworkGallery store={store} actionsDisabled={false} onOpen={() => {}} />);
+    const shareButton = await screen.findByRole('button', { name: 'Bagikan Kucing Duduk' });
+    expect(shareButton.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(shareButton);
+    expect(share).not.toHaveBeenCalled();
+    answerParentGate();
+    expect(share).toHaveBeenCalledTimes(1);
+    const file = share.mock.calls[0]?.[0].files[0];
+    expect(file?.type).toBe('image/png');
+    expect(await screen.findByText(/Lembar berbagi terbuka/)).toBeTruthy();
+  });
+
   it('disables opening, export, and delete while an update is applying', async () => {
     const store = new MemorySessionStore();
     await savedCat(store);
     render(<ArtworkGallery store={store} actionsDisabled onOpen={() => {}} />);
     expect((await screen.findByRole('button', { name: 'Buka Kucing Duduk' })).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Simpan PNG Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Bagikan Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Cetak Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Lainnya untuk Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
     expect(screen.queryByRole('button', { name: 'Hapus Kucing Duduk' })).toBeNull();
   });

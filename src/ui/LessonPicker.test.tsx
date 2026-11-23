@@ -33,7 +33,7 @@ function renderPicker(onSelect: (lessonId: string) => void = () => {}) {
 }
 
 describe('lesson picker', () => {
-  it('lists every done category lesson as a coloured picture', () => {
+  it('lists every done category lesson as a coloured picture', async () => {
     const onSelect = vi.fn();
     renderPicker(onSelect);
     const choices = document.querySelectorAll('.lesson-picker__choice');
@@ -56,7 +56,7 @@ describe('lesson picker', () => {
     expect(screen.getByRole('button', { name: 'Gambar ini' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Tantangan hari ini' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Orang tua' })).toBeTruthy();
-    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length + 11 + BEGINNER_PATH.length);
+    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length * 2 + 11 + BEGINNER_PATH.length);
 
     const names = [...document.querySelectorAll('.lesson-picker__name')].map((node) => node.textContent);
     expect(new Set(names).size).toBe(names.length);
@@ -84,6 +84,14 @@ describe('lesson picker', () => {
     expect(getPlayableLesson('butterfly').id).toBe('butterfly');
     expect(getPlayableLesson('cat-sitting').id).toBe('cat-sitting');
     expect(getPlayableLesson('house-front').id).toBe('house-front');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cetak Rumah' }));
+    expect(await screen.findByRole('dialog', { name: 'Cetak lembar' })).toBeTruthy();
+    expect(screen.queryByRole('article', { name: 'Gambar jadi' })).toBeNull();
+    expect(screen.getAllByRole('article', { name: 'Lembar latihan' }).length).toBeGreaterThan(0);
+    const colouring = screen.getByRole('article', { name: 'Halaman mewarnai' });
+    expect(colouring.querySelector('[data-ink="outline"]')?.getAttribute('fill')).toBe('none');
+    expect(screen.getAllByText('Dibuat di perangkat ini. Tidak ada yang diunggah.').length).toBeGreaterThan(0);
   });
 
   it('shows a visible trace choice and reports a cancelled or unusable photo', () => {
