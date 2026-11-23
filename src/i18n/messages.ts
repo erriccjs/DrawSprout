@@ -249,6 +249,27 @@ export interface Messages {
   readonly dailyDone: string;
   readonly dailyStreak: string;
   readonly mascotTalk: string;
+  readonly parentTitle: string;
+  readonly parentQuestion: string;
+  readonly parentAnswer: string;
+  readonly parentContinue: string;
+  readonly parentWrong: string;
+  readonly parentDash: string;
+  readonly parentFinished: string;
+  readonly parentStamps: string;
+  readonly parentStreak: string;
+  readonly parentNoStreak: string;
+  readonly parentRecent: string;
+  readonly parentNoPictures: string;
+  readonly parentTime: string;
+  readonly parentPrivacyTitle: string;
+  readonly parentPrivacyBody: string;
+  readonly doodleSendTitle: string;
+  readonly doodleSendBody: string;
+  readonly doodleSend: string;
+  readonly tracePreviewTitle: string;
+  readonly tracePreviewBody: string;
+  readonly tracePreviewUse: string;
 }
 
 const id: Messages = {
@@ -285,7 +306,7 @@ const id: Messages = {
   doodleTraceScale: 'Ukuran doodle',
   doodleTraceInclude: 'Simpan bersama doodle',
   offlineReady: 'Bisa dibuka tanpa internet.',
-  usageNote: 'Hitungan pemakaian tanpa nama. Tidak ada data pribadi dan tidak ada foto.',
+  usageNote: 'Hitungan tanpa nama. Ketuk Orang tua untuk penjelasan lengkap.',
   feedbackAsk: 'Untuk orang tua',
   feedbackUp: 'Suka',
   feedbackDown: 'Kurang',
@@ -334,7 +355,7 @@ const id: Messages = {
   useThisPart: 'Pakai bagian ini',
   changePhoto: 'Ganti foto',
   beforeSendTitle: 'Sebelum foto dikirim',
-  beforeSendBody: 'Foto ini dikirim ke server DrawSprout dan ke OpenAI supaya bisa dibuat menjadi gambar garis. Foto tidak disimpan setelah diproses, dan tidak masuk hitungan pemakaian. Pelajaran yang dihasilkan tersimpan di perangkat ini, dan menghapusnya menghapus gambar turunan itu juga.',
+  beforeSendBody: 'Foto ini dikirim ke server DrawSprout, lalu ke layanan gambar yang dipasang di server (Replicate atau OpenAI). Foto tidak disimpan setelah diproses, dan tidak masuk hitungan pemakaian. Pelajaran yang dihasilkan tersimpan di perangkat ini, dan menghapusnya menghapus gambar turunan itu juga.',
   photoToSend: 'Foto yang akan dikirim',
   makingLines: 'Membuat garis…',
   tryAgain: 'Coba lagi',
@@ -495,6 +516,27 @@ const id: Messages = {
   dailyDone: 'Stempel hari ini',
   dailyStreak: '{count} hari berturut-turut',
   mascotTalk: 'Dengar Tunas',
+  parentTitle: 'Untuk orang tua',
+  parentQuestion: 'Berapa {left} ditambah {right}?',
+  parentAnswer: 'Jawaban',
+  parentContinue: 'Lanjut',
+  parentWrong: 'Coba lagi.',
+  parentDash: 'Orang tua',
+  parentFinished: 'Pelajaran selesai: {count}',
+  parentStamps: 'Stempel: {count}',
+  parentStreak: 'Hari berturut-turut: {count}',
+  parentNoStreak: 'Belum ada tantangan hari ini.',
+  parentRecent: 'Gambar terakhir',
+  parentNoPictures: 'Belum ada gambar selesai.',
+  parentTime: 'Waktu memakai aplikasi tidak disimpan di perangkat ini.',
+  parentPrivacyTitle: 'Privasi',
+  parentPrivacyBody: 'Di perangkat ini tersimpan gambar, goresan, stempel, bahasa, dan hari tantangan. Tidak ada akun dan tidak ada nama. Kalau ada internet, aplikasi mengirim hitungan tanpa nama: pelajaran yang dibuka, ponsel atau tablet, bahasa, dan apakah aplikasi sudah dibuka minggu ini. Tidak ada foto di hitungan itu. Cloudflare Web Analytics dapat menghitung kunjungan halaman, juga tanpa nama dan tanpa foto. Jiplak foto tidak meninggalkan perangkat. Doodle dari foto mengunggah foto ke server DrawSprout, yang mengirimnya ke Replicate untuk membuat gambar garis. Foto tidak disimpan setelah itu. Aplikasi ini tidak membuka tautan ke situs lain.',
+  doodleSendTitle: 'Kirim foto ini?',
+  doodleSendBody: 'Bagian yang dipilih diunggah ke server DrawSprout, lalu ke Replicate, untuk dibuat gambar garis. Fotonya tidak disimpan. Hitungan pemakaian tidak berisi foto.',
+  doodleSend: 'Kirim',
+  tracePreviewTitle: 'Jiplak foto ini?',
+  tracePreviewBody: 'Foto ini tetap di perangkat ini. Tidak ada yang diunggah.',
+  tracePreviewUse: 'Jiplak',
 };
 
 const en: Messages = {
@@ -531,7 +573,7 @@ const en: Messages = {
   doodleTraceScale: 'Doodle size',
   doodleTraceInclude: 'Save with the doodle',
   offlineReady: 'Works without the internet.',
-  usageNote: 'Anonymous usage counts. No personal data and no photos.',
+  usageNote: 'Anonymous counts. Tap For grown-ups for the full note.',
   feedbackAsk: 'For a parent',
   feedbackUp: 'Like',
   feedbackDown: 'Not for us',
@@ -580,7 +622,7 @@ const en: Messages = {
   useThisPart: 'Use this part',
   changePhoto: 'Change photo',
   beforeSendTitle: 'Before the photo is sent',
-  beforeSendBody: 'This photo is sent to the DrawSprout server and to OpenAI so it can become a line drawing. The photo is not kept after that, and it is not part of the usage counts. The lesson is saved on this device, and deleting it deletes that drawing too.',
+  beforeSendBody: 'This photo is sent to the DrawSprout server, then to the image service configured there (Replicate or OpenAI). The photo is not kept after that, and it is not part of the usage counts. The lesson is saved on this device, and deleting it deletes that drawing too.',
   photoToSend: 'Photo that will be sent',
   makingLines: 'Making the lines…',
   tryAgain: 'Try again',
@@ -741,6 +783,27 @@ const en: Messages = {
   dailyDone: 'Today\'s stamp',
   dailyStreak: '{count} days in a row',
   mascotTalk: 'Hear Tunas',
+  parentTitle: 'For grown-ups',
+  parentQuestion: 'What is {left} plus {right}?',
+  parentAnswer: 'Answer',
+  parentContinue: 'Continue',
+  parentWrong: 'Try again.',
+  parentDash: 'For grown-ups',
+  parentFinished: 'Lessons finished: {count}',
+  parentStamps: 'Stamps: {count}',
+  parentStreak: 'Days in a row: {count}',
+  parentNoStreak: 'No challenge finished today.',
+  parentRecent: 'Recent pictures',
+  parentNoPictures: 'No finished pictures yet.',
+  parentTime: 'Time spent in the app is not stored on this device.',
+  parentPrivacyTitle: 'Privacy',
+  parentPrivacyBody: 'This device stores pictures, strokes, stamps, the language, and the challenge day. There is no account and no name. When online, the app sends anonymous counts: which lesson was opened, phone or tablet, language, and whether the app was already opened this week. Those counts include no photo. Cloudflare Web Analytics may count page visits, also with no name and no photo. Tracing a photo does not leave this device. Doodle from a photo uploads the photo to the DrawSprout server, which sends it to Replicate to make the line drawing. The photo is not kept after that. This app does not open links to other sites.',
+  doodleSendTitle: 'Send this photo?',
+  doodleSendBody: 'The framed part is uploaded to the DrawSprout server, then to Replicate, to make a line drawing. The photo is not kept. Usage counts include no photo.',
+  doodleSend: 'Send',
+  tracePreviewTitle: 'Trace this photo?',
+  tracePreviewBody: 'This photo stays on this device. Nothing is uploaded.',
+  tracePreviewUse: 'Trace',
 };
 
 export const messages: Record<Locale, Messages> = { id, en };

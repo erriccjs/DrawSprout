@@ -26,6 +26,7 @@ import { DrawingPad } from './ui/DrawingPad';
 import { requestDocumentFullscreen } from './ui/fullscreen';
 import { RESUME_NOTICE } from './ui/resume-notice';
 import { LessonPicker } from './ui/LessonPicker';
+import { ParentDashboard } from './ui/ParentDashboard';
 import { PhotoFlow } from './ui/PhotoFlow';
 import { TabletNotice } from './ui/TabletNotice';
 import { newId } from './ui/ids';
@@ -80,6 +81,8 @@ export function App() {
   const [photoLessons, setPhotoLessons] = useState<readonly PhotoLessonRecord[]>([]);
   const [photoFlow, setPhotoFlow] = useState(false);
   const [traceDraft, setTraceDraft] = useState<{ image: HTMLImageElement; url: string; placement: TraceSession['placement'] } | null>(null);
+  const [tracePreview, setTracePreview] = useState<{ image: HTMLImageElement; url: string } | null>(null);
+  const [parentOpen, setParentOpen] = useState(false);
   const [traceLive, setTraceLive] = useState<TraceSession | null>(null);
   const [doodleOpen, setDoodleOpen] = useState(false);
   const doodleStoreRef = useRef<IndexedDbDoodleLessonStore | null>(null);
@@ -226,13 +229,8 @@ export function App() {
         fail();
         return;
       }
-      const space = TRACE_LESSON.coordinateSpace;
       setExitNotice(null);
-      setTraceDraft({
-        image,
-        url,
-        placement: fitPhoto(space.width, space.height, image.naturalWidth || image.width, image.naturalHeight || image.height),
-      });
+      setTracePreview({ image, url });
     });
     image.addEventListener('error', fail);
     image.src = url;
@@ -639,6 +637,42 @@ export function App() {
           }}
           onBack={() => setResumeOffer(null)}
         />
+      ) : parentOpen ? (
+        <ParentDashboard store={bootstrap.store} onClose={() => setParentOpen(false)} />
+      ) : tracePreview ? (
+        <section className="trace-preview" aria-labelledby="trace-preview-title">
+          <h1 id="trace-preview-title">{t('tracePreviewTitle')}</h1>
+          <p>{t('tracePreviewBody')}</p>
+          <img className="photo-preview" src={tracePreview.url} alt={t('photoChosen')} />
+          <div className="button-row">
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => {
+                const image = tracePreview.image;
+                const space = TRACE_LESSON.coordinateSpace;
+                setTraceDraft({
+                  image,
+                  url: tracePreview.url,
+                  placement: fitPhoto(space.width, space.height, image.naturalWidth || image.width, image.naturalHeight || image.height),
+                });
+                setTracePreview(null);
+              }}
+            >
+              {t('tracePreviewUse')}
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                URL.revokeObjectURL(tracePreview.url);
+                setTracePreview(null);
+              }}
+            >
+              {t('cancel')}
+            </button>
+          </div>
+        </section>
       ) : (
         <>
           <LessonPicker
@@ -652,6 +686,7 @@ export function App() {
               recordUsage('daily_challenge_start', lessonId);
               selectLesson(lessonId);
             }}
+            onOpenParent={() => setParentOpen(true)}
             notice={exitNotice}
             offlineReady={offlineReady}
             updatePhase={updateGate.showPrompt ? (applyRequested ? 'applying' : 'prompt') : 'hidden'}
