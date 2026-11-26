@@ -288,6 +288,9 @@ export interface Messages {
   readonly printNoLines: string;
   readonly printDownloaded: string;
   readonly printFailed: string;
+  readonly moveAgain: string;
+  readonly moveNamed: string;
+  readonly shareMotion: string;
 }
 
 const id: Messages = {
@@ -573,6 +576,9 @@ const id: Messages = {
   printNoLines: 'Pelajaran ini tidak punya garis untuk dijiplak.',
   printDownloaded: 'File {name} diunduh. Tidak ada yang diunggah.',
   printFailed: 'Lembar belum bisa dibuat.',
+  moveAgain: 'Gerakkan lagi',
+  moveNamed: 'Gerakkan lagi {title}',
+  shareMotion: 'Bagikan gerakan',
 };
 
 const en: Messages = {
@@ -858,6 +864,9 @@ const en: Messages = {
   printNoLines: 'This lesson has no lines to trace.',
   printDownloaded: 'File {name} was downloaded. Nothing was uploaded.',
   printFailed: 'The sheet could not be made.',
+  moveAgain: 'Move it again',
+  moveNamed: 'Move {title} again',
+  shareMotion: 'Share the motion',
 };
 
 export const messages: Record<Locale, Messages> = { id, en };

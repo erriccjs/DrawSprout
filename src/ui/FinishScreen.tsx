@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useMemo, useState, useRef } from 'react';
+import { AlivePicture, type AliveHandle } from './AlivePicture';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { useI18n } from '../i18n/context';
 import { presentLesson } from '../i18n/present';
@@ -42,19 +43,19 @@ interface FinishScreenProps {
   readonly traceSource?: 'photo' | 'doodle';
 }
 
-/** Small enough to render instantly, large enough to look right on a tablet. */
-const PREVIEW_WIDTH_PX = 900;
-
 export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFreely, onChoosePicture, onStartFresh, restartError, underlay, includePhoto = false, onIncludePhoto, traceSource }: FinishScreenProps) {
   const { t, locale } = useI18n();
   const shown = useMemo(() => presentLesson(lesson, locale), [lesson, locale]);
-  const previewRef = useRef<HTMLDivElement>(null);
+  const aliveRef = useRef<AliveHandle>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
   const [askingToClear, setAskingToClear] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(() => feedbackAlreadySent(lesson.id));
-  const [motion, setMotion] = useState<MotionPreference>('full');
-  const [shareGate, setShareGate] = useState(false);
+  const [motion, setMotion] = useState<MotionPreference>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'full';
+    return motionPreference(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  });
+  const [shareGate, setShareGate] = useState<'png' | 'motion' | null>(null);
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const [printArt, setPrintArt] = useState<HTMLCanvasElement | null>(null);
 
@@ -67,21 +68,30 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
     return () => query.removeEventListener?.('change', update);
   }, []);
 
-  useEffect(() => {
-    const host = previewRef.current;
-    if (!host) return;
-    const canvas = renderArtworkToCanvas({
-      space: lesson.coordinateSpace,
-      strokes: toRenderStrokes(state.strokes),
-      clipPaths,
-      pixelWidth: PREVIEW_WIDTH_PX,
-      ...(underlay ? { underlay } : {}),
+  const shareFile = (file: File, fileName: string) => {
+    void shareOrDownload(file, shown.title, `${shown.title} — ${formatShareDate(new Date(), locale)}`).then((result) => {
+      if (result === 'cancelled') return;
+      recordUsage('share_picture', lesson.id);
+      setShareStatus(result === 'shared' ? t('shareSent') : t('shareDownloaded', { name: fileName }));
     });
-    canvas.className = 'finish__canvas';
-    canvas.setAttribute('role', 'img');
-    canvas.setAttribute('aria-label', t('yourArtwork', { title: shown.title }));
-    host.replaceChildren(canvas);
-  }, [lesson, state.strokes, clipPaths, shown.title, t, underlay]);
+  };
+
+  const shareMotion = () => {
+    setExportError(null);
+    setShareStatus(null);
+    const pending = aliveRef.current?.record() ?? Promise.resolve(null);
+    void pending.then((blob) => {
+      if (!blob || blob.size === 0) {
+        shareNow();
+        return;
+      }
+      const extension = blob.type.includes('mp4') ? '.mp4' : '.webm';
+      const fileName = artworkFileName(shown.title).replace(/\.png$/, extension);
+      shareFile(new File([blob], fileName, { type: blob.type || 'video/webm' }), fileName);
+    }).catch(() => {
+      shareNow();
+    });
+  };
 
   const artworkCanvas = () => renderArtworkToCanvas({
     space: lesson.coordinateSpace,
@@ -97,11 +107,7 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
       const dateLabel = formatShareDate(new Date(), locale);
       const fileName = artworkFileName(shown.title);
       const file = shareArtworkFile(artworkCanvas(), shown.title, dateLabel, fileName);
-      void shareOrDownload(file, shown.title, `${shown.title} — ${dateLabel}`).then((result) => {
-        if (result === 'cancelled') return;
-        recordUsage('share_picture', lesson.id);
-        setShareStatus(result === 'shared' ? t('shareSent') : t('shareDownloaded', { name: fileName }));
-      });
+      shareFile(file, fileName);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : t('shareFailed'));
     }
@@ -145,7 +151,19 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
         {t('finishLead')}
       </p>
 
-      <div className="finish__preview" ref={previewRef} />
+      <div className="finish__preview">
+        <AlivePicture
+          lesson={lesson}
+          strokes={state.strokes}
+          clipPaths={clipPaths}
+          {...(underlay ? { underlay } : {})}
+          label={t('yourArtwork', { title: shown.title })}
+          autoPlay={motion === 'full'}
+          className="finish__canvas"
+          handle={aliveRef}
+          onPlay={() => recordUsage('animation_play', lesson.id)}
+        />
+      </div>
 
       {onIncludePhoto && (
         <label className="trace-controls__include">
@@ -167,10 +185,23 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
           className="button"
           onClick={() => {
             if (parentUnlocked()) shareNow();
-            else setShareGate(true);
+            else setShareGate('png');
           }}
         >
           {t('share')}
+        </button>
+        <button
+          type="button"
+          className="button"
+          onClick={() => {
+            if (parentUnlocked()) shareMotion();
+            else setShareGate('motion');
+          }}
+        >
+          {t('shareMotion')}
+        </button>
+        <button type="button" className="button" onClick={() => aliveRef.current?.replay()}>
+          {t('moveAgain')}
         </button>
         <button type="button" className="button" onClick={() => setPrintArt(artworkCanvas())}>
           {t('print')}
@@ -196,13 +227,15 @@ export function FinishScreen({ lesson, state, clipPaths, onKeepDrawing, onDrawFr
         />
       )}
 
-      {shareGate && (
+      {shareGate !== null && (
         <ParentGate
           onPass={() => {
-            setShareGate(false);
-            shareNow();
+            const kind = shareGate;
+            setShareGate(null);
+            if (kind === 'motion') shareMotion();
+            else shareNow();
           }}
-          onCancel={() => setShareGate(false)}
+          onCancel={() => setShareGate(null)}
         />
       )}
       {printArt !== null && (

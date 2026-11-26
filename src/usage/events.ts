@@ -22,6 +22,7 @@ export const USAGE_EVENTS = [
   'feedback_down',
   'share_picture',
   'print_sheet',
+  'animation_play',
 ] as const;
 
 export type UsageEventName = (typeof USAGE_EVENTS)[number];
@@ -48,6 +49,7 @@ const LESSON_REQUIRED = new Set<UsageEventName>([
   'feedback_down',
   'share_picture',
   'print_sheet',
+  'animation_play',
 ]);
 
 /** A lesson slug is useful, but the event still counts without one. */

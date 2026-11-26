@@ -5,7 +5,7 @@
  * strokes only, then offers open, PNG export, and delete-with-confirmation.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getPlayableLesson } from '../categories/library';
 import { useI18n } from '../i18n/context';
 import { say } from '../i18n/generated';
@@ -22,6 +22,7 @@ import { recordUsage } from '../usage/client';
 import { downloadArtwork, formatArtworkWhen, paintArtworkThumbnail } from './artwork-files';
 import { ParentGate } from './ParentGate';
 import { parentUnlocked } from './parent-session';
+import { AlivePicture, type AliveHandle } from './AlivePicture';
 import { PrintBook } from './PrintBook';
 import { clipPathsFromLesson, toRenderStrokes } from './render-adapter';
 
@@ -128,9 +129,11 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
   const [pictureHost, setPictureHost] = useState<HTMLDivElement | null>(null);
   const [strokes, setStrokes] = useState<readonly Stroke[] | null>(null);
   const [printArt, setPrintArt] = useState<HTMLCanvasElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const aliveRef = useRef<AliveHandle>(null);
 
   useEffect(() => {
-    if (!pictureHost || !lesson) return;
+    if (!pictureHost || !lesson || playing) return;
     let cancelled = false;
     void store.loadSession(artwork.sessionId).then((restored) => {
       if (cancelled || !restored) return;
@@ -145,7 +148,7 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
     return () => {
       cancelled = true;
     };
-  }, [pictureHost, lesson, store, artwork.sessionId, t, title]);
+  }, [pictureHost, lesson, store, artwork.sessionId, t, title, playing]);
 
   const painted = () => {
     if (!lesson || !strokes) return null;
@@ -206,7 +209,22 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
 
   return (
     <li className="artwork-card">
-      <div className="artwork-card__picture" ref={setPictureHost} />
+      <div className="artwork-card__picture">
+        {playing && lesson && strokes ? (
+          <AlivePicture
+            lesson={lesson}
+            strokes={strokes}
+            clipPaths={clipPathsFromLesson(lesson)}
+            label={t('artworkNamed', { title })}
+            autoPlay
+            className="artwork-card__canvas"
+            handle={aliveRef}
+            onPlay={() => recordUsage('animation_play', lesson.id)}
+          />
+        ) : (
+          <div className="artwork-card__still" ref={setPictureHost} />
+        )}
+      </div>
       <h3 className="artwork-card__title">{title}</h3>
       <time className="artwork-card__when" dateTime={new Date(artwork.updatedAt).toISOString()}>
         {formatArtworkWhen(artwork.updatedAt, undefined, locale)}
@@ -220,6 +238,18 @@ function ArtworkCard({ store, artwork, actionsDisabled, onOpen, extraLessons, on
           onClick={() => onOpen(artwork.sessionId)}
         >
           {t('open')}
+        </button>
+        <button
+          type="button"
+          className="button"
+          disabled={actionsDisabled || lesson === null || strokes === null}
+          aria-label={t('moveNamed', { title })}
+          onClick={() => {
+            if (playing) aliveRef.current?.replay();
+            else setPlaying(true);
+          }}
+        >
+          {t('moveAgain')}
         </button>
         <button
           type="button"
