@@ -8,11 +8,13 @@ import type { ColorRegion, LessonPackage, LessonStep } from '../lesson-data/sche
 import { localizeSentence, say } from './generated';
 import type { Locale } from './locale';
 import { CATEGORY_EN, CATEGORY_LESSON_EN } from './lessons-category';
+import { NUSANTARA_LESSON_EN } from './lessons-nusantara';
 import { LESSON_EN as BUNDLED_EN, type LessonEnglish } from './lessons-bundled';
 
 export const LESSON_EN: Readonly<Record<string, LessonEnglish>> = {
   ...BUNDLED_EN,
   ...CATEGORY_LESSON_EN,
+  ...NUSANTARA_LESSON_EN,
 };
 
 export function categoryName(locale: Locale, id: string, fallback: string): string {

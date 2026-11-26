@@ -23,6 +23,7 @@ import type { LessonPackage } from '../lesson-data/schema';
 import type { MessageKey } from '../i18n/messages';
 import type { PhotoLessonRecord } from '../persistence/photo-lesson-store';
 import { recordUsage } from '../usage/client';
+import { PackBrowser } from './PackBrowser';
 
 interface LessonPickerProps {
   readonly onSelect: (lessonId: string) => void;
@@ -119,6 +120,7 @@ export function LessonPicker({
           </div>
         </section>
       )}
+      <PackBrowser disabled={applying} onSelect={onSelect} />
       <div className="button-row home-actions">
         {nextId && (
           <button type="button" className="button button--primary" disabled={applying} onClick={() => onSelect(nextId)}>

@@ -291,6 +291,13 @@ export interface Messages {
   readonly moveAgain: string;
   readonly moveNamed: string;
   readonly shareMotion: string;
+  readonly packsTitle: string;
+  readonly askGrownup: string;
+  readonly premiumTitle: string;
+  readonly premiumLead: string;
+  readonly premiumUnlock: string;
+  readonly premiumOpen: string;
+  readonly premiumBack: string;
 }
 
 const id: Messages = {
@@ -579,6 +586,13 @@ const id: Messages = {
   moveAgain: 'Gerakkan lagi',
   moveNamed: 'Gerakkan lagi {title}',
   shareMotion: 'Bagikan gerakan',
+  packsTitle: 'Paket gambar',
+  askGrownup: 'Minta orang tua',
+  premiumTitle: 'Paket premium',
+  premiumLead: 'Paket ini bisa dibuka di perangkat ini. Tidak ada pembayaran.',
+  premiumUnlock: 'Buka di perangkat ini',
+  premiumOpen: 'Sudah terbuka di perangkat ini.',
+  premiumBack: 'Kembali',
 };
 
 const en: Messages = {
@@ -867,6 +881,13 @@ const en: Messages = {
   moveAgain: 'Move it again',
   moveNamed: 'Move {title} again',
   shareMotion: 'Share the motion',
+  packsTitle: 'Picture packs',
+  askGrownup: 'Ask a grown-up',
+  premiumTitle: 'Premium packs',
+  premiumLead: 'This pack can be opened on this device. There is no payment.',
+  premiumUnlock: 'Open on this device',
+  premiumOpen: 'Already open on this device.',
+  premiumBack: 'Back',
 };
 
 export const messages: Record<Locale, Messages> = { id, en };
