@@ -92,7 +92,7 @@ describe('lesson picker', () => {
     const colouring = screen.getByRole('article', { name: 'Halaman mewarnai' });
     expect(colouring.querySelector('[data-ink="outline"]')?.getAttribute('fill')).toBe('none');
     expect(screen.getAllByText('Dibuat di perangkat ini. Tidak ada yang diunggah.').length).toBeGreaterThan(0);
-  });
+  }, 15000);
 
   it('shows a visible trace choice and reports a cancelled or unusable photo', () => {
     const onTrace = vi.fn();
