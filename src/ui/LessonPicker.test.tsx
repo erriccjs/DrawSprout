@@ -56,7 +56,7 @@ describe('lesson picker', () => {
     expect(screen.getByRole('button', { name: 'Gambar ini' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Tantangan hari ini' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Orang tua' })).toBeTruthy();
-    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length * 2 + 11 + BEGINNER_PATH.length);
+    expect(screen.getAllByRole('button')).toHaveLength(lessonsForPicker().length * 2 + 13 + BEGINNER_PATH.length);
 
     const names = [...document.querySelectorAll('.lesson-picker__name')].map((node) => node.textContent);
     expect(new Set(names).size).toBe(names.length);

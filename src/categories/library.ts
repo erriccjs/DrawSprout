@@ -32,6 +32,7 @@ import { TOY_CAR_CATEGORY } from './lessons/toy-car';
 import { TREE_CATEGORY } from './lessons/tree';
 import { TEDDY_BEAR_CATEGORY } from './lessons/teddy-bear';
 import { TURTLE_CATEGORY } from './lessons/turtle';
+import { packLesson } from '../packs/nusantara/lessons';
 import { isDone, type CategoryEntry, type CategoryLesson, type PlannedCategory } from './types';
 
 const PLANNED: readonly PlannedCategory[] = [
@@ -132,6 +133,8 @@ export function getPlayableLesson(id: string): LessonPackage {
   if (bundled) return cleanLessonOutlines(bundled);
   const category = CATEGORY_LESSONS.find((entry) => entry.lesson.id === id || entry.id === id);
   if (category) return cleanLessonOutlines(category.lesson);
+  const packed = packLesson(id);
+  if (packed) return cleanLessonOutlines(packed);
   return cleanLessonOutlines(getLesson(id));
 }
 

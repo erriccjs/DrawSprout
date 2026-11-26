@@ -131,8 +131,9 @@ wrapped. Entitlement has to work offline: a signed or locally stored
 without a network.
 
 **Success.** After payments exist: starts and completes inside premium packs,
-and doodle success versus the free cap. Before payments: do not block Phase
-A–B on this.
+and doodle success versus the free cap. Before payments: the freemium flag
+stays off, `pack_open` counts opens, and `premium_lock_view` counts lock taps
+only while the flag is on. Do not block Phase A–B on this.
 
 **Effort.** Large, mostly because of packs, entitlement, and the payment choice.
 

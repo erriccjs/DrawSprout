@@ -141,6 +141,61 @@ body {
   margin: 16px 0;
 }
 
+.pack-browser {
+  margin: 20px 0 8px;
+}
+
+.pack-browser__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+}
+
+.pack-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.pack-card__cover {
+  width: 100%;
+  height: 72px;
+}
+
+.pack-card__name {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.pack-card__blurb,
+.pack-card__ask {
+  color: var(--muted);
+}
+
+.pack-browser__lessons {
+  margin-top: 16px;
+}
+
+.premium-page {
+  z-index: 70;
+}
+
+.premium-page__pack {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
 .parent-gate,
 .parent-dash,
 .trace-preview {
