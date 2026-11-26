@@ -464,6 +464,11 @@ body {
   overflow: hidden;
 }
 
+.artwork-card__still {
+  width: 100%;
+  height: 100%;
+}
+
 .artwork-card__canvas {
   display: block;
   width: 100%;

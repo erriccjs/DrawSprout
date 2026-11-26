@@ -114,6 +114,7 @@ describe('the finish celebration', () => {
   });
 
   it('lets a parent answer once for a finished lesson', () => {
+    window.matchMedia = () => media(true);
     localStorage.removeItem('drawsprout.feedback-lessons');
     const calls = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
     vi.stubGlobal('fetch', calls);
@@ -131,6 +132,22 @@ describe('the finish celebration', () => {
     expect(screen.getByText('Terima kasih.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Kurang' })).toBeNull();
     expect(calls).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it('stays still when motion is reduced, and plays the child strokes when tapped', () => {
+    window.matchMedia = () => media(true);
+    const calls = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => Promise.resolve(new Response(null, { status: 204 })));
+    vi.stubGlobal('fetch', calls);
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    renderFinish();
+    expect(calls).not.toHaveBeenCalled();
+    expect(screen.getByRole('img', { name: 'Karyamu: Kucing Duduk' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Gerakkan lagi' }));
+    expect(calls).toHaveBeenCalledTimes(1);
+    const body = typeof calls.mock.calls[0]?.[1]?.body === 'string' ? calls.mock.calls[0][1].body : '';
+    expect(body).toContain('"name":"animation_play"');
+    expect(body).toContain('"lesson":"cat-sitting"');
     vi.unstubAllGlobals();
   });
 });

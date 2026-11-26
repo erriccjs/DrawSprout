@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TREE_CATEGORY } from '../categories/lessons/tree';
 import { CAT_LESSON } from '../lesson-data/cat-lesson';
 import { HOUSE_LESSON } from '../lesson-data/house-lesson';
@@ -88,6 +88,25 @@ describe('Karyaku', () => {
     expect(await screen.findByText(/Lembar berbagi terbuka/)).toBeTruthy();
   });
 
+  it('plays a saved picture from Buku Gambarku without the parent gate', async () => {
+    const store = new MemorySessionStore();
+    await savedCat(store);
+    const calls = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => Promise.resolve(new Response(null, { status: 204 })));
+    vi.stubGlobal('fetch', calls);
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    render(<ArtworkGallery store={store} actionsDisabled={false} onOpen={() => {}} />);
+    const move = await screen.findByRole('button', { name: 'Gerakkan lagi Kucing Duduk' });
+    await waitFor(() => {
+      expect(move.hasAttribute('disabled')).toBe(false);
+    });
+    fireEvent.click(move);
+    expect(calls).toHaveBeenCalled();
+    const body = typeof calls.mock.calls[0]?.[1]?.body === 'string' ? calls.mock.calls[0][1].body : '';
+    expect(body).toContain('"name":"animation_play"');
+    expect(body).toContain('"lesson":"cat-sitting"');
+    vi.unstubAllGlobals();
+  });
+
   it('disables opening, export, and delete while an update is applying', async () => {
     const store = new MemorySessionStore();
     await savedCat(store);
@@ -96,6 +115,7 @@ describe('Karyaku', () => {
     expect(screen.getByRole('button', { name: 'Simpan PNG Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Bagikan Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Cetak Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Gerakkan lagi Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Lainnya untuk Kucing Duduk' }).hasAttribute('disabled')).toBe(true);
     expect(screen.queryByRole('button', { name: 'Hapus Kucing Duduk' })).toBeNull();
   });

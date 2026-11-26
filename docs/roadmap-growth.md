@@ -6,7 +6,8 @@ with about 10–20 families, come first.
 
 Counts used below are the anonymous events in `docs/analytics.md`
 (`lesson_start`, `lesson_complete`, `free_draw_start`, `stamp_earned`,
-`album_open`, `share_picture`, `print_sheet`, and the weekly returning flag).
+`album_open`, `share_picture`, `print_sheet`, `animation_play`, and the weekly
+returning flag).
 They are not a list of people.
 
 ## Phase A — Habit and learning structure
@@ -104,8 +105,7 @@ candidate in Phase F, so the free path should keep one PNG save.
 **Features.** A client-side wiggle, blink, or move of the finished drawing.
 No video upload, no server render. Honour reduced motion with a still picture.
 
-**Success.** Used after `lesson_complete`. Add an event when the phase is
-built if the count would change a decision.
+**Success.** `animation_play` after `lesson_complete`.
 
 **Effort.** Medium.
 

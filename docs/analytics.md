@@ -33,15 +33,18 @@ That means the weekly query counts returning opens, not a list of people.
 `app_open`, `lesson_start`, `lesson_complete`, `trace_photo_start`,
 `doodle_start`, `doodle_success`, `free_draw_start`, `stamp_earned`,
 `album_open`, `daily_challenge_start`, `daily_challenge_complete`,
-`mascot_tap`, `feedback_up`, `feedback_down`, `share_picture`, `print_sheet`.
+`mascot_tap`, `feedback_up`, `feedback_down`, `share_picture`, `print_sheet`,
+`animation_play`.
 
 `share_picture` counts a finished picture handed to the share sheet, or the
 download used when that browser cannot share a file. `print_sheet` counts a
-PDF download or a print of the A4 pages. Neither event carries the picture.
+PDF download or a print of the A4 pages. `animation_play` counts one play of
+the finished picture coming alive, including the first play and “Gerakkan
+lagi”. None of these events carries the picture.
 
 `lesson_start`, `lesson_complete`, `stamp_earned`, `daily_challenge_start`,
 `daily_challenge_complete`, `feedback_up`, `feedback_down`, `share_picture`,
-and `print_sheet` require a lesson id. `album_open` and `mascot_tap` must not
+`print_sheet`, and `animation_play` require a lesson id. `album_open` and `mascot_tap` must not
 carry one. The id
 must match `[a-z0-9-]`. Anything else is rejected. The client drops a bad
 event and never throws. Offline events are dropped.
@@ -141,6 +144,19 @@ WHERE blob1 IN ('share_picture', 'print_sheet')
   AND timestamp > NOW() - INTERVAL '30' DAY
 GROUP BY lesson
 ORDER BY shares + prints DESC
+```
+
+### Finished pictures that came alive
+
+```sql
+SELECT
+  blob2 AS lesson,
+  SUM(_sample_interval) AS plays
+FROM drawsprout_events
+WHERE blob1 = 'animation_play'
+  AND timestamp > NOW() - INTERVAL '30' DAY
+GROUP BY lesson
+ORDER BY plays DESC
 ```
 
 ### Feedback per lesson
